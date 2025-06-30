@@ -29,8 +29,14 @@ const CLIENT_ID = import.meta.env.VITE_SHAREPOINT_CLIENT_ID;
 const CLIENT_SECRET = import.meta.env.VITE_SHAREPOINT_CLIENT_SECRET;
 const TENANT_ID = import.meta.env.VITE_SHAREPOINT_TENANT_ID;
 const SITE_NAME = import.meta.env.VITE_SHAREPOINT_SITE_NAME;
-const API_BASE_URL = 'http://localhost:3001/api/sharepoint/v1.0'; // Use proxy server with correct API version
-const PROXY_URL = 'http://localhost:3001'; // Proxy server base URL
+const API_BASE_URL =
+  window.location.hostname === 'localhost'
+    ? 'http://localhost:3001/api/sharepoint/v1.0'
+    : '/.netlify/functions/sharepoint-proxy?apiPath=/v1.0'; // Use Netlify Function in production
+const PROXY_URL =
+  window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : '/.netlify/functions/sharepoint-proxy'; // Use Netlify Function in production
 
 // Debug: Log environment variables on service load
 console.log('[SharePoint] Environment variables loaded:');
@@ -615,7 +621,7 @@ function transformExcelToLagMetrics(
                 const indicatorTamyeez = rowData[typeColIdx]?.trim();
                 const indicatorIsLessBetter = indicatorTamyeez === 'عدد يقل';
                 const currentMonth = getFilteredMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, indicatorTamyeez);
-      const totalData = getTotalData(rowData);
+                const totalData = getTotalData(rowData);
                 const trend = calculateTrendFromMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, indicatorTamyeez);
                 const norm = normalizeValueTarget(currentMonth.achieved, currentMonth.target);
                 const value = norm.value;
@@ -753,7 +759,7 @@ function transformExcelToLagMetrics(
               // Normal LEAD (no indicators)
               const rowData = excelData[leadStart].data;
               const currentMonth = getFilteredMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, leadTamyeez);
-      const totalData = getTotalData(rowData);
+              const totalData = getTotalData(rowData);
               const trend = calculateTrendFromMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, leadTamyeez);
               const norm = normalizeValueTarget(currentMonth.achieved, currentMonth.target);
               const value = norm.value;
