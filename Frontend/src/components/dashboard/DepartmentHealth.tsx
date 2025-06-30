@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity } from "lucide-react";
 
@@ -30,20 +29,20 @@ const DepartmentHealth = ({ department, healthPercentage }: DepartmentHealthProp
   return (
     <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Activity className="w-5 h-5 text-primary" />
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
           {department} Health
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 sm:space-y-6">
         {/* Heart Visual */}
-        <div className="flex flex-col items-center space-y-4">
+        <div className="flex flex-col items-center space-y-3 sm:space-y-4">
           <div className="relative">
             <svg 
               width="120" 
               height="108" 
               viewBox="0 0 24 24" 
-              className="w-30 h-30"
+              className="w-24 h-24 sm:w-30 sm:h-30"
             >
               {/* Heart outline */}
               <path
@@ -89,13 +88,13 @@ const DepartmentHealth = ({ department, healthPercentage }: DepartmentHealthProp
           </div>
           
           <div className="text-center space-y-2">
-            <div className={`text-4xl font-bold ${getHealthColor(healthPercentage)}`}>
+            <div className={`text-3xl sm:text-4xl font-bold ${getHealthColor(healthPercentage)}`}>
               {healthPercentage}%
             </div>
             <div className="text-sm text-muted-foreground">
               Health Score
             </div>
-            <div className={`text-lg font-semibold ${getHealthColor(healthPercentage)}`}>
+            <div className={`text-base sm:text-lg font-semibold ${getHealthColor(healthPercentage)}`}>
               {getHealthStatus(healthPercentage)}
             </div>
           </div>

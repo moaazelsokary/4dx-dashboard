@@ -73,51 +73,51 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
       className={`border-2 border-lag/20 bg-white/30 backdrop-blur-md border-white/30 shadow-lg transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${isAverage ? 'ring-2 ring-primary/60' : ''} ${small ? 'scale-95 text-xs p-1' : ''}`}
       onClick={() => onClick(lag.id)}
     >
-      <CardHeader className={`pb-2 ${small ? 'p-2' : ''}`}>
-        <CardTitle className={`flex items-center justify-between font-medium gap-2 ${small ? 'text-xs' : 'text-sm'}`}>
+      <CardHeader className={`pb-2 ${small ? 'p-2' : 'p-3 sm:p-4'}`}>
+        <CardTitle className={`flex items-center justify-between font-medium gap-2 ${small ? 'text-xs' : 'text-sm sm:text-base'}`}>
           <div className="flex items-center gap-2">
             {/* LAG Number Bracket - only for average cards and normal LAGs, not indicators */}
             {lag.lagNumber && (isAverage || !isIndicator) && (
-              <div className="bg-primary text-primary-foreground rounded-lg px-2 py-1 text-xs font-bold shadow-md">
-                LAG {lag.lagNumber}
+              <div className="bg-primary text-primary-foreground rounded-lg px-2 py-1 text-xs font-bold shadow-md whitespace-nowrap">
+                LAG{lag.lagNumber}
               </div>
             )}
-            <span className="text-muted-foreground">{lag.name}</span>
+            <span className="text-muted-foreground text-xs sm:text-sm">{lag.name}</span>
           </div>
           <div className="flex items-center gap-2">
-            {isIndicator && <Badge variant="outline" className="border-primary text-primary">Indicator</Badge>}
+            {isIndicator && <Badge variant="outline" className="border-primary text-primary text-xs">Indicator</Badge>}
             <Target className={`text-lag ${small ? 'w-3 h-3' : 'w-4 h-4'}`} />
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className={`space-y-2 ${small ? 'p-2' : ''}`}>
+      <CardContent className={`space-y-2 ${small ? 'p-2' : 'p-3 sm:p-4'}`}>
         <div className="space-y-1">
           <div className="flex items-baseline gap-2">
             {isAverage ? (
               <>
-                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-2xl'}`}>{lag.target === 0 ? 100 : Math.round((Number(lag.value.toFixed(2)) / Number(lag.target.toFixed(2))) * 100)}%</span>
+                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-xl sm:text-2xl'}`}>{lag.target === 0 ? 100 : Math.round((Number(lag.value.toFixed(2)) / Number(lag.target.toFixed(2))) * 100)}%</span>
                 <Badge 
                   variant={statusInfo.variant} 
-                  className={
+                  className={`text-xs ${
                     statusInfo.text === 'Perfect' || statusInfo.text === 'Over Target'
                       ? 'bg-green-500 text-white'
                       : statusInfo.className
-                  }
+                  }`}
                 >
                   {statusInfo.text}
                 </Badge>
               </>
             ) : (
               <>
-                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-2xl'}`}>{getDisplayValue()}/{getDisplayTarget()}</span>
+                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-xl sm:text-2xl'}`}>{getDisplayValue()}/{getDisplayTarget()}</span>
                 <span className={`text-muted-foreground ${small ? 'text-xs' : 'text-sm'}`}>({Math.round(getDisplayPercentage())}%)</span>
                 <Badge 
                   variant={statusInfo.variant} 
-                  className={
+                  className={`text-xs ${
                     statusInfo.text === 'Perfect' || statusInfo.text === 'Over Target'
                       ? 'bg-green-500 text-white'
                       : statusInfo.className
-                  }
+                  }`}
                 >
                   {statusInfo.text}
                 </Badge>

@@ -454,34 +454,36 @@ const Dashboard = () => {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex flex-col">
-      <header className="w-full shadow-sm bg-white/80 sticky top-0 z-10">
-        <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-4 flex flex-col md:flex-row items-center md:justify-between gap-2 md:gap-0">
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full">
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 flex-shrink-0">
+    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
+      {/* Header */}
+      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
                 <img 
                   src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
                   alt="Logo" 
                   className="w-full h-full object-contain"
                 />
               </div>
-              <div className="text-center sm:text-left">
-                <h1 className="text-lg sm:text-xl font-bold text-foreground">
+              <div>
+                <h1 className="text-base sm:text-xl font-bold text-foreground">
                   {isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
                 </h1>
                 <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto justify-center sm:justify-end">
-              <div className="flex items-center gap-2">
+            
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                 {user.role === "CEO" ? (
-                  <Badge variant="secondary" className="bg-accent text-accent-foreground">
+                  <Badge variant="secondary" className="bg-accent text-accent-foreground w-fit text-xs">
                     <Users className="w-3 h-3 mr-1" />
                     CEO View
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="border-primary text-primary">
+                  <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
                     <Building2 className="w-3 h-3 mr-1" />
                     {getDepartmentDisplayName(user.departments[0])}
                   </Badge>
@@ -493,7 +495,9 @@ const Dashboard = () => {
                   }
                 </span>
               </div>
-              <div className="flex items-center gap-2 mt-2 sm:mt-0">
+              
+              {/* Connection Status - Desktop Only */}
+              <div className="hidden sm:flex sm:flex-row sm:items-center gap-2">
                 {isLoading && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <RefreshCw className="w-3 h-3 animate-spin" />
@@ -506,36 +510,33 @@ const Dashboard = () => {
                     Connection Error
                   </div>
                 )}
-                {/* Desktop only: Refresh and Logout buttons */}
-                <div className="hidden sm:flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={handleRefreshData} className="px-2 sm:px-4">
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    <span className="hidden xs:inline">Refresh Data</span>
-                    <span className="inline xs:hidden">Refresh</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleSignOut} className="px-2 sm:px-4">
-                    <LogOut className="w-4 h-4 mr-1" />
-                    <span className="hidden xs:inline">Sign Out</span>
-                    <span className="inline xs:hidden">Logout</span>
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh Data
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
+                  <LogOut className="w-4 h-4 mr-1" />
+                  Sign Out
+                </Button>
               </div>
             </div>
           </div>
         </div>
       </header>
-      {/* Mobile only: Top bar for Refresh and Logout (not fixed, not sticky) */}
-      <div className="flex sm:hidden bg-white/90 border-b border-gray-200 p-2 justify-center gap-2">
-        <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 flex items-center justify-center px-2">
-          <RefreshCw className="w-4 h-4 mr-1" />
-          Refresh
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleSignOut} className="flex-1 flex items-center justify-center px-2">
-          <LogOut className="w-4 h-4 mr-1" />
-          Logout
-        </Button>
-      </div>
-      <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-4 space-y-4">
+
+      <div className="container mx-auto px-4 py-4 space-y-4 pb-20 sm:pb-4">
+        {/* Mobile Buttons - Before Filters */}
+        <div className="flex gap-3 sm:hidden">
+          <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 text-xs">
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Refresh Data
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSignOut} className="flex-1 text-xs">
+            <LogOut className="w-4 h-4 mr-1" />
+            Sign Out
+          </Button>
+        </div>
+
         {/* Filters */}
         <DashboardFilters
           selectedPeriod={selectedPeriod}
@@ -549,6 +550,7 @@ const Dashboard = () => {
           endMonth={endMonth}
           setEndMonth={setEndMonth}
         />
+
         {/* Loading State */}
         {isLoading && (
           <Card>
@@ -560,6 +562,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         )}
+
         {/* Error State */}
         {error && (
           <Card className="border-destructive">
@@ -568,15 +571,16 @@ const Dashboard = () => {
                 <AlertCircle className="w-4 h-4" />
                 <div>
                   <h3 className="font-semibold">Connection Error</h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Failed to load data from SharePoint. Please check your connection and try again.
                   </p>
-                  <p className="text-xs mt-1 break-all">{error.message}</p>
+                  <p className="text-xs mt-1">{error.message}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
+
         {/* LAG Metrics Grid */}
         {!isLoading && !error && (
         <div>
@@ -589,27 +593,30 @@ const Dashboard = () => {
             ) : (
               // Department Dashboard - LAGs with indicators
               <>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 mb-4">
-              <BarChart3 className="w-5 h-5 text-lag" />
-              <h2 className="text-lg sm:text-xl font-bold text-foreground">LAG Measures</h2>
-            <Badge variant="outline" className="border-lag text-lag">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-lag" />
+                <h2 className="text-lg sm:text-xl font-bold text-foreground">LAG Measures</h2>
+              </div>
+              <Badge variant="outline" className="border-lag text-lag w-fit">
                     {groupLagsForDisplay(displayData).length} Active Measures
             </Badge>
           </div>
+          
             {displayData.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+              <div className="grid grid-cols-1 gap-4">
                     {groupLagsForDisplay(displayData).map((group, idx) => (
                       group.indicators.length > 0 ? (
                         <div
                           key={group.average.id}
-                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center col-span-1 md:col-span-2 xl:col-span-4 w-full"
+                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center w-full"
                         >
                           <div className="w-full">
               <LagMetricsCard
                               lag={{ ...group.average, name: group.average.name.replace(/\s*\(Average\)$/, '') }}
                 onClick={handleLagClick}
               />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 w-full mt-2 bg-muted/40 rounded-lg p-2 overflow-x-auto">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 w-full mt-2 bg-muted/40 rounded-lg p-2">
                               {group.indicators.map(ind => (
                                 <div key={ind.id} className="w-full">
                                   <LagMetricsCard lag={ind} onClick={handleLagClick} small />
@@ -634,6 +641,7 @@ const Dashboard = () => {
             )}
           </div>
         )}
+          
         {/* Department Health */}
         {!isLoading && !error && !isCEO && (
           <div>
@@ -644,6 +652,7 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
       {/* Lead Measures Modal */}
       {!isCEO && (
       <LeadMeasuresModal
@@ -652,6 +661,7 @@ const Dashboard = () => {
         lagName={selectedLag?.name || ""}
           leads={(() => {
             if (!selectedLag) return [];
+            
             // For department view, find the filtered lag in displayData by id
             const filteredLag = displayData.find(l => l.id === selectedLag.id);
             return filteredLag?.leads || [];

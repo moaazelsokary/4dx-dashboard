@@ -135,7 +135,7 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
   return (
     <div className="space-y-6">
       {/* Department Health Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {(() => {
           // Expected departments
           const expectedDepartments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices'];
@@ -156,10 +156,10 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
                 onClick={() => handleDepartmentClick(departmentCode)}
               >
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-lg">
+                  <CardTitle className="flex items-center justify-between text-base sm:text-lg">
                     <div className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-primary" />
-                      {departmentName}
+                      <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                      <span className="text-sm sm:text-base">{departmentName}</span>
                     </div>
                     {lags.length === 0 && (
                       <Badge variant="outline" className="text-xs">
@@ -176,7 +176,7 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
                         width="80" 
                         height="72" 
                         viewBox="0 0 24 24" 
-                        className="w-20 h-20"
+                        className="w-16 h-16 sm:w-20 sm:h-20"
                       >
                         {/* Heart outline */}
                         <path

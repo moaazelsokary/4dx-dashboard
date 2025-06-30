@@ -105,10 +105,10 @@ const DashboardFilters = ({
 
   return (
     <Card>
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         <div className="flex items-center gap-2 mb-4">
           <Filter className="w-4 h-4 text-primary" />
-          <h3 className="font-semibold">Time Period Filters</h3>
+          <h3 className="font-semibold text-sm sm:text-base">Time Period Filters</h3>
         </div>
         
         <div className="space-y-4">
@@ -124,7 +124,7 @@ const DashboardFilters = ({
                   variant={selectedPeriod === period.value ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectedPeriod(period.value)}
-                  className={selectedPeriod === period.value ? "bg-primary text-primary-foreground" : ""}
+                  className={`${selectedPeriod === period.value ? "bg-primary text-primary-foreground" : ""} text-xs sm:text-sm`}
                 >
                   {period.label}
                 </Button>
@@ -139,12 +139,12 @@ const DashboardFilters = ({
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Select Months ({selectedMonths.length} selected)
               </label>
-              <div className="flex flex-wrap gap-2">
-                {months.map((month) => (
+              <div className="flex flex-wrap gap-1 sm:gap-2">
+                {compactMonths.map((month) => (
                   <Badge
                     key={month.value}
                     variant={selectedMonths.includes(month.value) ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors ${
+                    className={`cursor-pointer transition-colors text-xs ${
                       selectedMonths.includes(month.value) 
                         ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                         : "hover:bg-muted"
@@ -165,12 +165,12 @@ const DashboardFilters = ({
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Select Quarters ({selectedQuarters.length} selected)
               </label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1 sm:gap-2">
                 {quarters.map((quarter) => (
                   <Badge
                     key={quarter.value}
                     variant={selectedQuarters.includes(quarter.value) ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors ${
+                    className={`cursor-pointer transition-colors text-xs ${
                       selectedQuarters.includes(quarter.value) 
                         ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                         : "hover:bg-muted"
@@ -186,13 +186,13 @@ const DashboardFilters = ({
 
           {/* Cumulative Selection */}
           {selectedPeriod === "cumulative" && (
-            <div className="bg-muted/30 rounded-lg p-4 border">
+            <div className="bg-muted/30 rounded-lg p-3 sm:p-4 border">
               <div className="flex items-center gap-2 mb-3">
                 <Calendar className="w-4 h-4 text-primary" />
                 <span className="text-sm font-medium text-foreground">Date Range Selection</span>
               </div>
               
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                     <span className="w-2 h-2 bg-green-500 rounded-full"></span>
