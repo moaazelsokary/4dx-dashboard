@@ -488,7 +488,7 @@ const Dashboard = () => {
                     {getDepartmentDisplayName(user.departments[0])}
                   </Badge>
                 )}
-                <span className="text-xs sm:text-sm text-muted-foreground">
+                <span className={`text-xs sm:text-sm text-muted-foreground ${user.role !== "CEO" ? "hidden sm:block" : ""}`}>
                   {isCEO
                     ? "welcome ENG. Ahmed Mousa"
                     : `Welcome, ${getDepartmentDisplayName(user.departments[0])}`
@@ -604,12 +604,12 @@ const Dashboard = () => {
           </div>
           
             {displayData.length > 0 ? (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {groupLagsForDisplay(displayData).map((group, idx) => (
                       group.indicators.length > 0 ? (
                         <div
                           key={group.average.id}
-                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center w-full"
+                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center w-full md:col-span-2 lg:col-span-3 xl:col-span-4"
                         >
                           <div className="w-full">
               <LagMetricsCard

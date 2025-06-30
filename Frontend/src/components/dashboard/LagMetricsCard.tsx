@@ -78,7 +78,7 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
           <div className="flex items-center gap-2">
             {/* LAG Number Bracket - only for average cards and normal LAGs, not indicators */}
             {lag.lagNumber && (isAverage || !isIndicator) && (
-              <div className="bg-primary text-primary-foreground rounded-lg px-2 py-1 text-xs font-bold shadow-md whitespace-nowrap">
+              <div className={`bg-primary text-primary-foreground rounded-lg px-1 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold shadow-md whitespace-nowrap ${lag.lagNumber < 10 ? 'px-1 sm:px-2' : 'px-1.5 sm:px-2'}`}>
                 LAG{lag.lagNumber}
               </div>
             )}
@@ -95,10 +95,10 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
           <div className="flex items-baseline gap-2">
             {isAverage ? (
               <>
-                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-xl sm:text-2xl'}`}>{lag.target === 0 ? 100 : Math.round((Number(lag.value.toFixed(2)) / Number(lag.target.toFixed(2))) * 100)}%</span>
+                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-lg sm:text-2xl'}`}>{lag.target === 0 ? 100 : Math.round((Number(lag.value.toFixed(2)) / Number(lag.target.toFixed(2))) * 100)}%</span>
                 <Badge 
                   variant={statusInfo.variant} 
-                  className={`text-xs ${
+                  className={`text-[10px] sm:text-xs ${
                     statusInfo.text === 'Perfect' || statusInfo.text === 'Over Target'
                       ? 'bg-green-500 text-white'
                       : statusInfo.className
@@ -109,11 +109,11 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
               </>
             ) : (
               <>
-                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-xl sm:text-2xl'}`}>{getDisplayValue()}/{getDisplayTarget()}</span>
-                <span className={`text-muted-foreground ${small ? 'text-xs' : 'text-sm'}`}>({Math.round(getDisplayPercentage())}%)</span>
+                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-lg sm:text-2xl'}`}>{getDisplayValue()}/{getDisplayTarget()}</span>
+                <span className={`text-muted-foreground ${small ? 'text-xs' : 'text-xs sm:text-sm'}`}>({Math.round(getDisplayPercentage())}%)</span>
                 <Badge 
                   variant={statusInfo.variant} 
-                  className={`text-xs ${
+                  className={`text-[10px] sm:text-xs ${
                     statusInfo.text === 'Perfect' || statusInfo.text === 'Over Target'
                       ? 'bg-green-500 text-white'
                       : statusInfo.className
@@ -127,12 +127,12 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
           <div className="flex items-center gap-2">
             <Badge 
               variant={isPositiveTrend ? "default" : "destructive"} 
-              className={`px-2 py-0.5 ${small ? 'text-[10px]' : 'text-xs'}`}
+              className={`px-1.5 sm:px-2 py-0.5 ${small ? 'text-[8px] sm:text-[10px]' : 'text-[10px] sm:text-xs'}`}
             >
-              {isPositiveTrend ? <TrendingUp className={`mr-1 ${small ? 'w-2 h-2' : 'w-3 h-3'}`} /> : <TrendingDown className={`mr-1 ${small ? 'w-2 h-2' : 'w-3 h-3'}`} />}
+              {isPositiveTrend ? <TrendingUp className={`mr-1 ${small ? 'w-2 h-2' : 'w-2 h-2 sm:w-3 sm:h-3'}`} /> : <TrendingDown className={`mr-1 ${small ? 'w-2 h-2' : 'w-2 h-2 sm:w-3 sm:h-3'}`} />}
               {Math.abs(lag.trend).toFixed(2)}%
             </Badge>
-            <span className={`text-muted-foreground ${small ? 'text-[10px]' : 'text-xs'}`}>vs last period</span>
+            <span className={`text-muted-foreground ${small ? 'text-[8px] sm:text-[10px]' : 'text-[10px] sm:text-xs'}`}>vs last period</span>
           </div>
         </div>
       </CardContent>
