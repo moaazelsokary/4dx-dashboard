@@ -13,7 +13,7 @@ const TENANT_ID = process.env.TENANT_ID;
 
 // Enable CORS for all routes
 app.use(cors({
-  origin: 'http://localhost:8080',
+  origin: ['http://localhost:8080','https://lifemakers.netlify.app/'],
   credentials: true
 }));
 
