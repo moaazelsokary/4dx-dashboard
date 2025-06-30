@@ -71,3 +71,16 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+## Netlify Functions Proxy for SharePoint
+
+- The SharePoint proxy logic is now in a Netlify Function at `netlify/functions/sharepoint-proxy.js`.
+- Set the following environment variables in Netlify:
+  - CLIENT_ID
+  - CLIENT_SECRET
+  - TENANT_ID
+- Use the endpoint in your frontend as:
+  
+  ```js
+  fetch('/.netlify/functions/sharepoint-proxy?apiPath=/v1.0/sites/lifemaker.sharepoint.com:/sites/CaseManagementFiles2')
+  ```
