@@ -12,6 +12,7 @@ interface LeadMeasure {
   target: number;
   trend: number;
   leadNumber?: number;
+  avgIndicatorPercentage?: number;
 }
 
 interface LeadMeasuresModalProps {
@@ -37,7 +38,13 @@ const LeadMeasuresModal = ({ isOpen, onClose, lagName, leads }: LeadMeasuresModa
           indicators.push(leads[j]);
           j++;
         }
-        groups.push({ average: lead, indicators });
+        // Calculate average of indicator percentages
+        let avgPercentage = null;
+        if (indicators.length > 0) {
+          const percentages = indicators.map(ind => ind.target === 0 ? 100 : (ind.value / ind.target) * 100);
+          avgPercentage = percentages.reduce((sum, pct) => sum + pct, 0) / indicators.length;
+        }
+        groups.push({ average: { ...lead, avgIndicatorPercentage: avgPercentage }, indicators });
         i = j;
       } else {
         groups.push({ average: lead, indicators: [] });
@@ -86,9 +93,12 @@ const LeadMeasuresModal = ({ isOpen, onClose, lagName, leads }: LeadMeasuresModa
 
 // Extracted LeadCard for reuse
 function LeadCard({ lead, isAverage, isIndicator }: { lead: LeadMeasure; isAverage?: boolean; isIndicator?: boolean }) {
-  const achievementRate = lead.target === 0 ? 100 : (lead.value / lead.target) * 100;
+  const displayAchievementRate =
+    typeof lead.avgIndicatorPercentage === 'number'
+      ? lead.avgIndicatorPercentage
+      : (lead.target === 0 ? 100 : (lead.value / lead.target) * 100);
   const isPositiveTrend = lead.trend > 0;
-  const statusInfo = getStatusBadge(achievementRate);
+  const statusInfo = getStatusBadge(displayAchievementRate);
   return (
     <Card className={`border-2 border-lead/20 bg-white/30 backdrop-blur-md border-white/30 shadow-lg ${isAverage ? 'ring-2 ring-primary/60' : ''}`}>
       <CardHeader className="pb-2">
@@ -114,7 +124,7 @@ function LeadCard({ lead, isAverage, isIndicator }: { lead: LeadMeasure; isAvera
           <div className="flex items-baseline gap-2">
             {isAverage ? (
               <>
-                <span className="text-2xl font-bold text-foreground">{Math.round(achievementRate)}%</span>
+                <span className="text-2xl font-bold text-foreground">{Math.round(displayAchievementRate)}%</span>
                 <Badge 
                   variant={statusInfo.variant} 
                   className={
@@ -132,7 +142,7 @@ function LeadCard({ lead, isAverage, isIndicator }: { lead: LeadMeasure; isAvera
                   {formatNumber(lead.value)}/{formatNumber(lead.target)}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  ({Math.round(achievementRate)}%)
+                  ({Math.round(displayAchievementRate)}%)
                 </span>
                 <Badge 
                   variant={statusInfo.variant} 
@@ -161,10 +171,10 @@ function LeadCard({ lead, isAverage, isIndicator }: { lead: LeadMeasure; isAvera
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Progress</span>
-            <span className="font-medium">{Math.round(achievementRate)}%</span>
+            <span className="font-medium">{Math.round(displayAchievementRate)}%</span>
           </div>
           <Progress 
-            value={Math.min(achievementRate, 100)} 
+            value={Math.min(displayAchievementRate, 100)} 
             className="h-2"
           />
         </div>

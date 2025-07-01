@@ -423,7 +423,13 @@ const Dashboard = () => {
           indicators.push(lags[j]);
           j++;
         }
-        groups.push({ average: lag, indicators });
+        // Calculate average of indicator percentages
+        let avgPercentage = null;
+        if (indicators.length > 0) {
+          const percentages = indicators.map(ind => ind.target === 0 ? 100 : (ind.value / ind.target) * 100);
+          avgPercentage = percentages.reduce((sum, pct) => sum + pct, 0) / indicators.length;
+        }
+        groups.push({ average: { ...lag, avgIndicatorPercentage: avgPercentage }, indicators });
         i = j;
       } else {
         groups.push({ average: lag, indicators: [] });

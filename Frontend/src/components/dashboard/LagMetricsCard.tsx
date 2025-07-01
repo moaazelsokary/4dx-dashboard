@@ -21,6 +21,7 @@ interface LagMetric {
     isLessBetter: boolean;
     lagNumber?: number; // Sequential LAG number for visual display
   }[];
+  avgIndicatorPercentage?: number;
 }
 
 interface LagMetricsCardProps {
@@ -34,14 +35,17 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
   // "Not Yet" means: target=0 (no planned target)
   const isNotYet = lag.target === 0;
   
-  // Calculate achievement rate based on whether "less is better"
-  const achievementRate = isNotYet ? 100 : 
-    lag.isLessBetter ? 
-      (lag.value === 0 ? 0 : (lag.target / lag.value) * 100) : // For "عدد يقل": handle 0 case
-      (lag.value / lag.target) * 100;  // For normal metrics: (value / target) * 100
-  const isPositiveTrend = lag.trend > 0;
+  // Distinguish card type for UI
+  const isAverage = lag.id.includes('_average');
+  const isIndicator = lag.name.includes('Indicator');
 
-  const statusInfo = getStatusBadge(achievementRate, isNotYet);
+  // Use avgIndicatorPercentage if present (for average LAGs with indicators)
+  const displayAchievementRate =
+    typeof lag.avgIndicatorPercentage === 'number'
+      ? lag.avgIndicatorPercentage
+      : (lag.target === 0 ? 100 : lag.isLessBetter ? (lag.value === 0 ? 0 : (lag.target / lag.value) * 100) : (lag.value / lag.target) * 100);
+
+  const statusInfo = getStatusBadge(displayAchievementRate, isNotYet);
 
   const getDisplayValue = () => {
     if (isNotYet) {
@@ -61,12 +65,10 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
     if (isNotYet) {
       return 100;
     }
-    return achievementRate;
+    return displayAchievementRate;
   };
 
-  // Distinguish card type for UI
-  const isAverage = lag.id.includes('_average');
-  const isIndicator = lag.name.includes('Indicator');
+  const isPositiveTrend = lag.trend > 0;
 
   return (
     <Card 
@@ -95,7 +97,7 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
           <div className="flex items-baseline gap-2">
             {isAverage ? (
               <>
-                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-lg sm:text-2xl'}`}>{lag.target === 0 ? 100 : Math.round((Number(lag.value.toFixed(2)) / Number(lag.target.toFixed(2))) * 100)}%</span>
+                <span className={`font-bold text-foreground ${small ? 'text-lg' : 'text-lg sm:text-2xl'}`}>{Math.round(displayAchievementRate)}%</span>
                 <Badge 
                   variant={statusInfo.variant} 
                   className={`text-[10px] sm:text-xs ${
