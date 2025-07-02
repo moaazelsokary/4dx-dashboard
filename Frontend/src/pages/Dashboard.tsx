@@ -161,6 +161,36 @@ const Dashboard = () => {
       return tamyeez === 'عدد يقل';
     };
 
+    // Helper to check if a row is "ثابت" type (fixed value)
+    const isFixedRow = (rowData: string[]): boolean => {
+      const tamyeez = rowData[4]?.trim();
+      return tamyeez === 'ثابت';
+    };
+
+    // Helper to get the latest non-zero, non-blank value in a period, or fallback to previous
+    // Accepts an optional parity argument: 0 for even (target), 1 for odd (achieved)
+    const getFixedValueForPeriod = (monthlyData: string[], indices: number[], parity?: 0 | 1): number => {
+      // Find the last non-zero, non-blank value in the selected indices
+      for (let i = indices.length - 1; i >= 0; i--) {
+        const idx = indices[i];
+        const val = parseFloat(monthlyData[idx]) || 0;
+        if (val !== 0 && monthlyData[idx] !== '' && !isNaN(val)) {
+          return val;
+        }
+      }
+      // If all are zero/blank, look backward before the first index, only checking correct parity
+      const startIdx = indices.length > 0 ? indices[0] : 0;
+      for (let i = startIdx - 1; i >= 0; i--) {
+        if (parity !== undefined && i % 2 !== parity) continue;
+        const val = parseFloat(monthlyData[i]) || 0;
+        if (val !== 0 && monthlyData[i] !== '' && !isNaN(val)) {
+          return val;
+        }
+      }
+      // If nothing found, return 0
+      return 0;
+    };
+
     // Helper to filter a single metric (LAG, LEAD, or indicator)
     const filterMetric = (metric: LagMetricWithRaw): LagMetricWithRaw => {
       if (!metric.rawData) return metric;
@@ -176,6 +206,8 @@ const Dashboard = () => {
       const isPercentage = isPercentageRow(rowData);
       // Check if this is a "عدد يقل" row (less is better)
       const isLessBetter = isLessBetterRow(rowData);
+      // Check if this is a "ثابت" row (fixed value)
+      const isFixed = isFixedRow(rowData);
       // Both "نسبة" and "عدد يقل" should use average for multiple months
       const shouldUseAverage = isPercentage || isLessBetter;
 
@@ -334,6 +366,62 @@ const Dashboard = () => {
         trend = Math.round((currentRate - previousRate) * 100) / 100;
       }
       // --- End trend calculation ---
+
+      if (isFixed) {
+        // --- ثابت logic ---
+        let indices: number[] = [];
+        if (selectedPeriod === 'monthly' && selectedMonths.length) {
+          indices = selectedMonths.map(monthStr => getMonthIndex(monthStr) * 2);
+        } else if (selectedPeriod === 'quarterly' && selectedQuarters.length) {
+          selectedQuarters.forEach(quarter => {
+            indices.push(...getQuarterIndices(quarter).map(i => i * 2));
+          });
+        } else if (selectedPeriod === 'cumulative' && startMonth && endMonth) {
+          const startIdx = getMonthIndex(startMonth);
+          const endIdx = getMonthIndex(endMonth);
+          for (let i = startIdx; i <= endIdx; i++) {
+            indices.push(i * 2);
+          }
+        } else {
+          // Default: all months
+          for (let i = 0; i < monthlyData.length; i += 2) {
+            indices.push(i);
+          }
+        }
+        // Sort indices in ascending order (natural month order)
+        indices = indices.filter(i => i >= 0).sort((a, b) => a - b);
+        // For achieved, indices are +1
+        const achievedIndices = indices.map(i => i + 1);
+        const target = getFixedValueForPeriod(monthlyData, indices, 0); // even indices for target
+        const value = getFixedValueForPeriod(monthlyData, achievedIndices, 1); // odd indices for achieved
+        // Trend logic: compare with previous period (use same logic as before, but for fixed)
+        let previousTarget = 0;
+        let previousValue = 0;
+        if (indices.length > 0 && indices[0] > 0) {
+          // Previous period is the value just before the first index
+          previousTarget = getFixedValueForPeriod(monthlyData, [indices[0] - 2], 0);
+          previousValue = getFixedValueForPeriod(monthlyData, [achievedIndices[0] - 2], 1);
+        }
+        // Calculate achievement rate
+        const currentRate = target > 0 ? (value / target) * 100 : 0;
+        const previousRate = previousTarget > 0 ? (previousValue / previousTarget) * 100 : 0;
+        let trend = 0;
+        if ((target === 0 && value === 0) || (previousTarget === 0 && previousValue === 0)) {
+          trend = 0;
+        } else if (previousRate === 0) {
+          trend = 0;
+        } else {
+          trend = Math.round((currentRate - previousRate) * 100) / 100;
+        }
+        return {
+          ...metric,
+          value,
+          target,
+          trend,
+          leads: metric.leads ? metric.leads.map(filterMetric) : [],
+          isLessBetter: false // ثابت is not less-better
+        };
+      }
 
       return {
         ...metric,
@@ -521,9 +609,9 @@ const Dashboard = () => {
                   Refresh Data
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
-                  <LogOut className="w-4 h-4 mr-1" />
-                  Sign Out
-                </Button>
+                <LogOut className="w-4 h-4 mr-1" />
+                Sign Out
+              </Button>
               </div>
             </div>
           </div>
@@ -601,7 +689,7 @@ const Dashboard = () => {
               <>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
               <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-lag" />
+              <BarChart3 className="w-5 h-5 text-lag" />
                 <h2 className="text-lg sm:text-xl font-bold text-foreground">LAG Measures</h2>
               </div>
               <Badge variant="outline" className="border-lag text-lag w-fit">

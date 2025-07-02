@@ -621,7 +621,7 @@ function transformExcelToLagMetrics(
                 const indicatorTamyeez = rowData[typeColIdx]?.trim();
                 const indicatorIsLessBetter = indicatorTamyeez === 'عدد يقل';
                 const currentMonth = getFilteredMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, indicatorTamyeez);
-                const totalData = getTotalData(rowData);
+      const totalData = getTotalData(rowData);
                 const trend = calculateTrendFromMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, indicatorTamyeez);
                 const norm = normalizeValueTarget(currentMonth.achieved, currentMonth.target);
                 const value = norm.value;
@@ -759,7 +759,7 @@ function transformExcelToLagMetrics(
               // Normal LEAD (no indicators)
               const rowData = excelData[leadStart].data;
               const currentMonth = getFilteredMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, leadTamyeez);
-              const totalData = getTotalData(rowData);
+      const totalData = getTotalData(rowData);
               const trend = calculateTrendFromMonthlyData(rowData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth, leadTamyeez);
               const norm = normalizeValueTarget(currentMonth.achieved, currentMonth.target);
               const value = norm.value;

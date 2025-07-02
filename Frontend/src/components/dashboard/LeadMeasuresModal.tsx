@@ -93,12 +93,13 @@ const LeadMeasuresModal = ({ isOpen, onClose, lagName, leads }: LeadMeasuresModa
 
 // Extracted LeadCard for reuse
 function LeadCard({ lead, isAverage, isIndicator }: { lead: LeadMeasure; isAverage?: boolean; isIndicator?: boolean }) {
+  const isNotYet = (lead.target === 0 || isNaN(lead.target)) && (lead.value === 0 || isNaN(lead.value));
   const displayAchievementRate =
     typeof lead.avgIndicatorPercentage === 'number'
       ? lead.avgIndicatorPercentage
       : (lead.target === 0 ? 100 : (lead.value / lead.target) * 100);
   const isPositiveTrend = lead.trend > 0;
-  const statusInfo = getStatusBadge(displayAchievementRate);
+  const statusInfo = getStatusBadge(displayAchievementRate, isNotYet);
   return (
     <Card className={`border-2 border-lead/20 bg-white/30 backdrop-blur-md border-white/30 shadow-lg ${isAverage ? 'ring-2 ring-primary/60' : ''}`}>
       <CardHeader className="pb-2">
