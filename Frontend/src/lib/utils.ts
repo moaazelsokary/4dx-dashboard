@@ -5,6 +5,36 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Utility function to get current month in YYYY-MM format
+export function getCurrentMonth(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0'); // getMonth() returns 0-11
+  return `${year}-${month}`;
+}
+
+// Utility function to get current quarter
+export function getCurrentQuarter(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1; // getMonth() returns 0-11
+  
+  if (month >= 1 && month <= 3) return 'Q1';
+  if (month >= 4 && month <= 6) return 'Q2';
+  if (month >= 7 && month <= 9) return 'Q3';
+  return 'Q4';
+}
+
+// Utility function to get the previous month (for end month ranges)
+export function getPreviousMonth(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // Previous month (0-11)
+  const adjustedMonth = month === 0 ? 12 : month; // If January, go to December of previous year
+  const adjustedYear = month === 0 ? year - 1 : year;
+  const monthStr = String(adjustedMonth).padStart(2, '0');
+  return `${adjustedYear}-${monthStr}`;
+}
+
 // Format number with comma separation, 2 decimal places only if needed, and millions format
 export function formatNumber(value: number): string {
   if (value === 0) return "0";

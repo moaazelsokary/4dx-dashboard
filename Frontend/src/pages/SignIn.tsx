@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, User } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { dataCacheService } from "@/services/dataCacheService";
+import { sharePointCacheService } from "@/services/sharePointCacheService";
 
 const SignIn = () => {
   const [username, setUsername] = useState("");
@@ -34,7 +36,7 @@ const SignIn = () => {
     setIsLoading(true);
 
     // Simulate authentication delay
-    setTimeout(() => {
+    setTimeout(async () => {
       if (mockUsers[username as keyof typeof mockUsers] && password === mockUsers[username as keyof typeof mockUsers].password) {
         const user = mockUsers[username as keyof typeof mockUsers];
         
@@ -45,10 +47,17 @@ const SignIn = () => {
           departments: user.departments
         }));
 
-        toast({
-          title: "Sign in successful",
-          description: `Welcome, ${username}!`,
+        // Start pre-loading both OneDrive and SharePoint data in background
+        Promise.all([
+          dataCacheService.preloadData(),
+          sharePointCacheService.preloadData()
+        ]).then(() => {
+          console.log('✅ All data pre-loading completed');
+        }).catch((error) => {
+          console.error('❌ Data pre-loading failed:', error);
         });
+
+        // Removed welcome toast - silent sign in
 
         navigate("/dashboard");
       } else {

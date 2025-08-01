@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEffect } from "react";
+import { getCurrentMonth, getCurrentQuarter } from "@/lib/utils";
 
 interface DashboardFiltersProps {
   selectedPeriod: string;
@@ -96,10 +97,10 @@ const DashboardFilters = ({
   // Ensure at least one option is selected when period changes
   useEffect(() => {
     if (selectedPeriod === "monthly" && selectedMonths.length === 0) {
-      setSelectedMonths(["2025-01"]); // Default to January
+      setSelectedMonths([getCurrentMonth()]); // Default to current month
     }
     if (selectedPeriod === "quarterly" && selectedQuarters.length === 0) {
-      setSelectedQuarters(["Q1"]); // Default to Q1
+      setSelectedQuarters([getCurrentQuarter()]); // Default to current quarter
     }
   }, [selectedPeriod, selectedMonths.length, selectedQuarters.length, setSelectedMonths, setSelectedQuarters]);
 

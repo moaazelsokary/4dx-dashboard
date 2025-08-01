@@ -10,7 +10,9 @@ import {
   Building2,
   BarChart3,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  FolderOpen,
+  ArrowRight
 } from "lucide-react";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
 import LagMetricsCard from "@/components/dashboard/LagMetricsCard";
@@ -20,6 +22,8 @@ import CEODashboard from "@/components/dashboard/CEODashboard";
 import { useUserData, useTestConnection } from "@/hooks/useSharePointData";
 import { toast } from "@/hooks/use-toast";
 import type { LagMetric } from "@/services/sharepointService";
+import { getCurrentMonth, getCurrentQuarter, getPreviousMonth } from "@/lib/utils";
+import { sharePointCacheService } from "@/services/sharePointCacheService";
 
 interface User {
   username: string;
@@ -36,10 +40,10 @@ interface LagMetricWithRaw extends LagMetric {
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState("monthly");
-  const [selectedMonths, setSelectedMonths] = useState<string[]>(["2025-06"]);
-  const [selectedQuarters, setSelectedQuarters] = useState<string[]>(["Q2"]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonth()]);
+  const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
   const [startMonth, setStartMonth] = useState("2025-01");
-  const [endMonth, setEndMonth] = useState("2025-06");
+  const [endMonth, setEndMonth] = useState(getCurrentMonth());
   const [selectedLag, setSelectedLag] = useState<LagMetric | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -126,7 +130,16 @@ const Dashboard = () => {
   };
 
   const handleRefreshData = () => {
-    window.location.reload();
+    // Clear SharePoint cache
+    sharePointCacheService.clearCache();
+    
+    // Refetch data using React Query
+    refetch();
+    
+    toast({
+      title: "Data refreshed",
+      description: "Latest data has been loaded.",
+    });
   };
 
   // Transform data based on selected time period (local filtering)
@@ -444,13 +457,15 @@ const Dashboard = () => {
       // For CEO, combine all departments
       const allLags: LagMetric[] = [];
       Object.entries(userData).forEach(([department, lags]) => {
-        lags.forEach(lag => {
-          allLags.push({
-            ...lag,
-            name: `${getDepartmentDisplayName(department)}: ${lag.name}`,
-            id: `${department}_${lag.id}`
+        if (Array.isArray(lags)) {
+          lags.forEach(lag => {
+            allLags.push({
+              ...lag,
+              name: `${getDepartmentDisplayName(department)}: ${lag.name}`,
+              id: `${department}_${lag.id}`
+            });
           });
-        });
+        }
       });
       return transformDataForPeriod(allLags);
     } else if (Array.isArray(userData)) {
@@ -582,12 +597,7 @@ const Dashboard = () => {
                     {getDepartmentDisplayName(user.departments[0])}
                   </Badge>
                 )}
-                <span className={`text-xs sm:text-sm text-muted-foreground ${user.role !== "CEO" ? "hidden sm:block" : ""}`}>
-                  {isCEO
-                    ? "welcome ENG. Ahmed Mousa"
-                    : `Welcome, ${getDepartmentDisplayName(user.departments[0])}`
-                  }
-                </span>
+                {/* Removed welcome message */}
               </div>
               
               {/* Connection Status - Desktop Only */}
@@ -631,19 +641,78 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* Filters */}
-        <DashboardFilters
-          selectedPeriod={selectedPeriod}
-          setSelectedPeriod={setSelectedPeriod}
-          selectedMonths={selectedMonths}
-          setSelectedMonths={setSelectedMonths}
-          selectedQuarters={selectedQuarters}
-          setSelectedQuarters={setSelectedQuarters}
-          startMonth={startMonth}
-          setStartMonth={setStartMonth}
-          endMonth={endMonth}
-          setEndMonth={setEndMonth}
-        />
+        {/* Combined Filters and Program Operations Sector Navigation */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Program Operations Sector Navigation - Takes 1/3 of the space, comes first on mobile */}
+              {user && (user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
+                <div className="order-1 lg:order-2 lg:col-span-1">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FolderOpen className="w-5 h-5 text-primary" />
+                      <h3 className="font-semibold text-base">Program Operations Sector</h3>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/summary')}
+                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                    >
+                      <div className="text-left flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                        </div>
+                        <div>
+                          <div className="font-medium">Summary Overview</div>
+                          <div className="text-xs text-muted-foreground">High-level project summaries</div>
+                        </div>
+                        <div className="ml-auto flex-shrink-0">
+                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                        </div>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/project-details')}
+                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                    >
+                      <div className="text-left flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          <FolderOpen className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                        </div>
+                        <div>
+                          <div className="font-medium">Project Details</div>
+                          <div className="text-xs text-muted-foreground">Detailed project view</div>
+                        </div>
+                        <div className="ml-auto flex-shrink-0">
+                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                        </div>
+                      </div>
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Filters - Takes 2/3 of the space, comes second on mobile */}
+              <div className="order-2 lg:order-1 lg:col-span-2">
+                <DashboardFilters
+                  selectedPeriod={selectedPeriod}
+                  setSelectedPeriod={setSelectedPeriod}
+                  selectedMonths={selectedMonths}
+                  setSelectedMonths={setSelectedMonths}
+                  selectedQuarters={selectedQuarters}
+                  setSelectedQuarters={setSelectedQuarters}
+                  startMonth={startMonth}
+                  setStartMonth={setStartMonth}
+                  endMonth={endMonth}
+                  setEndMonth={setEndMonth}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Loading State */}
         {isLoading && (

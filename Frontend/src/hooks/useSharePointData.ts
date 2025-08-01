@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDepartmentData, testSharePointConnection } from '@/services/sharepointService';
 import { DepartmentData } from '@/types/dashboard';
+import { sharePointCacheService } from '@/services/sharePointCacheService';
 
 // Define LagMetric type here to match the service
 interface LagMetric {
@@ -23,12 +24,30 @@ export const useDepartmentData = (
   department: string
 ) => {
   const queryClient = useQueryClient();
-  // Always fetch raw data first (without filters) for caching
+  
   return useQuery({
     queryKey: ['departmentData', department],
-    queryFn: () => getDepartmentData(department), // No filters in initial fetch
+    queryFn: async () => {
+      // Check for cached data first
+      const cached = sharePointCacheService.getCachedData();
+      if (cached && !cached.isStale && cached[department]) {
+        console.log(`✅ Using cached SharePoint data for ${department}`);
+        return cached[department];
+      }
+
+      // Fetch fresh data if not cached
+      const data = await getDepartmentData(department);
+      
+      // Update cache with new data
+      if (cached) {
+        cached[department] = data;
+        sharePointCacheService.cacheData(cached);
+      }
+      
+      return data;
+    },
     enabled: !!department && department !== 'CEO',
-    staleTime: 0, // Always consider data stale so refetch triggers loading
+    staleTime: 5 * 60 * 1000, // 5 minutes - match cache duration
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
@@ -39,6 +58,13 @@ export const useAllDepartmentsData = () => {
   return useQuery({
     queryKey: ['allDepartmentsData'],
     queryFn: async () => {
+      // Check for cached data first
+      const cached = sharePointCacheService.getCachedData();
+      if (cached && !cached.isStale) {
+        console.log('✅ Using cached SharePoint data for CEO view');
+        return cached;
+      }
+
       // For CEO view, we'll fetch data for all departments
       const departments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices'];
       const results = await Promise.allSettled(
@@ -53,10 +79,13 @@ export const useAllDepartmentsData = () => {
           departmentDataMap[departments[index]] = result.value;
         }
       });
+
+      // Cache the fresh data
+      sharePointCacheService.cacheData(departmentDataMap);
       
       return departmentDataMap;
     },
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes - match cache duration
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });

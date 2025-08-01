@@ -6,6 +6,8 @@ import SignIn from "./pages/SignIn";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import TestConnection from "./pages/TestConnection";
+import Summary from "./pages/OneDriveSummary1";
+import ProjectDetails from "./pages/OneDriveProject";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +20,8 @@ const App = () => (
         <Route path="/" element={<SignIn />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/test" element={<TestConnection />} />
+        <Route path="/summary" element={<Summary />} />
+        <Route path="/project-details" element={<ProjectDetails />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
