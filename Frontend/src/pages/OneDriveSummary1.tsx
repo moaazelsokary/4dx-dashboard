@@ -160,16 +160,62 @@ const Summary: React.FC = () => {
       return null;
     }
 
-    const targetQuartersVsActual = data['Target quarters Vs Actual'];
-    if (!targetQuartersVsActual || targetQuartersVsActual.length < 2) {
-      console.log('❌ Target quarters Vs Actual sheet not found or too short');
+    // Try to find the correct tab name
+    const possibleTabNames = [
+      'Services Target Q  Vs Actual',
+      'Services Target Q Vs Actual',
+      'Target quarters Vs Actual',
+      'Target Quarters Vs Actual'
+    ];
+    
+    let targetQuartersVsActual = null;
+    let usedTabName = '';
+    
+    for (const tabName of possibleTabNames) {
+      if (data[tabName]) {
+        targetQuartersVsActual = data[tabName];
+        usedTabName = tabName;
+        console.log(`✅ Found tab: "${tabName}"`);
+        break;
+      }
+    }
+    
+    if (!targetQuartersVsActual) {
+      console.log('❌ Could not find target quarters vs actual tab');
+      console.log('Available tabs:', Object.keys(data));
+      return null;
+    }
+    
+    // Handle different data structures
+    let dataArray = targetQuartersVsActual;
+    
+    // If it's an object with sheets property, extract the first sheet
+    if (typeof targetQuartersVsActual === 'object' && !Array.isArray(targetQuartersVsActual)) {
+      console.log('🔍 Data is an object, checking for sheets property...');
+      if (targetQuartersVsActual.sheets && Array.isArray(targetQuartersVsActual.sheets)) {
+        dataArray = targetQuartersVsActual.sheets[0] || [];
+        console.log('✅ Found sheets property, using first sheet');
+      } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
+        dataArray = targetQuartersVsActual.data;
+        console.log('✅ Found data property');
+      } else {
+        console.log('❌ Data is object but no sheets or data property found');
+        console.log('Object keys:', Object.keys(targetQuartersVsActual));
+        return null;
+      }
+    }
+    
+    if (!Array.isArray(dataArray) || dataArray.length < 2) {
+      console.log('❌ Target quarters vs actual data is not in expected format');
+      console.log('Data type:', typeof dataArray, Array.isArray(dataArray));
+      console.log('Data length:', dataArray?.length);
       return null;
     }
 
-    console.log('Target quarters Vs Actual data:', targetQuartersVsActual);
+    console.log('Target quarters Vs Actual data:', dataArray);
 
     // Get headers from the second row (index 1) which contains quarter-specific information
-    const headers = targetQuartersVsActual[1] || [];
+    const headers = dataArray[1] || [];
     console.log('Headers (row 1):', headers);
 
     // Find column indices based on the Excel structure where metric names and quarters are in separate columns
@@ -624,12 +670,44 @@ const Summary: React.FC = () => {
   const getMetricsForQuarter = (quarter: string) => {
     if (!data) return null;
     
-    const targetQuartersVsActual = data['Target quarters Vs Actual'];
-    if (!targetQuartersVsActual || targetQuartersVsActual.length < 2) return null;
+    // Try to find the correct tab name
+    const possibleTabNames = [
+      'Services Target Q  Vs Actual',
+      'Services Target Q Vs Actual',
+      'Target quarters Vs Actual',
+      'Target Quarters Vs Actual'
+    ];
+    
+    let targetQuartersVsActual = null;
+    
+    for (const tabName of possibleTabNames) {
+      if (data[tabName]) {
+        targetQuartersVsActual = data[tabName];
+        break;
+      }
+    }
+    
+    if (!targetQuartersVsActual) return null;
+    
+    // Handle different data structures
+    let dataArray = targetQuartersVsActual;
+    
+    // If it's an object with sheets property, extract the first sheet
+    if (typeof targetQuartersVsActual === 'object' && !Array.isArray(targetQuartersVsActual)) {
+      if (targetQuartersVsActual.sheets && Array.isArray(targetQuartersVsActual.sheets)) {
+        dataArray = targetQuartersVsActual.sheets[0] || [];
+      } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
+        dataArray = targetQuartersVsActual.data;
+      } else {
+        return null;
+      }
+    }
+    
+    if (!Array.isArray(dataArray) || dataArray.length < 2) return null;
 
     // Use the exact same findColumnIndex function from getFilteredMetrics
     const findColumnIndex = (metricName: string, quarter: string, type: 'target' | 'actual') => {
-      const headers = targetQuartersVsActual[1] || [];
+      const headers = dataArray[1] || [];
       const searchTerm = type === 'target' ? quarter : `Actual${quarter.slice(1)}`;
       
       // Find the metric section first
@@ -791,6 +869,7 @@ const Summary: React.FC = () => {
     }
     
     console.log('📋 Available tabs:', Object.keys(data));
+    console.log('🔍 Data structure:', typeof data, Array.isArray(data));
     
     // Try different possible tab names
     const possibleTabNames = [
@@ -810,6 +889,7 @@ const Summary: React.FC = () => {
         targetQuartersVsActual = data[tabName];
         usedTabName = tabName;
         console.log(`✅ Found tab: "${tabName}"`);
+        console.log(`📊 Tab data type:`, typeof targetQuartersVsActual, Array.isArray(targetQuartersVsActual));
         break;
       }
     }
@@ -820,17 +900,44 @@ const Summary: React.FC = () => {
       return [];
     }
     
-    if (!Array.isArray(targetQuartersVsActual) || targetQuartersVsActual.length < 2) {
+    // Handle different data structures
+    let dataArray = targetQuartersVsActual;
+    
+    // If it's an object with sheets property, extract the first sheet
+    if (typeof targetQuartersVsActual === 'object' && !Array.isArray(targetQuartersVsActual)) {
+      console.log('🔍 Data is an object, checking for sheets property...');
+      if (targetQuartersVsActual.sheets && Array.isArray(targetQuartersVsActual.sheets)) {
+        dataArray = targetQuartersVsActual.sheets[0] || [];
+        console.log('✅ Found sheets property, using first sheet');
+      } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
+        dataArray = targetQuartersVsActual.data;
+        console.log('✅ Found data property');
+      } else {
+        console.log('❌ Data is object but no sheets or data property found');
+        console.log('Object keys:', Object.keys(targetQuartersVsActual));
+        return [];
+      }
+    }
+    
+    if (!Array.isArray(dataArray) || dataArray.length < 2) {
       console.log('❌ Target quarters vs actual data is not in expected format');
-      console.log('Data:', targetQuartersVsActual);
+      console.log('Data type:', typeof dataArray, Array.isArray(dataArray));
+      console.log('Data length:', dataArray?.length);
+      console.log('Data sample:', dataArray?.slice(0, 2));
       return [];
     }
     
-    console.log(`📊 Processing ${targetQuartersVsActual.length} rows from "${usedTabName}"`);
+    console.log(`📊 Processing ${dataArray.length} rows from "${usedTabName}"`);
     
     // Skip header row and extract project names from Project column (index 0)
-    const projectNames = targetQuartersVsActual.slice(1)
-      .map((row: any[]) => row[0]) // Project column
+    const projectNames = dataArray.slice(1)
+      .map((row: any[]) => {
+        if (!Array.isArray(row)) {
+          console.log('⚠️ Row is not an array:', row);
+          return null;
+        }
+        return row[0]; // Project column
+      })
       .filter((name: string) => name && name.trim() !== '')
       .map((name: string) => name.trim())
       .filter((name: string, index: number, arr: string[]) => arr.indexOf(name) === index); // Remove duplicates

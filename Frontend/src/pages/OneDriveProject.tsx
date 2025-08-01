@@ -231,28 +231,76 @@ const ProjectDetails: React.FC = () => {
     console.log('🔄 getFilteredMetrics called with quarter:', selectedQuarter, 'project:', selectedProject);
     console.log('🔍 Available tabs in data:', Object.keys(data));
     
-    // Check if required tabs exist
-    const hasProjectsTab = 'Projects' in data;
-    const hasServicesTab = 'Services Target Q  Vs Actual' in data;
-    console.log('🔍 Looking for Projects tab:', hasProjectsTab);
-    console.log('🔍 Looking for Services Target Q  Vs Actual tab:', hasServicesTab);
+    // Try to find the correct tab names
+    const possibleProjectsTabNames = ['Projects', 'Project', 'Projects ', 'Project '];
+    const possibleServicesTabNames = [
+      'Services Target Q  Vs Actual',
+      'Services Target Q Vs Actual',
+      'Target quarters Vs Actual',
+      'Target Quarters Vs Actual'
+    ];
     
-    if (!hasProjectsTab || !hasServicesTab) {
+    let projectsData = null;
+    let servicesData = null;
+    
+    // Find Projects tab
+    for (const tabName of possibleProjectsTabNames) {
+      if (data[tabName]) {
+        projectsData = data[tabName];
+        console.log(`✅ Found Projects tab: "${tabName}"`);
+        break;
+      }
+    }
+    
+    // Find Services tab
+    for (const tabName of possibleServicesTabNames) {
+      if (data[tabName]) {
+        servicesData = data[tabName];
+        console.log(`✅ Found Services tab: "${tabName}"`);
+        break;
+      }
+    }
+    
+    if (!projectsData || !servicesData) {
       console.error('❌ Required tabs not found in data');
+      console.log('Available tabs:', Object.keys(data));
       return null;
     }
     
-    // Process projects data
-    const projectsData = data['Projects'];
-    const servicesData = data['Services Target Q  Vs Actual'];
-    console.log('Projects data:', projectsData.length);
-    console.log('Services data:', servicesData.length);
+    // Handle different data structures for both tabs
+    let projectsArray = projectsData;
+    let servicesArray = servicesData;
+    
+    // Handle Projects data structure
+    if (typeof projectsData === 'object' && !Array.isArray(projectsData)) {
+      if (projectsData.sheets && Array.isArray(projectsData.sheets)) {
+        projectsArray = projectsData.sheets[0] || [];
+      } else if (projectsData.data && Array.isArray(projectsData.data)) {
+        projectsArray = projectsData.data;
+      }
+    }
+    
+    // Handle Services data structure
+    if (typeof servicesData === 'object' && !Array.isArray(servicesData)) {
+      if (servicesData.sheets && Array.isArray(servicesData.sheets)) {
+        servicesArray = servicesData.sheets[0] || [];
+      } else if (servicesData.data && Array.isArray(servicesData.data)) {
+        servicesArray = servicesData.data;
+      }
+    }
+    
+    if (!Array.isArray(projectsArray) || !Array.isArray(servicesArray)) {
+      console.error('❌ Data is not in expected array format');
+      return null;
+    }
+    console.log('Projects data:', projectsArray.length);
+    console.log('Services data:', servicesArray.length);
     
     // Process services data for the selected project and quarter
-    const processedServices = processServicesData(servicesData);
+    const processedServices = processServicesData(servicesArray);
     
     // Process projects data
-    const processedProjects = processProjectsData(projectsData);
+    const processedProjects = processProjectsData(projectsArray);
     
     return {
       services: processedServices,
@@ -327,8 +375,33 @@ const ProjectDetails: React.FC = () => {
   const getSummaryMetrics = () => {
     if (!data) return null;
     
-    const projectsData = data['Projects'];
-    const servicesData = data['Target quarters Vs Actual'];
+    // Try to find the correct tab names
+    const possibleProjectsTabNames = ['Projects', 'Project', 'Projects ', 'Project '];
+    const possibleServicesTabNames = [
+      'Services Target Q  Vs Actual',
+      'Services Target Q Vs Actual',
+      'Target quarters Vs Actual',
+      'Target Quarters Vs Actual'
+    ];
+    
+    let projectsData = null;
+    let servicesData = null;
+    
+    // Find Projects tab
+    for (const tabName of possibleProjectsTabNames) {
+      if (data[tabName]) {
+        projectsData = data[tabName];
+        break;
+      }
+    }
+    
+    // Find Services tab
+    for (const tabName of possibleServicesTabNames) {
+      if (data[tabName]) {
+        servicesData = data[tabName];
+        break;
+      }
+    }
     
     if (!projectsData || !servicesData) {
       console.log('❌ Required tabs not found');
