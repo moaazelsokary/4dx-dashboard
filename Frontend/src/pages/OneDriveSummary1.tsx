@@ -113,8 +113,27 @@ const Summary: React.FC = () => {
   const getSummaryMetrics = () => {
     if (!data) return null;
 
-    const overallTargets = data['Overall Targets'] || [];
-    const projects = data['Projects'] || [];
+    // Helper function to extract array from potential object structure
+    const extractArray = (dataObj: any) => {
+      if (Array.isArray(dataObj)) {
+        return dataObj;
+      }
+      if (typeof dataObj === 'object' && dataObj !== null) {
+        if (dataObj.sheets && Array.isArray(dataObj.sheets)) {
+          return dataObj.sheets[0] || [];
+        }
+        if (dataObj.data && Array.isArray(dataObj.data)) {
+          return dataObj.data;
+        }
+        if (Object.keys(dataObj).length === 1 && Array.isArray(Object.values(dataObj)[0])) {
+          return Object.values(dataObj)[0];
+        }
+      }
+      return [];
+    };
+
+    const overallTargets = extractArray(data['Overall Targets'] || []);
+    const projects = extractArray(data['Projects'] || []);
     
     // Check if data is valid (not an error object)
     if (!Array.isArray(overallTargets) || !Array.isArray(projects)) {
@@ -192,15 +211,24 @@ const Summary: React.FC = () => {
     // If it's an object with sheets property, extract the first sheet
     if (typeof targetQuartersVsActual === 'object' && !Array.isArray(targetQuartersVsActual)) {
       console.log('🔍 Data is an object, checking for sheets property...');
+      console.log('🔍 Object type:', typeof targetQuartersVsActual);
+      console.log('🔍 Object keys:', Object.keys(targetQuartersVsActual));
+      console.log('🔍 Object values sample:', Object.values(targetQuartersVsActual).slice(0, 2));
+      
       if (targetQuartersVsActual.sheets && Array.isArray(targetQuartersVsActual.sheets)) {
         dataArray = targetQuartersVsActual.sheets[0] || [];
         console.log('✅ Found sheets property, using first sheet');
       } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
         dataArray = targetQuartersVsActual.data;
         console.log('✅ Found data property');
+      } else if (Object.keys(targetQuartersVsActual).length === 1 && Array.isArray(Object.values(targetQuartersVsActual)[0])) {
+        // Handle case where data is { '0': [...] } or similar single-key object
+        dataArray = Object.values(targetQuartersVsActual)[0];
+        console.log('✅ Found single key object, using its value as array');
       } else {
-        console.log('❌ Data is object but no sheets or data property found');
+        console.log('❌ Data is object but no sheets, data, or single array property found');
         console.log('Object keys:', Object.keys(targetQuartersVsActual));
+        console.log('Object values types:', Object.values(targetQuartersVsActual).map(v => typeof v));
         return null;
       }
     }
@@ -694,11 +722,25 @@ const Summary: React.FC = () => {
     
     // If it's an object with sheets property, extract the first sheet
     if (typeof targetQuartersVsActual === 'object' && !Array.isArray(targetQuartersVsActual)) {
+      console.log('🔍 getMetricsForQuarter: Data is an object, checking for sheets property...');
+      console.log('🔍 Object type:', typeof targetQuartersVsActual);
+      console.log('🔍 Object keys:', Object.keys(targetQuartersVsActual));
+      console.log('🔍 Object values sample:', Object.values(targetQuartersVsActual).slice(0, 2));
+      
       if (targetQuartersVsActual.sheets && Array.isArray(targetQuartersVsActual.sheets)) {
         dataArray = targetQuartersVsActual.sheets[0] || [];
+        console.log('✅ Found sheets property, using first sheet');
       } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
         dataArray = targetQuartersVsActual.data;
+        console.log('✅ Found data property');
+      } else if (Object.keys(targetQuartersVsActual).length === 1 && Array.isArray(Object.values(targetQuartersVsActual)[0])) {
+        // Handle case where data is { '0': [...] } or similar single-key object
+        dataArray = Object.values(targetQuartersVsActual)[0];
+        console.log('✅ Found single key object, using its value as array');
       } else {
+        console.log('❌ Data is object but no sheets, data, or single array property found');
+        console.log('Object keys:', Object.keys(targetQuartersVsActual));
+        console.log('Object values types:', Object.values(targetQuartersVsActual).map(v => typeof v));
         return null;
       }
     }
@@ -906,15 +948,24 @@ const Summary: React.FC = () => {
     // If it's an object with sheets property, extract the first sheet
     if (typeof targetQuartersVsActual === 'object' && !Array.isArray(targetQuartersVsActual)) {
       console.log('🔍 Data is an object, checking for sheets property...');
+      console.log('🔍 Object type:', typeof targetQuartersVsActual);
+      console.log('🔍 Object keys:', Object.keys(targetQuartersVsActual));
+      console.log('🔍 Object values sample:', Object.values(targetQuartersVsActual).slice(0, 2));
+      
       if (targetQuartersVsActual.sheets && Array.isArray(targetQuartersVsActual.sheets)) {
         dataArray = targetQuartersVsActual.sheets[0] || [];
         console.log('✅ Found sheets property, using first sheet');
       } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
         dataArray = targetQuartersVsActual.data;
         console.log('✅ Found data property');
+      } else if (Object.keys(targetQuartersVsActual).length === 1 && Array.isArray(Object.values(targetQuartersVsActual)[0])) {
+        // Handle case where data is { '0': [...] } or similar single-key object
+        dataArray = Object.values(targetQuartersVsActual)[0];
+        console.log('✅ Found single key object, using its value as array');
       } else {
-        console.log('❌ Data is object but no sheets or data property found');
+        console.log('❌ Data is object but no sheets, data, or single array property found');
         console.log('Object keys:', Object.keys(targetQuartersVsActual));
+        console.log('Object values types:', Object.values(targetQuartersVsActual).map(v => typeof v));
         return [];
       }
     }
