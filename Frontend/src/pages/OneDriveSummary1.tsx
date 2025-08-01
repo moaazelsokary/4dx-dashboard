@@ -221,10 +221,19 @@ const Summary: React.FC = () => {
       } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
         dataArray = targetQuartersVsActual.data;
         console.log('✅ Found data property');
-      } else if (Object.keys(targetQuartersVsActual).length === 1 && Array.isArray(Object.values(targetQuartersVsActual)[0])) {
+      } else if (Object.keys(targetQuartersVsActual).length === 1) {
         // Handle case where data is { '0': [...] } or similar single-key object
-        dataArray = Object.values(targetQuartersVsActual)[0];
-        console.log('✅ Found single key object, using its value as array');
+        const firstValue = Object.values(targetQuartersVsActual)[0];
+        console.log('🔍 First value type:', typeof firstValue, Array.isArray(firstValue));
+        if (Array.isArray(firstValue)) {
+          dataArray = firstValue;
+          console.log('✅ Found single key object, using its value as array');
+        } else {
+          console.log('❌ Single key object value is not an array');
+          console.log('Object keys:', Object.keys(targetQuartersVsActual));
+          console.log('Object values types:', Object.values(targetQuartersVsActual).map(v => typeof v));
+          return null;
+        }
       } else {
         console.log('❌ Data is object but no sheets, data, or single array property found');
         console.log('Object keys:', Object.keys(targetQuartersVsActual));
@@ -589,23 +598,12 @@ const Summary: React.FC = () => {
 
 
 
-  // Fallback to mock data if no real data available
-  const mockMetrics = {
-    volunteers: { actual: 4190, target: 518.5, variance: 807.91 },
-    opportunities: { actual: 1431.5, target: 6059.5, variance: 23.62 },
-    training: { actual: 12.5, target: 128.5, variance: 9.73 },
-    expenditures: { actual: 3457845.5, target: 4000000, variance: 86.45 },
-    beneficiaries: { actual: 46457, target: 49701, variance: 93.47 },
-    cases: { actual: 0, target: 50, variance: 0 }
-  };
-
-  // Use reactive filtered data if available, otherwise fall back to mock data
-  const displayMetrics = filteredMetrics || mockMetrics;
+  // Use reactive filtered data only
+  const displayMetrics = filteredMetrics;
   
   // Debug: Log what metrics are being displayed
   console.log('🔍 Current display metrics:', displayMetrics);
   console.log('🔍 Filtered metrics:', filteredMetrics);
-  console.log('🔍 Using mock data:', !filteredMetrics);
 
   // Utility function to format large numbers as "1.25M" format
   const formatNumber = (num: number) => {
@@ -675,6 +673,8 @@ const Summary: React.FC = () => {
 
   // Calculate overall health score (average of all 6 metrics)
   const calculateOverallHealth = () => {
+    if (!displayMetrics) return 0;
+    
     const metrics = [
       displayMetrics.volunteers.variance,
       displayMetrics.opportunities.variance,
@@ -733,10 +733,19 @@ const Summary: React.FC = () => {
       } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
         dataArray = targetQuartersVsActual.data;
         console.log('✅ Found data property');
-      } else if (Object.keys(targetQuartersVsActual).length === 1 && Array.isArray(Object.values(targetQuartersVsActual)[0])) {
+      } else if (Object.keys(targetQuartersVsActual).length === 1) {
         // Handle case where data is { '0': [...] } or similar single-key object
-        dataArray = Object.values(targetQuartersVsActual)[0];
-        console.log('✅ Found single key object, using its value as array');
+        const firstValue = Object.values(targetQuartersVsActual)[0];
+        console.log('🔍 First value type:', typeof firstValue, Array.isArray(firstValue));
+        if (Array.isArray(firstValue)) {
+          dataArray = firstValue;
+          console.log('✅ Found single key object, using its value as array');
+        } else {
+          console.log('❌ Single key object value is not an array');
+          console.log('Object keys:', Object.keys(targetQuartersVsActual));
+          console.log('Object values types:', Object.values(targetQuartersVsActual).map(v => typeof v));
+          return null;
+        }
       } else {
         console.log('❌ Data is object but no sheets, data, or single array property found');
         console.log('Object keys:', Object.keys(targetQuartersVsActual));
@@ -958,10 +967,19 @@ const Summary: React.FC = () => {
       } else if (targetQuartersVsActual.data && Array.isArray(targetQuartersVsActual.data)) {
         dataArray = targetQuartersVsActual.data;
         console.log('✅ Found data property');
-      } else if (Object.keys(targetQuartersVsActual).length === 1 && Array.isArray(Object.values(targetQuartersVsActual)[0])) {
+      } else if (Object.keys(targetQuartersVsActual).length === 1) {
         // Handle case where data is { '0': [...] } or similar single-key object
-        dataArray = Object.values(targetQuartersVsActual)[0];
-        console.log('✅ Found single key object, using its value as array');
+        const firstValue = Object.values(targetQuartersVsActual)[0];
+        console.log('🔍 First value type:', typeof firstValue, Array.isArray(firstValue));
+        if (Array.isArray(firstValue)) {
+          dataArray = firstValue;
+          console.log('✅ Found single key object, using its value as array');
+        } else {
+          console.log('❌ Single key object value is not an array');
+          console.log('Object keys:', Object.keys(targetQuartersVsActual));
+          console.log('Object values types:', Object.values(targetQuartersVsActual).map(v => typeof v));
+          return [];
+        }
       } else {
         console.log('❌ Data is object but no sheets, data, or single array property found');
         console.log('Object keys:', Object.keys(targetQuartersVsActual));
@@ -1269,8 +1287,27 @@ const Summary: React.FC = () => {
             </Card>
           )}
 
+          {/* No Data Message */}
+          {!loading && !error && !displayMetrics && (
+            <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+              <CardContent className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Data Available</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Unable to load metrics data. Please check your filters or try refreshing the data.
+                  </p>
+                  <Button onClick={handleRefreshData} variant="outline" size="sm">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh Data
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Metrics Grid */}
-          {!loading && !error && (
+          {!loading && !error && displayMetrics && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Volunteers Actual vs Target */}
               <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
