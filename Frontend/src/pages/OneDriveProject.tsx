@@ -65,16 +65,40 @@ const ProjectDetails: React.FC = () => {
   const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
   
   // Process Services data from "Services Target Q Vs Actual" tab
-  const processServicesData = useCallback((servicesData: any[]) => {
-    if (!Array.isArray(servicesData) || servicesData.length < 2) {
+  const processServicesData = useCallback((servicesData: any) => {
+    let dataArray = servicesData;
+
+    // If it's an object with sheets property, extract the first sheet
+    if (typeof servicesData === 'object' && !Array.isArray(servicesData)) {
+      console.log('🔍 Services data is an object, checking for sheets/data property...');
+      if (servicesData.sheets && Array.isArray(servicesData.sheets)) {
+        dataArray = servicesData.sheets[0] || [];
+        console.log('✅ Found sheets property, using first sheet for Services');
+      } else if (servicesData.data && Array.isArray(servicesData.data)) {
+        dataArray = servicesData.data;
+        console.log('✅ Found data property, using it for Services');
+      } else if (Object.keys(servicesData).length === 1 && Array.isArray(Object.values(servicesData)[0])) {
+        dataArray = Object.values(servicesData)[0];
+        console.log('✅ Found single key object, using its value as array for Services');
+      } else {
+        console.log('❌ Services data is object but no sheets, data, or single array property found');
+        console.log('Object keys:', Object.keys(servicesData));
+        return [];
+      }
+    }
+
+    if (!Array.isArray(dataArray) || dataArray.length < 2) {
       console.log('❌ Services data is not in expected format');
+      console.log('Data type:', typeof dataArray, Array.isArray(dataArray));
+      console.log('Data length:', dataArray?.length);
+      console.log('Data sample:', dataArray?.slice(0, 2));
       return [];
     }
 
-    console.log('📊 Processing Services Target Q Vs Actual data:', servicesData.slice(0, 3));
+    console.log('📊 Processing Services Target Q Vs Actual data:', dataArray.slice(0, 3));
 
     // Find the column indices based on the known structure
-    const headers = servicesData[1] || [];
+    const headers = dataArray[1] || [];
     console.log('🔍 Available headers:', headers);
     
     // Column mapping based on the structure you provided:
@@ -115,7 +139,7 @@ const ProjectDetails: React.FC = () => {
     console.log('🔍 Quarter data for', selectedQuarter, ':', quarterData);
 
     // Filter service rows (skip header row)
-    const serviceRows = servicesData.slice(1).filter(row => {
+    const serviceRows = dataArray.slice(1).filter(row => {
       const projectName = String(row[columnIndices.project] || '').trim();
       const serviceName = String(row[columnIndices.mainServices] || '').trim();
       
@@ -141,7 +165,7 @@ const ProjectDetails: React.FC = () => {
       project: row[columnIndices.project],
       service: row[columnIndices.mainServices]
     })));
-    console.log('🔍 All available projects in services data:', [...new Set(servicesData.slice(1).map(row => row[columnIndices.project]).filter(Boolean))]);
+    console.log('🔍 All available projects in services data:', [...new Set(dataArray.slice(1).map(row => row[columnIndices.project]).filter(Boolean))]);
 
     // Process each service row into metrics
     return serviceRows.map(row => {
@@ -165,16 +189,40 @@ const ProjectDetails: React.FC = () => {
   }, [selectedQuarter, selectedProject]);
 
   // Process Projects data from "Projects" tab
-  const processProjectsData = useCallback((projectsData: any[]) => {
-    if (!Array.isArray(projectsData) || projectsData.length < 2) {
+  const processProjectsData = useCallback((projectsData: any) => {
+    let dataArray = projectsData;
+
+    // If it's an object with sheets property, extract the first sheet
+    if (typeof projectsData === 'object' && !Array.isArray(projectsData)) {
+      console.log('🔍 Projects data is an object, checking for sheets/data property...');
+      if (projectsData.sheets && Array.isArray(projectsData.sheets)) {
+        dataArray = projectsData.sheets[0] || [];
+        console.log('✅ Found sheets property, using first sheet for Projects');
+      } else if (projectsData.data && Array.isArray(projectsData.data)) {
+        dataArray = projectsData.data;
+        console.log('✅ Found data property, using it for Projects');
+      } else if (Object.keys(projectsData).length === 1 && Array.isArray(Object.values(projectsData)[0])) {
+        dataArray = Object.values(projectsData)[0];
+        console.log('✅ Found single key object, using its value as array for Projects');
+      } else {
+        console.log('❌ Projects data is object but no sheets, data, or single array property found');
+        console.log('Object keys:', Object.keys(projectsData));
+        return [];
+      }
+    }
+
+    if (!Array.isArray(dataArray) || dataArray.length < 2) {
       console.log('❌ Projects data is not in expected format');
+      console.log('Data type:', typeof dataArray, Array.isArray(dataArray));
+      console.log('Data length:', dataArray?.length);
+      console.log('Data sample:', dataArray?.slice(0, 2));
       return [];
     }
 
-    console.log('📊 Processing Projects data:', projectsData.slice(0, 3));
+    console.log('📊 Processing Projects data:', dataArray.slice(0, 3));
 
     // Find the column indices based on the known structure
-    const headers = projectsData[1] || [];
+    const headers = dataArray[1] || [];
     console.log('🔍 Available headers:', headers);
     
     // Column mapping based on the structure you provided:
@@ -191,7 +239,7 @@ const ProjectDetails: React.FC = () => {
     console.log('🔍 Column indices:', columnIndices);
 
     // Filter project rows (skip header row)
-    const projectRows = projectsData.slice(1).filter(row => {
+    const projectRows = dataArray.slice(1).filter(row => {
       const projectName = String(row[columnIndices.projectName] || '').trim();
       
       // Only include rows that have project names
@@ -556,16 +604,39 @@ const ProjectDetails: React.FC = () => {
       return [];
     }
     
-    if (!Array.isArray(projectsData) || projectsData.length < 2) {
+    // Handle different data structures
+    let dataArray = projectsData;
+    
+    if (typeof projectsData === 'object' && !Array.isArray(projectsData)) {
+      console.log('🔍 Projects data is an object, checking for sheets/data property...');
+      if (projectsData.sheets && Array.isArray(projectsData.sheets)) {
+        dataArray = projectsData.sheets[0] || [];
+        console.log('✅ Found sheets property, using first sheet for Projects');
+      } else if (projectsData.data && Array.isArray(projectsData.data)) {
+        dataArray = projectsData.data;
+        console.log('✅ Found data property, using it for Projects');
+      } else if (Object.keys(projectsData).length === 1 && Array.isArray(Object.values(projectsData)[0])) {
+        dataArray = Object.values(projectsData)[0];
+        console.log('✅ Found single key object, using its value as array for Projects');
+      } else {
+        console.log('❌ Projects data is object but no sheets, data, or single array property found');
+        console.log('Object keys:', Object.keys(projectsData));
+        return [];
+      }
+    }
+    
+    if (!Array.isArray(dataArray) || dataArray.length < 2) {
       console.log('❌ Projects data is not in expected format');
-      console.log('Data:', projectsData);
+      console.log('Data type:', typeof dataArray, Array.isArray(dataArray));
+      console.log('Data length:', dataArray?.length);
+      console.log('Data sample:', dataArray?.slice(0, 2));
       return [];
     }
     
-    console.log(`📊 Processing ${projectsData.length} rows from "${usedTabName}"`);
+    console.log(`📊 Processing ${dataArray.length} rows from "${usedTabName}"`);
     
     // Skip header row and extract project names from Project_Name column (index 1)
-    const projectNames = projectsData.slice(1)
+    const projectNames = dataArray.slice(1)
       .map((row: any[]) => row[1]) // Project_Name column
       .filter((name: string) => name && name.trim() !== '')
       .map((name: string) => name.trim());
