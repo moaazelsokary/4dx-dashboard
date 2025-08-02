@@ -1004,9 +1004,9 @@ const ProjectDetails: React.FC = () => {
                   <h3 className="font-semibold text-sm">Data Filters</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-6">
-                  {/* Quarters Filter */}
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+                  {/* Quarters Filter - Left Column (1/4 width) */}
+                  <div className="col-span-1">
                     <label className="text-sm font-medium text-muted-foreground mb-2 block">
                       <Calendar className="w-4 h-4 inline mr-1" />
                       Select Quarters
@@ -1040,24 +1040,76 @@ const ProjectDetails: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Projects Filter - Dropdown */}
-                  <div>
+                  {/* Projects Filter - Right Column (3/4 width) */}
+                  <div className="col-span-1 sm:col-span-3">
                     <label className="text-sm font-medium text-muted-foreground mb-2 block">
                       <Building2 className="w-4 h-4 inline mr-1" />
                       Select Projects
                     </label>
-                    <Select value={selectedProject} onValueChange={setSelectedProject}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select a project" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getProjectNames().map((projectName: string) => (
-                          <SelectItem key={projectName} value={projectName}>
-                            {projectName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    
+                    {/* Mobile: Dropdown */}
+                    <div className="sm:hidden">
+                      <Select value={selectedProject} onValueChange={setSelectedProject}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getProjectNames().map((projectName: string) => (
+                            <SelectItem key={projectName} value={projectName}>
+                              {projectName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Desktop: Badge Grid */}
+                    <div className="hidden sm:block">
+                      <div className="space-y-2">
+                        {/* First row of projects */}
+                        <div className="flex flex-wrap gap-1">
+                          {projectNames.length > 0 ? (
+                            projectNames.slice(0, Math.ceil(projectNames.length / 2)).map((projectName: string) => (
+                              <Badge
+                                key={projectName}
+                                variant={selectedProject === projectName ? "default" : "outline"}
+                                className={`cursor-pointer transition-colors text-[10px] px-2 py-1 ${
+                                  selectedProject === projectName 
+                                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                                    : "hover:bg-muted"
+                                }`}
+                                onClick={() => handleProjectChange(projectName)}
+                              >
+                                {projectName}
+                              </Badge>
+                            ))
+                          ) : (
+                            <div className="text-sm text-muted-foreground">
+                              Loading projects...
+                            </div>
+                          )}
+                        </div>
+                        {/* Second row of projects */}
+                        <div className="flex flex-wrap gap-1">
+                          {projectNames.length > 0 ? (
+                            projectNames.slice(Math.ceil(projectNames.length / 2)).map((projectName: string) => (
+                              <Badge
+                                key={projectName}
+                                variant={selectedProject === projectName ? "default" : "outline"}
+                                className={`cursor-pointer transition-colors text-[10px] px-2 py-1 ${
+                                  selectedProject === projectName 
+                                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                                    : "hover:bg-muted"
+                                }`}
+                                onClick={() => handleProjectChange(projectName)}
+                              >
+                                {projectName}
+                              </Badge>
+                            ))
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
