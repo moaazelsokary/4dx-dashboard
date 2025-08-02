@@ -65,9 +65,16 @@ const ProjectDetails: React.FC = () => {
   const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
   
   // Process Services data from "Services Target Q Vs Actual" tab
-  const processServicesData = useCallback((servicesData: any[]) => {
+  const processServicesData = useCallback((servicesData: any) => {
+    // Check if the data is an error object from Netlify function
+    if (servicesData && typeof servicesData === 'object' && servicesData.error) {
+      console.log('❌ Services Target Q Vs Actual tab has an error:', servicesData.error);
+      return [];
+    }
+    
     if (!Array.isArray(servicesData) || servicesData.length < 2) {
       console.log('❌ Services data is not in expected format');
+      console.log('Data:', servicesData);
       return [];
     }
 
@@ -165,9 +172,16 @@ const ProjectDetails: React.FC = () => {
   }, [selectedQuarter, selectedProject]);
 
   // Process Projects data from "Projects" tab
-  const processProjectsData = useCallback((projectsData: any[]) => {
+  const processProjectsData = useCallback((projectsData: any) => {
+    // Check if the data is an error object from Netlify function
+    if (projectsData && typeof projectsData === 'object' && projectsData.error) {
+      console.log('❌ Projects tab has an error:', projectsData.error);
+      return [];
+    }
+    
     if (!Array.isArray(projectsData) || projectsData.length < 2) {
       console.log('❌ Projects data is not in expected format');
+      console.log('Data:', projectsData);
       return [];
     }
 
@@ -483,6 +497,12 @@ const ProjectDetails: React.FC = () => {
       return [];
     }
     
+    // Check if the data is an error object from Netlify function
+    if (projectsData && typeof projectsData === 'object' && projectsData.error) {
+      console.log('❌ Projects tab has an error:', projectsData.error);
+      return [];
+    }
+    
     if (!Array.isArray(projectsData) || projectsData.length < 2) {
       console.log('❌ Projects data is not in expected format');
       console.log('Data:', projectsData);
@@ -698,6 +718,18 @@ const ProjectDetails: React.FC = () => {
       let governorates: string[] = [];
       
       if (selectedProject && dataRef.current?.Projects) {
+        // Check if the data is an error object from Netlify function
+        if (dataRef.current.Projects && typeof dataRef.current.Projects === 'object' && dataRef.current.Projects.error) {
+          console.log('❌ Map: Projects tab has an error:', dataRef.current.Projects.error);
+          return;
+        }
+        
+        // Check if Projects data is an array
+        if (!Array.isArray(dataRef.current.Projects)) {
+          console.log('❌ Map: Projects data is not an array:', dataRef.current.Projects);
+          return;
+        }
+        
         // Find the selected project in the raw projects data - use exact match or starts with
         const projectsData = dataRef.current.Projects;
         const selectedProjectData = projectsData.find((project: any) => {
@@ -718,14 +750,17 @@ const ProjectDetails: React.FC = () => {
 
       console.log('🔍 Map: Selected project:', selectedProject);
       console.log('🔍 Map: Governorates for project:', governorates);
-      console.log('🔍 Map: Available projects:', dataRef.current?.Projects?.slice(2).map((p: any) => ({ 
-        name: p[1], 
-        geolocation: p[5],
-        match: String(p[1] || '').toLowerCase().includes(selectedProject.toLowerCase())
-      })));
-      console.log('🔍 Map: All governorates in data:', [...new Set(dataRef.current?.Projects?.slice(2).flatMap((p: any) => 
-        String(p[5] || '').split(',').map(g => g.trim()).filter(Boolean)
-      ) || [])]);
+      // Only log if Projects data is an array
+      if (Array.isArray(dataRef.current?.Projects)) {
+        console.log('🔍 Map: Available projects:', dataRef.current?.Projects?.slice(2).map((p: any) => ({ 
+          name: p[1], 
+          geolocation: p[5],
+          match: String(p[1] || '').toLowerCase().includes(selectedProject.toLowerCase())
+        })));
+        console.log('🔍 Map: All governorates in data:', [...new Set(dataRef.current?.Projects?.slice(2).flatMap((p: any) => 
+          String(p[5] || '').split(',').map(g => g.trim()).filter(Boolean)
+        ) || [])]);
+      }
       
       // Egypt governorate coordinates - Updated with more accurate locations
       const governorateCoordinates: { [key: string]: [number, number] } = {

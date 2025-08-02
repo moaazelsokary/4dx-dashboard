@@ -116,6 +116,17 @@ const Summary: React.FC = () => {
     const overallTargets = data['Overall Targets'] || [];
     const projects = data['Projects'] || [];
     
+    // Check if the data is an error object from Netlify function
+    if (overallTargets && typeof overallTargets === 'object' && overallTargets.error) {
+      console.log('❌ Overall Targets tab has an error:', overallTargets.error);
+      return null;
+    }
+    
+    if (projects && typeof projects === 'object' && projects.error) {
+      console.log('❌ Projects tab has an error:', projects.error);
+      return null;
+    }
+    
     // Check if data is valid (not an error object)
     if (!Array.isArray(overallTargets) || !Array.isArray(projects)) {
       console.error('Invalid data format:', { overallTargets, projects });
@@ -161,8 +172,16 @@ const Summary: React.FC = () => {
     }
 
     const targetQuartersVsActual = data['Target quarters Vs Actual'];
-    if (!targetQuartersVsActual || targetQuartersVsActual.length < 2) {
+    
+    // Check if the data is an error object from Netlify function
+    if (targetQuartersVsActual && typeof targetQuartersVsActual === 'object' && targetQuartersVsActual.error) {
+      console.log('❌ Target quarters Vs Actual tab has an error:', targetQuartersVsActual.error);
+      return null;
+    }
+    
+    if (!targetQuartersVsActual || !Array.isArray(targetQuartersVsActual) || targetQuartersVsActual.length < 2) {
       console.log('❌ Target quarters Vs Actual sheet not found or too short');
+      console.log('Data:', targetQuartersVsActual);
       return null;
     }
 
@@ -625,7 +644,17 @@ const Summary: React.FC = () => {
     if (!data) return null;
     
     const targetQuartersVsActual = data['Target quarters Vs Actual'];
-    if (!targetQuartersVsActual || targetQuartersVsActual.length < 2) return null;
+    
+    // Check if the data is an error object from Netlify function
+    if (targetQuartersVsActual && typeof targetQuartersVsActual === 'object' && targetQuartersVsActual.error) {
+      console.log('❌ Target quarters Vs Actual tab has an error:', targetQuartersVsActual.error);
+      return null;
+    }
+    
+    if (!targetQuartersVsActual || !Array.isArray(targetQuartersVsActual) || targetQuartersVsActual.length < 2) {
+      console.log('❌ Target quarters Vs Actual sheet not found or too short');
+      return null;
+    }
 
     // Use the exact same findColumnIndex function from getFilteredMetrics
     const findColumnIndex = (metricName: string, quarter: string, type: 'target' | 'actual') => {
@@ -817,6 +846,12 @@ const Summary: React.FC = () => {
     if (!targetQuartersVsActual) {
       console.log('❌ Could not find Services Target Q Vs Actual tab');
       console.log('Available tabs:', Object.keys(data));
+      return [];
+    }
+    
+    // Check if the data is an error object from Netlify function
+    if (targetQuartersVsActual && typeof targetQuartersVsActual === 'object' && targetQuartersVsActual.error) {
+      console.log('❌ Services Target Q Vs Actual tab has an error:', targetQuartersVsActual.error);
       return [];
     }
     
