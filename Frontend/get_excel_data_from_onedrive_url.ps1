@@ -9,7 +9,7 @@ $clientSecret = $env:CLIENT_SECRET
 $tenantId = $env:TENANT_ID
 
 # Your OneDrive URL
-$oneDriveUrl = $env:ONE_DRIVE_URL
+$oneDriveUrl = $env:VITE_ONEDRIVE_URL
 
 # Excel configuration
 $worksheetName = "Overall Targets"  # Change this to your worksheet name
