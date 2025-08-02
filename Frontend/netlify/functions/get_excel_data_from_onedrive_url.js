@@ -14,8 +14,6 @@ const WORKSHEET_NAMES = [
 // Helper to extract fileId and userEmail from OneDrive URL
 function extractFileIdAndUserEmail(oneDriveUrl) {
   try {
-    console.log('🔍 Extracting file ID and user email from URL:', oneDriveUrl);
-    
     const url = new URL(oneDriveUrl);
     const params = new URLSearchParams(url.search);
     const sourcedoc = params.get('sourcedoc');
@@ -24,30 +22,12 @@ function extractFileIdAndUserEmail(oneDriveUrl) {
     const personalIdx = pathParts.indexOf('personal');
     let userEmail = personalIdx >= 0 ? pathParts[personalIdx + 1] : null;
     
-    console.log('🔍 Path parts:', pathParts);
-    console.log('🔍 Personal index:', personalIdx);
-    console.log('🔍 Raw user email from path:', userEmail);
-    
-    // Try to fix common email format issues
-    if (userEmail && userEmail.includes('_')) {
-      // Convert hamed_ibrahim_lifemakers_org to hamed_ibrahim@lifemakers.org
-      const parts = userEmail.split('_');
-      if (parts.length >= 3) {
-        const name = parts[0];
-        const domain = parts.slice(2).join('.');
-        const convertedEmail = `${name}@${domain}`;
-        console.log(`🔍 Converted email from ${userEmail} to ${convertedEmail}`);
-        userEmail = convertedEmail;
-      }
-    }
-    
-    console.log('🔍 Final extracted values:');
-    console.log('  - File ID:', fileId);
-    console.log('  - User Email:', userEmail);
+    // Keep the original email format like the local proxy does
+    // Don't convert hamed_ibrahim_lifemakers_org to hamed_ibrahim@lifemakers.org
+    // The Microsoft Graph API works with the original format
     
     return { fileId, userEmail };
   } catch (e) {
-    console.error('❌ Error extracting file ID and user email:', e);
     return { fileId: null, userEmail: null };
   }
 }
@@ -70,60 +50,68 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-async function getWorksheetData(accessToken, userEmail, fileId, worksheetName, range = 'A1:BC100') {
-  // Try different email formats if the first one fails
-  const emailFormats = [
-    userEmail, // Original email
-    userEmail.replace('@', '_at_'), // Try with _at_ format
-    userEmail.replace('@', '_'), // Try with underscore format
-    userEmail.split('@')[0] + '@lifemakers.org', // Try with lifemakers.org domain
-    userEmail.split('@')[0] + '@lifemaker-my.sharepoint.com' // Try with SharePoint domain
+async function getSiteId(accessToken, userEmail) {
+  // Try different site URL formats like the local proxy
+  const siteUrls = [
+    `https://graph.microsoft.com/v1.0/sites/lifemaker-my.sharepoint.com:/personal/${userEmail}`,
+    `https://graph.microsoft.com/v1.0/sites/lifemaker-my.sharepoint.com:/sites/personal/${userEmail}`,
+    `https://graph.microsoft.com/v1.0/sites/lifemaker-my.sharepoint.com:/personal/${userEmail.replace('@', '_')}`,
+    `https://graph.microsoft.com/v1.0/sites/lifemaker-my.sharepoint.com:/personal/${userEmail.split('@')[0]}`
   ];
   
-  console.log(`🔗 Trying to get worksheet data for: ${worksheetName}`);
-  console.log(`  - File ID: ${fileId}`);
-  console.log(`  - Email formats to try:`, emailFormats);
-  
-  for (let i = 0; i < emailFormats.length; i++) {
-    const currentEmail = emailFormats[i];
-    console.log(`🔗 Attempt ${i + 1}: Trying email format: ${currentEmail}`);
-    
-    // URL encode worksheet name
-    const worksheetIdentifier = encodeURIComponent(worksheetName);
-    const url = `https://graph.microsoft.com/v1.0/users/${currentEmail}/drive/items/${fileId}/workbook/worksheets('${worksheetIdentifier}')/range(address='${range}')`;
-    
-    console.log(`  - URL: ${url}`);
+  for (const siteUrl of siteUrls) {
+    console.log(`Trying site URL: ${siteUrl}`);
     
     try {
-      const response = await fetch(url, {
+      const response = await fetch(siteUrl, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       
-      console.log(`  - Response status: ${response.status}`);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log(`✅ Successfully got data for ${worksheetName} using email: ${currentEmail}, rows: ${data.values ? data.values.length : 0}`);
-        return data.values;
+        console.log(`Got site ID: ${data.id} from ${siteUrl}`);
+        return data.id;
       } else {
         const errorText = await response.text();
-        console.log(`  - Failed with email ${currentEmail}: ${response.status} - ${errorText}`);
-        
-        // If this is the last attempt, throw the error
-        if (i === emailFormats.length - 1) {
-          console.error(`❌ All email formats failed for ${worksheetName}`);
-          throw new Error(`Failed to get worksheet data for ${worksheetName}: ${response.status} ${response.statusText} - ${errorText}`);
-        }
+        console.log(`Site URL failed: ${response.status}`, errorText);
       }
-    } catch (error) {
-      console.log(`  - Error with email ${currentEmail}: ${error.message}`);
-      
-      // If this is the last attempt, throw the error
-      if (i === emailFormats.length - 1) {
-        throw error;
-      }
+    } catch (e) {
+      console.log(`Site URL error:`, e.message);
     }
   }
+  
+  throw new Error('All site URL formats failed');
+}
+
+async function getWorksheetData(accessToken, userEmail, fileId, worksheetName, range = 'A1:BC100', useSiteEndpoint = false, siteId = null) {
+  // URL encode worksheet name
+  const worksheetIdentifier = encodeURIComponent(worksheetName);
+  
+  let url;
+  if (useSiteEndpoint && siteId) {
+    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${fileId}/workbook/worksheets('${worksheetIdentifier}')/range(address='${range}')`;
+  } else {
+    url = `https://graph.microsoft.com/v1.0/users/${userEmail}/drive/items/${fileId}/workbook/worksheets('${worksheetIdentifier}')/range(address='${range}')`;
+  }
+  
+  console.log(`Requesting URL: ${url}`);
+  
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  
+  console.log(`Response status for ${worksheetName}: ${response.status}`);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`HTTP ${response.status} for ${worksheetName}:`, errorText);
+    console.error(`Full URL that failed: ${url}`);
+    throw new Error(`Failed to get worksheet data for ${worksheetName}: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+  
+  const data = await response.json();
+  console.log(`Successfully got data for ${worksheetName}, rows: ${data.values ? data.values.length : 0}`);
+  return data.values;
 }
 
 exports.handler = async function(event) {
@@ -167,9 +155,9 @@ exports.handler = async function(event) {
       };
     }
 
-    console.log('🔄 Processing OneDrive URL:', oneDriveUrl);
+    console.log('Processing OneDrive URL:', oneDriveUrl);
     const { fileId, userEmail } = extractFileIdAndUserEmail(oneDriveUrl);
-    console.log('✅ Extracted:', { fileId, userEmail });
+    console.log('Extracted:', { fileId, userEmail });
     
     if (!fileId || !userEmail) {
       return { 
@@ -182,11 +170,52 @@ exports.handler = async function(event) {
     const accessToken = await getAccessToken();
     console.log('Got access token');
     
+    // Try with original email format first (like local proxy)
+    console.log('Trying with original email format...');
+    const originalEmail = 'hamed_ibrahim_lifemakers_org';
+    let useSiteEndpoint = false;
+    let siteId = null;
+    
+    // Try direct access with original email
+    try {
+      const testUrl = `https://graph.microsoft.com/v1.0/users/${originalEmail}/drive/items/${fileId}`;
+      console.log(`Testing direct access with original email: ${testUrl}`);
+      
+      const testResponse = await fetch(testUrl, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      
+      if (testResponse.ok) {
+        console.log('Direct access with original email successful!');
+        userEmail = originalEmail; // Use original email
+      } else {
+        console.log('Direct access with original email failed, trying site endpoint...');
+        useSiteEndpoint = true;
+        try {
+          siteId = await getSiteId(accessToken, originalEmail);
+          console.log('Successfully got site ID with original email:', siteId);
+        } catch (siteError) {
+          console.error('Failed to get site ID with original email:', siteError.message);
+          useSiteEndpoint = false;
+        }
+      }
+    } catch (e) {
+      console.log('Direct access with original email failed, trying site endpoint...');
+      useSiteEndpoint = true;
+      try {
+        siteId = await getSiteId(accessToken, originalEmail);
+        console.log('Successfully got site ID with original email:', siteId);
+      } catch (siteError) {
+        console.error('Failed to get site ID with original email:', siteError.message);
+        useSiteEndpoint = false;
+      }
+    }
+    
     const results = {};
     for (const worksheetName of WORKSHEET_NAMES) {
       try {
         console.log(`Fetching worksheet: ${worksheetName}`);
-        results[worksheetName] = await getWorksheetData(accessToken, userEmail, fileId, worksheetName, range || 'A1:BC100');
+        results[worksheetName] = await getWorksheetData(accessToken, userEmail, fileId, worksheetName, range || 'A1:BC100', useSiteEndpoint, siteId);
         console.log(`Successfully fetched: ${worksheetName}`);
       } catch (e) {
         console.error(`Error fetching ${worksheetName}:`, e.message);

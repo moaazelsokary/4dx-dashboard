@@ -11,8 +11,7 @@ const ONEDRIVE_FUNCTION_URL = isLocalhost
 const TEST_FUNCTION_URL = isLocalhost 
   ? 'http://localhost:3002/api/test'
   : '/.netlify/functions/test';
-// Use environment variable for OneDrive URL, fallback to hardcoded URL
-const ONEDRIVE_SAMPLE_URL = import.meta.env.VITE_ONEDRIVE_URL || 'https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true';
+const ONEDRIVE_SAMPLE_URL = 'https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true';
 
 export interface CachedData {
   data: any;
@@ -95,10 +94,6 @@ export const dataCacheService = {
     
     // Fetch OneDrive data
     try {
-      console.log('🔗 Using OneDrive URL:', ONEDRIVE_SAMPLE_URL);
-      console.log('🔗 Environment variable VITE_ONEDRIVE_URL:', import.meta.env.VITE_ONEDRIVE_URL ? 'Set' : 'Not set');
-      console.log('🔗 Full function URL:', `${ONEDRIVE_FUNCTION_URL}?oneDriveUrl=${encodeURIComponent(ONEDRIVE_SAMPLE_URL)}`);
-      
       const res = await fetch(`${ONEDRIVE_FUNCTION_URL}?oneDriveUrl=${encodeURIComponent(ONEDRIVE_SAMPLE_URL)}`);
       
       if (!res.ok) {
