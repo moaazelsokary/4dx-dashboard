@@ -23,7 +23,8 @@ import {
   FolderOpen,
   RefreshCw,
   LogOut,
-  Menu
+  Menu,
+  ArrowRight
 } from 'lucide-react';
 import {
   LineChart,
@@ -952,8 +953,8 @@ const ProjectDetails: React.FC = () => {
               <h1 className="text-xl font-semibold text-gray-900">Project Details</h1>
             </div>
 
-            {/* Right side: Action Buttons */}
-            <div className="flex items-center gap-2">
+            {/* Right side: Action Buttons - Desktop Only */}
+            <div className="hidden sm:flex sm:items-center gap-2">
               {loading && (
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <RefreshCw className="w-3 h-3 animate-spin" />
@@ -976,110 +977,93 @@ const ProjectDetails: React.FC = () => {
               </Button>
             </div>
           </div>
-
-          {/* Row 2: Filters Card */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Filter className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Data Filters</h3>
-              </div>
-              
-              <div className="grid grid-cols-4 gap-6">
-                {/* Left Column - Quarters (1/4 width) */}
-                <div className="col-span-1">
-                  <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                    <Calendar className="w-4 h-4 inline mr-1" />
-                    Select Quarters
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge
-                      variant={selectedQuarter === 'all' ? "default" : "outline"}
-                      className={`cursor-pointer transition-colors text-xs ${
-                        selectedQuarter === 'all' 
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                          : "hover:bg-muted"
-                      }`}
-                      onClick={() => handleQuarterChange('all')}
-                    >
-                      Select all
-                    </Badge>
-                    {['Q1', 'Q2', 'Q3', 'Q4'].map((quarter) => (
-                      <Badge
-                        key={quarter}
-                        variant={selectedQuarter === quarter ? "default" : "outline"}
-                        className={`cursor-pointer transition-colors text-xs ${
-                          selectedQuarter === quarter 
-                            ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                            : "hover:bg-muted"
-                        }`}
-                        onClick={() => handleQuarterChange(quarter)}
-                      >
-                        {quarter}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                                 {/* Right Column - Projects (3/4 width) */}
-                 <div className="col-span-3">
-                   <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                     <Building2 className="w-4 h-4 inline mr-1" />
-                     Select Projects
-                   </label>
-                   <div className="space-y-2">
-                                           {/* Dynamic project filters - 2 rows max */}
-                      <div className="flex flex-wrap gap-1">
-                        {projectNames.length > 0 ? (
-                          projectNames.slice(0, Math.ceil(projectNames.length / 2)).map((projectName: string) => (
-                            <Badge
-                              key={projectName}
-                              variant={selectedProject === projectName ? "default" : "outline"}
-                              className={`cursor-pointer transition-colors text-[10px] px-2 py-1 ${
-                                selectedProject === projectName 
-                                  ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                                  : "hover:bg-muted"
-                              }`}
-                              onClick={() => handleProjectChange(projectName)}
-                            >
-                              {projectName}
-                            </Badge>
-                          ))
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            Loading projects...
-                          </div>
-                        )}
-                      </div>
-                      {/* Second row of projects */}
-                      <div className="flex flex-wrap gap-1">
-                        {projectNames.length > 0 ? (
-                          projectNames.slice(Math.ceil(projectNames.length / 2)).map((projectName: string) => (
-                            <Badge
-                              key={projectName}
-                              variant={selectedProject === projectName ? "default" : "outline"}
-                              className={`cursor-pointer transition-colors text-[10px] px-2 py-1 ${
-                                selectedProject === projectName 
-                                  ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                                  : "hover:bg-muted"
-                              }`}
-                              onClick={() => handleProjectChange(projectName)}
-                            >
-                              {projectName}
-                            </Badge>
-                          ))
-                        ) : null}
-                      </div>
-                   </div>
-                 </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="p-6">
+      <div className="container mx-auto px-4 py-4 space-y-4 pb-20 sm:pb-4">
+        {/* Mobile Buttons - Before Filters */}
+        <div className="flex gap-3 sm:hidden">
+          <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 text-xs">
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Refresh Data
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSignOut} className="flex-1 text-xs">
+            <LogOut className="w-4 h-4 mr-1" />
+            Sign Out
+          </Button>
+        </div>
+
+        {/* Combined Filters */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 gap-6">
+              {/* Filters - Full width */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Filter className="w-4 h-4 text-primary" />
+                  <h3 className="font-semibold text-sm">Data Filters</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Quarters Filter */}
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                      <Calendar className="w-4 h-4 inline mr-1" />
+                      Select Quarters
+                    </label>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge
+                        variant={selectedQuarter === 'all' ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors text-xs ${
+                          selectedQuarter === 'all' 
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                            : "hover:bg-muted"
+                        }`}
+                        onClick={() => setSelectedQuarter('all')}
+                      >
+                        Select all
+                      </Badge>
+                      {['Q1', 'Q2', 'Q3', 'Q4'].map((quarter) => (
+                        <Badge
+                          key={quarter}
+                          variant={selectedQuarter === quarter ? "default" : "outline"}
+                          className={`cursor-pointer transition-colors text-xs ${
+                            selectedQuarter === quarter 
+                              ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                              : "hover:bg-muted"
+                          }`}
+                          onClick={() => setSelectedQuarter(quarter)}
+                        >
+                          {quarter}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Projects Filter - Dropdown */}
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                      <Building2 className="w-4 h-4 inline mr-1" />
+                      Select Projects
+                    </label>
+                    <Select value={selectedProject} onValueChange={setSelectedProject}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getProjectNames().map((projectName: string) => (
+                          <SelectItem key={projectName} value={projectName}>
+                            {projectName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         {loading && (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -1358,7 +1342,7 @@ const ProjectDetails: React.FC = () => {
             )}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 };
