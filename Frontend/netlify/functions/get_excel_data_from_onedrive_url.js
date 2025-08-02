@@ -14,6 +14,8 @@ const WORKSHEET_NAMES = [
 // Helper to extract fileId and userEmail from OneDrive URL
 function extractFileIdAndUserEmail(oneDriveUrl) {
   try {
+    console.log('🔍 Extracting file ID and user email from URL:', oneDriveUrl);
+    
     const url = new URL(oneDriveUrl);
     const params = new URLSearchParams(url.search);
     const sourcedoc = params.get('sourcedoc');
@@ -22,6 +24,10 @@ function extractFileIdAndUserEmail(oneDriveUrl) {
     const personalIdx = pathParts.indexOf('personal');
     let userEmail = personalIdx >= 0 ? pathParts[personalIdx + 1] : null;
     
+    console.log('🔍 Path parts:', pathParts);
+    console.log('🔍 Personal index:', personalIdx);
+    console.log('🔍 Raw user email from path:', userEmail);
+    
     // Try to fix common email format issues
     if (userEmail && userEmail.includes('_')) {
       // Convert hamed_ibrahim_lifemakers_org to hamed_ibrahim@lifemakers.org
@@ -29,13 +35,19 @@ function extractFileIdAndUserEmail(oneDriveUrl) {
       if (parts.length >= 3) {
         const name = parts[0];
         const domain = parts.slice(2).join('.');
-        userEmail = `${name}@${domain}`;
-        console.log(`Converted email from ${pathParts[personalIdx + 1]} to ${userEmail}`);
+        const convertedEmail = `${name}@${domain}`;
+        console.log(`🔍 Converted email from ${userEmail} to ${convertedEmail}`);
+        userEmail = convertedEmail;
       }
     }
     
+    console.log('🔍 Final extracted values:');
+    console.log('  - File ID:', fileId);
+    console.log('  - User Email:', userEmail);
+    
     return { fileId, userEmail };
   } catch (e) {
+    console.error('❌ Error extracting file ID and user email:', e);
     return { fileId: null, userEmail: null };
   }
 }
@@ -59,28 +71,59 @@ async function getAccessToken() {
 }
 
 async function getWorksheetData(accessToken, userEmail, fileId, worksheetName, range = 'A1:BC100') {
-  // URL encode worksheet name
-  const worksheetIdentifier = encodeURIComponent(worksheetName);
-  const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/drive/items/${fileId}/workbook/worksheets('${worksheetIdentifier}')/range(address='${range}')`;
+  // Try different email formats if the first one fails
+  const emailFormats = [
+    userEmail, // Original email
+    userEmail.replace('@', '_at_'), // Try with _at_ format
+    userEmail.replace('@', '_'), // Try with underscore format
+    userEmail.split('@')[0] + '@lifemakers.org', // Try with lifemakers.org domain
+    userEmail.split('@')[0] + '@lifemaker-my.sharepoint.com' // Try with SharePoint domain
+  ];
   
-  console.log(`Requesting URL: ${url}`);
+  console.log(`🔗 Trying to get worksheet data for: ${worksheetName}`);
+  console.log(`  - File ID: ${fileId}`);
+  console.log(`  - Email formats to try:`, emailFormats);
   
-  const response = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${accessToken}` }
-  });
-  
-  console.log(`Response status for ${worksheetName}: ${response.status}`);
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`HTTP ${response.status} for ${worksheetName}:`, errorText);
-    console.error(`Full URL that failed: ${url}`);
-    throw new Error(`Failed to get worksheet data for ${worksheetName}: ${response.status} ${response.statusText} - ${errorText}`);
+  for (let i = 0; i < emailFormats.length; i++) {
+    const currentEmail = emailFormats[i];
+    console.log(`🔗 Attempt ${i + 1}: Trying email format: ${currentEmail}`);
+    
+    // URL encode worksheet name
+    const worksheetIdentifier = encodeURIComponent(worksheetName);
+    const url = `https://graph.microsoft.com/v1.0/users/${currentEmail}/drive/items/${fileId}/workbook/worksheets('${worksheetIdentifier}')/range(address='${range}')`;
+    
+    console.log(`  - URL: ${url}`);
+    
+    try {
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      
+      console.log(`  - Response status: ${response.status}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Successfully got data for ${worksheetName} using email: ${currentEmail}, rows: ${data.values ? data.values.length : 0}`);
+        return data.values;
+      } else {
+        const errorText = await response.text();
+        console.log(`  - Failed with email ${currentEmail}: ${response.status} - ${errorText}`);
+        
+        // If this is the last attempt, throw the error
+        if (i === emailFormats.length - 1) {
+          console.error(`❌ All email formats failed for ${worksheetName}`);
+          throw new Error(`Failed to get worksheet data for ${worksheetName}: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+      }
+    } catch (error) {
+      console.log(`  - Error with email ${currentEmail}: ${error.message}`);
+      
+      // If this is the last attempt, throw the error
+      if (i === emailFormats.length - 1) {
+        throw error;
+      }
+    }
   }
-  
-  const data = await response.json();
-  console.log(`Successfully got data for ${worksheetName}, rows: ${data.values ? data.values.length : 0}`);
-  return data.values;
 }
 
 exports.handler = async function(event) {
@@ -124,9 +167,9 @@ exports.handler = async function(event) {
       };
     }
 
-    console.log('Processing OneDrive URL:', oneDriveUrl);
+    console.log('🔄 Processing OneDrive URL:', oneDriveUrl);
     const { fileId, userEmail } = extractFileIdAndUserEmail(oneDriveUrl);
-    console.log('Extracted:', { fileId, userEmail });
+    console.log('✅ Extracted:', { fileId, userEmail });
     
     if (!fileId || !userEmail) {
       return { 

@@ -97,6 +97,7 @@ export const dataCacheService = {
     try {
       console.log('🔗 Using OneDrive URL:', ONEDRIVE_SAMPLE_URL);
       console.log('🔗 Environment variable VITE_ONEDRIVE_URL:', import.meta.env.VITE_ONEDRIVE_URL ? 'Set' : 'Not set');
+      console.log('🔗 Full function URL:', `${ONEDRIVE_FUNCTION_URL}?oneDriveUrl=${encodeURIComponent(ONEDRIVE_SAMPLE_URL)}`);
       
       const res = await fetch(`${ONEDRIVE_FUNCTION_URL}?oneDriveUrl=${encodeURIComponent(ONEDRIVE_SAMPLE_URL)}`);
       
