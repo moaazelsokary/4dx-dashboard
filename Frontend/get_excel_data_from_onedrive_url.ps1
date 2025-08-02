@@ -9,7 +9,7 @@ $clientSecret = $env:CLIENT_SECRET
 $tenantId = $env:TENANT_ID
 
 # Your OneDrive URL
-$oneDriveUrl = "https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true"
+$oneDriveUrl = $env:ONE_DRIVE_URL
 
 # Excel configuration
 $worksheetName = "Overall Targets"  # Change this to your worksheet name
