@@ -66,7 +66,22 @@ const Dashboard = () => {
       navigate("/");
       return;
     }
-    setUser(JSON.parse(userData));
+    
+    const user = JSON.parse(userData);
+    
+    // Redirect project users to Summary page
+    if (user.role === "project") {
+      navigate("/summary");
+      return;
+    }
+    
+    // Redirect project users to Summary page
+    if (user.role === "project") {
+      navigate("/summary");
+      return;
+    }
+    
+    setUser(user);
   }, [navigate]);
 
   const handleSignOut = () => {

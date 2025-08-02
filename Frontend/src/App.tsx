@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import SignIn from "./pages/SignIn";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
+import AccessDenied from "./pages/AccessDenied";
 import TestConnection from "./pages/TestConnection";
 import Summary from "./pages/OneDriveSummary1";
 import ProjectDetails from "./pages/OneDriveProject";
@@ -22,6 +23,7 @@ const App = () => (
         <Route path="/test" element={<TestConnection />} />
         <Route path="/summary" element={<Summary />} />
         <Route path="/project-details" element={<ProjectDetails />} />
+        <Route path="/access-denied" element={<AccessDenied />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

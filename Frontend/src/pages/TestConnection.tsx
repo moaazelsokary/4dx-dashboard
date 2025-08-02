@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { testSharePointConnection, getDepartmentData } from "@/services/sharepointService";
@@ -6,6 +7,28 @@ import { testSharePointConnection, getDepartmentData } from "@/services/sharepoi
 const TestConnection = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string>("");
+  const navigate = useNavigate();
+
+  // Authentication check
+  useEffect(() => {
+    const userData = localStorage.getItem("user");
+    if (!userData) {
+      navigate("/");
+      return;
+    }
+    
+    const user = JSON.parse(userData);
+    // Allow CEO, operations department, and all other department users (admin, hr, it, etc.)
+    if (user.role !== "CEO" && 
+        !(user.role === "department" && user.departments.includes("operations")) &&
+        user.role !== "project") {
+      // Allow all department users (admin, hr, it, etc.) but not project users
+      if (user.role !== "department") {
+        navigate("/access-denied");
+        return;
+      }
+    }
+  }, [navigate]);
 
   const testConnection = async () => {
     setIsLoading(true);

@@ -37,7 +37,8 @@ import {
   Heart,
   RefreshCw,
   LogOut,
-  AlertCircle
+  AlertCircle,
+  Navigation
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
@@ -65,6 +66,26 @@ const Summary: React.FC = () => {
   // Reactive filtering - recalculate when filters change (like department dashboard)
   const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
   
+  const navigate = useNavigate();
+
+  // Authentication check
+  useEffect(() => {
+    const userData = localStorage.getItem("user");
+    if (!userData) {
+      navigate("/");
+      return;
+    }
+    
+    const user = JSON.parse(userData);
+    // Only allow CEO, operations department, or project role
+    if (user.role !== "CEO" && 
+        !(user.role === "department" && user.departments.includes("operations")) &&
+        user.role !== "project") {
+      navigate("/dashboard");
+      return;
+    }
+  }, [navigate]);
+  
   useEffect(() => {
     console.log('🔄 Filter effect triggered - data:', !!data, 'quarter:', selectedQuarter, 'project:', selectedProject);
     if (data) {
@@ -78,7 +99,6 @@ const Summary: React.FC = () => {
   useEffect(() => {
     console.log('Filter changed - Quarter:', selectedQuarter, 'Project:', selectedProject);
   }, [selectedQuarter, selectedProject]);
-  const navigate = useNavigate();
 
   const fetchData = async (forceRefresh = false) => {
     setLoading(true);
@@ -953,56 +973,58 @@ const Summary: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left side: Logo and Title */}
+    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
+      {/* Header */}
+      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-3">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="p-2">
-                    <Menu className="w-5 h-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuItem onClick={() => navigate('/dashboard')}>
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Main Dashboard
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/project-details')}>
-                    <FolderOpen className="w-4 h-4 mr-2" />
-                    Project Details
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <img src="/logo.png" alt="LIFE Makers Egypt" className="h-12 w-auto" />
-              <h1 className="text-xl font-semibold text-gray-900">Program Operations Sector</h1>
+              <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
+                <img 
+                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div>
+                <h1 className="text-base sm:text-xl font-bold text-foreground">
+                  Program Operations Sector
+                </h1>
+                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
+              </div>
             </div>
-
-            {/* Right side: Action Buttons - Desktop Only */}
-            <div className="hidden sm:flex sm:items-center gap-2">
-              {loading && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  Syncing...
-                </div>
-              )}
-              {error && (
-                <div className="flex items-center gap-1 text-xs text-destructive">
-                  <AlertCircle className="w-3 h-3" />
-                  Connection Error
-                </div>
-              )}
-              <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Refresh Data
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
-                <LogOut className="w-4 h-4 mr-1" />
-                Sign Out
-              </Button>
+            
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
+                  <BarChart3 className="w-3 h-3 mr-1" />
+                  Summary Overview
+                </Badge>
+              </div>
+              
+              {/* Connection Status - Desktop Only */}
+              <div className="hidden sm:flex sm:flex-row sm:items-center gap-2">
+                {loading && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Syncing...
+                  </div>
+                )}
+                {error && (
+                  <div className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="w-3 h-3" />
+                    Connection Error
+                  </div>
+                )}
+                <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh Data
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
+                  <LogOut className="w-4 h-4 mr-1" />
+                  Sign Out
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1020,6 +1042,69 @@ const Summary: React.FC = () => {
             Sign Out
           </Button>
         </div>
+
+        {/* Navigation Bar */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
+          <CardContent className="p-6">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Navigation className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-base">Navigation</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Main Dashboard Button - Only show for non-project users */}
+                {(() => {
+                  const userData = localStorage.getItem("user");
+                  const user = userData ? JSON.parse(userData) : null;
+                  const isProjectUser = user && user.role === "project";
+                  
+                  return !isProjectUser ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/dashboard')}
+                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                    >
+                      <div className="text-left flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                        </div>
+                        <div>
+                          <div className="font-medium">Main Dashboard</div>
+                          <div className="text-xs text-muted-foreground">Department overview</div>
+                        </div>
+                        <div className="ml-auto flex-shrink-0">
+                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                        </div>
+                      </div>
+                    </Button>
+                  ) : null;
+                })()}
+                
+                {/* Project Details Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/project-details')}
+                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                >
+                  <div className="text-left flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <FolderOpen className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Project Details</div>
+                      <div className="text-xs text-muted-foreground">Detailed project view</div>
+                    </div>
+                    <div className="ml-auto flex-shrink-0">
+                      <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                    </div>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Combined Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">

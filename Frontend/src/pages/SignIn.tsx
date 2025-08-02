@@ -28,7 +28,8 @@ const SignIn = () => {
     "security": { role: "department", departments: ["security"], password: "Life@0000" },
     "admin": { role: "department", departments: ["admin"], password: "Life@0000" },
     "procurement": { role: "department", departments: ["procurement"], password: "Life@0000" },
-    "offices": { role: "department", departments: ["offices"], password: "Life@0000" }
+    "offices": { role: "department", departments: ["offices"], password: "Life@0000" },
+    "project": { role: "project", departments: ["project"], password: "Life@0000" }
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -59,7 +60,12 @@ const SignIn = () => {
 
         // Removed welcome toast - silent sign in
 
-        navigate("/dashboard");
+        // Redirect project user directly to Summary page
+        if (user.role === "project") {
+          navigate("/summary");
+        } else {
+          navigate("/dashboard");
+        }
       } else {
         toast({
           title: "Sign in failed",
