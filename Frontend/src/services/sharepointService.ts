@@ -171,6 +171,11 @@ async function getSiteId(): Promise<string> {
 async function getExcelData(siteId: string, fileId: string, tabName: string): Promise<ExcelRow[]> {
   console.log(`[SharePoint] Retrieving data from Excel file: ${fileId}, tab: ${tabName}`);
   
+  // Special debug for community department
+  if (fileId === '015WRP26IDVMI232P7BVFJMB6ZF4IVRPFG') {
+    console.log('[SharePoint] 🎯 Community department Excel file detected');
+  }
+  
   // URL encode the tab name for Arabic characters
   const encodedTabName = encodeURIComponent(tabName);
   
@@ -507,6 +512,18 @@ function transformExcelToLagMetrics(
   endMonth?: string
 ): LagMetric[] {
   console.log('[SharePoint] Transforming Excel data to LagMetrics...');
+  
+  // Special debug for community department (check if this is community data)
+  if (excelData.length > 0 && excelData[0]?.data && excelData[0].data.length > 0) {
+    const firstRowData = excelData[0].data;
+    // Check if this might be community data by looking for specific patterns
+    const hasCommunityPattern = firstRowData.some(cell => 
+      cell && typeof cell === 'string' && cell.includes('community')
+    );
+    if (hasCommunityPattern) {
+      console.log('[SharePoint] 🎯 Community department data transformation detected');
+    }
+  }
   if (excelData.length === 0) return [];
 
   // Force the index of التمييز to 4 for all rows
@@ -802,6 +819,18 @@ function transformExcelToLagMetrics(
       i++;
     }
   }
+  
+  // Special debug for community department
+  if (lagMetrics.length > 0 && lagMetrics[0]?.rawData) {
+    const firstRowData = lagMetrics[0].rawData;
+    const hasCommunityPattern = firstRowData.some(cell => 
+      cell && typeof cell === 'string' && cell.includes('community')
+    );
+    if (hasCommunityPattern) {
+      console.log('[SharePoint] 🎯 Community department transformation completed:', lagMetrics.length, 'LagMetrics');
+    }
+  }
+  
   return lagMetrics;
 }
 
@@ -820,6 +849,12 @@ export async function getDepartmentData(
   // Debug: Log all available departments
   const allDepartments = Object.keys(DEPARTMENT_FILES);
   console.log('[SharePoint] Available departments:', allDepartments);
+  
+  // Special debug for community department
+  if (department.toLowerCase() === 'community') {
+    console.log('[SharePoint] 🎯 Community department detected - checking configuration...');
+    console.log('[SharePoint] Community config:', DEPARTMENT_FILES.community);
+  }
   
   const deptKey = department.toLowerCase();
   const departmentConfig = DEPARTMENT_FILES[deptKey];
@@ -841,6 +876,13 @@ export async function getDepartmentData(
     const lagMetrics = transformExcelToLagMetrics(excelData, selectedPeriod, selectedMonths, selectedQuarters, startMonth, endMonth);
     
     console.log(`[SharePoint] Returning ${lagMetrics.length} LagMetrics for ${department}`);
+    
+    // Special debug for community department
+    if (department.toLowerCase() === 'community') {
+      console.log('[SharePoint] 🎯 Community department data fetch completed successfully');
+      console.log('[SharePoint] Community LagMetrics:', lagMetrics.map(lag => ({ name: lag.name, value: lag.value, target: lag.target })));
+    }
+    
     return lagMetrics;
   } catch (error) {
     console.error(`[SharePoint] Error getting data for department ${department}:`, error);

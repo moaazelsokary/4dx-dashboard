@@ -145,7 +145,7 @@ const SignIn = () => {
               <p className="text-sm font-medium text-muted-foreground mb-2">Demo Credentials:</p>
               <div className="text-xs space-y-1 text-muted-foreground">
                   <p><strong>CEO:</strong> CEO / Life@2025</p>
-                  <p><strong>Departments:</strong> hr, it, operations, communication, dfr, case, bdm, security, admin, procurement, offices / Life@0000</p>
+                  <p><strong>Departments:</strong> hr, it, operations, communication, dfr, case, bdm, security, admin, procurement, offices, community / Life@0000</p>
               </div>
             </div>
             */}

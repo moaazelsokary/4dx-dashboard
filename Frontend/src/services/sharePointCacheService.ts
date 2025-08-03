@@ -72,7 +72,7 @@ export const sharePointCacheService = {
     console.log('🔄 Fetching fresh SharePoint data...');
     
     // Fetch data for all departments
-    const departments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices'];
+    const departments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community'];
     const results = await Promise.allSettled(
       departments.map(dept => getDepartmentData(dept))
     );

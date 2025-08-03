@@ -21,7 +21,7 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
   // Debug: Log departments being loaded
   console.log('[CEO Dashboard] Department data received:', departmentData);
   console.log('[CEO Dashboard] Departments available:', Object.keys(departmentData));
-  console.log('[CEO Dashboard] Expected departments:', ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices']);
+  console.log('[CEO Dashboard] Expected departments:', ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community']);
 
   // Helper to get department display name
   const getDepartmentDisplayName = (departmentCode: string): string => {
@@ -139,7 +139,7 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {(() => {
           // Expected departments
-          const expectedDepartments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices'];
+          const expectedDepartments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community'];
           
           // Show all expected departments, even if some don't have data
           return expectedDepartments.map(departmentCode => {

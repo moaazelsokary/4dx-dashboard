@@ -66,7 +66,9 @@ export const useAllDepartmentsData = () => {
       }
 
       // For CEO view, we'll fetch data for all departments
-      const departments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices'];
+      const departments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community'];
+      console.log('[CEO Data Fetch] Starting fetch for departments:', departments);
+      
       const results = await Promise.allSettled(
         departments.map(dept => getDepartmentData(dept))
       );
@@ -75,8 +77,12 @@ export const useAllDepartmentsData = () => {
       const departmentDataMap: { [key: string]: LagMetric[] } = {};
       
       results.forEach((result, index) => {
+        const department = departments[index];
         if (result.status === 'fulfilled') {
-          departmentDataMap[departments[index]] = result.value;
+          departmentDataMap[department] = result.value;
+          console.log(`[CEO Data Fetch] ✅ ${department}: ${result.value.length} LagMetrics`);
+        } else {
+          console.error(`[CEO Data Fetch] ❌ ${department}: ${result.reason}`);
         }
       });
 
@@ -97,7 +103,7 @@ export const useDepartments = () => {
     queryKey: ['departments'],
     queryFn: () => {
       // Return the list of available departments
-      return ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices'];
+      return ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community'];
     },
     staleTime: Infinity, // Department list doesn't change often
   });
