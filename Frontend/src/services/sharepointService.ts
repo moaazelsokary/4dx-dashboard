@@ -60,6 +60,7 @@ const DEPARTMENT_FILES: Record<string, { fileId: string; tabName: string }> = {
   admin: { fileId: '015WRP26MHUUUOESOO3RDY3VJVVDJLOKS5', tabName: 'خطة 2025' },
   procurement: { fileId: '015WRP26I3VOGN55BL5VHL4O3IRNFCAVE4', tabName: 'خطة 2025' },
   offices: { fileId: '015WRP26NCJ7WE4D6CNBHYJHIN7ZNCJ6OK', tabName: 'خطة 2025' },
+  community: { fileId: '015WRP26IDVMI232P7BVFJMB6ZF4IVRPFG', tabName: 'خطة 2025' },
   ceo: { fileId: '015WRP26P5LLCBDPHI7ZDLURJON3SHG6XF', tabName: 'CEO Plan' }
 };
 

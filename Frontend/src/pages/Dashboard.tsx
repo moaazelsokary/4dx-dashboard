@@ -23,7 +23,7 @@ import CEODashboard from "@/components/dashboard/CEODashboard";
 import { useUserData, useTestConnection } from "@/hooks/useSharePointData";
 import { toast } from "@/hooks/use-toast";
 import type { LagMetric } from "@/services/sharepointService";
-import { getCurrentMonth, getCurrentQuarter, getPreviousMonth } from "@/lib/utils";
+import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth } from "@/lib/utils";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 
 interface User {
@@ -41,10 +41,10 @@ interface LagMetricWithRaw extends LagMetric {
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState("monthly");
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([getCurrentMonth()]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([getDefaultMonth()]);
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
   const [startMonth, setStartMonth] = useState("2025-01");
-  const [endMonth, setEndMonth] = useState(getCurrentMonth());
+  const [endMonth, setEndMonth] = useState(getDefaultMonth());
   const [selectedLag, setSelectedLag] = useState<LagMetric | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -505,7 +505,8 @@ const Dashboard = () => {
       security: "Safety & Security",
       admin: "Administrative Affairs",
       procurement: "Supply Chain",
-      offices: "Offices"
+      offices: "Offices",
+      community: "Community"
     };
     return departmentNames[departmentCode] || departmentCode.toUpperCase();
   };

@@ -36,7 +36,8 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
       'security': 'Security',
       'admin': 'Administration',
       'procurement': 'Procurement',
-      'offices': 'Offices'
+      'offices': 'Offices',
+      'community': 'Community'
     };
     return departmentNames[departmentCode] || departmentCode.toUpperCase();
   };

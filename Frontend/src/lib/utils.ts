@@ -13,6 +13,22 @@ export function getCurrentMonth(): string {
   return `${year}-${month}`;
 }
 
+// Utility function to get default month based on current date
+// If we're more than 10 days into the current month, use current month
+// Otherwise, use the previous month
+export function getDefaultMonth(): string {
+  const now = new Date();
+  const currentDay = now.getDate();
+  
+  // If we're more than 10 days into the current month, use current month
+  if (currentDay > 10) {
+    return getCurrentMonth();
+  } else {
+    // Otherwise, use the previous month
+    return getPreviousMonth();
+  }
+}
+
 // Utility function to get current quarter
 export function getCurrentQuarter(): string {
   const now = new Date();
