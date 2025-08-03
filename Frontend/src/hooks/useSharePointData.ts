@@ -61,20 +61,54 @@ export const useAllDepartmentsData = () => {
       // Check for cached data first
       const cached = sharePointCacheService.getCachedData();
       if (cached && !cached.isStale) {
-        console.log('✅ Using cached SharePoint data for CEO view');
-        return cached;
+        // Verify that cached data has all expected departments
+        const expectedDepartments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community'];
+        const hasAllDepartments = expectedDepartments.every(dept => cached[dept] && Array.isArray(cached[dept]));
+        
+        if (hasAllDepartments) {
+          console.log('✅ Using cached SharePoint data for CEO view (all departments present)');
+          return cached;
+        } else {
+          console.log('⚠️ Cached data incomplete, fetching fresh data...');
+        }
       }
 
       // For CEO view, we'll fetch data for all departments
       const departments = ['hr', 'it', 'operations', 'communication', 'dfr', 'case', 'bdm', 'security', 'admin', 'procurement', 'offices', 'community'];
       console.log('[CEO Data Fetch] Starting fetch for departments:', departments);
       
+      // Fetch data for all departments with special handling for community
       const results = await Promise.allSettled(
-        departments.map(dept => getDepartmentData(dept))
+        departments.map(async (dept) => {
+          if (dept === 'community') {
+            // Special handling for community department - skip if it fails
+            try {
+              console.log(`[CEO Data Fetch] Attempting to fetch community department...`);
+              const data = await getDepartmentData(dept);
+              console.log(`[CEO Data Fetch] ✅ Community department fetched successfully`);
+              return data;
+            } catch (error) {
+              console.warn(`[CEO Data Fetch] ⚠️ Community department failed, skipping:`, error);
+              // Return empty array instead of throwing error
+              return [];
+            }
+          } else {
+            return getDepartmentData(dept);
+          }
+        })
       );
       
       // Create a map of department to LagMetrics
       const departmentDataMap: { [key: string]: LagMetric[] } = {};
+      
+      // Start with existing cached data if available
+      if (cached) {
+        Object.keys(cached).forEach(dept => {
+          if (dept !== 'timestamp' && dept !== 'isStale' && Array.isArray(cached[dept])) {
+            departmentDataMap[dept] = cached[dept];
+          }
+        });
+      }
       
       results.forEach((result, index) => {
         const department = departments[index];
@@ -83,10 +117,27 @@ export const useAllDepartmentsData = () => {
           console.log(`[CEO Data Fetch] ✅ ${department}: ${result.value.length} LagMetrics`);
         } else {
           console.error(`[CEO Data Fetch] ❌ ${department}: ${result.reason}`);
+          // If this department failed and we don't have cached data for it, add empty array
+          if (!departmentDataMap[department]) {
+            departmentDataMap[department] = [];
+            console.log(`[CEO Data Fetch] ⚠️ ${department}: Using empty array due to fetch failure`);
+          }
         }
       });
 
-      // Cache the fresh data
+      // Check if too many departments failed
+      const failedDepartments = results.filter(result => result.status === 'rejected').length;
+      const totalDepartments = departments.length;
+      const failureRate = failedDepartments / totalDepartments;
+      
+      if (failureRate > 0.5) { // If more than 50% failed
+        console.warn(`[CEO Data Fetch] ⚠️ High failure rate (${failureRate * 100}%), clearing cache to prevent corruption`);
+        sharePointCacheService.clearCache();
+        // Return only successful departments
+        return departmentDataMap;
+      }
+      
+      // Cache the merged data
       sharePointCacheService.cacheData(departmentDataMap);
       
       return departmentDataMap;

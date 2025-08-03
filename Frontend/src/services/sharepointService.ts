@@ -942,4 +942,49 @@ export async function testSharePointConnection(): Promise<{ success: boolean; me
 // Export a function to get the list of department keys
 export function getDepartmentFiles() {
   return Object.keys(DEPARTMENT_FILES).map(department => ({ department }));
+}
+
+// Test specific department connection
+export async function testDepartmentConnection(department: string): Promise<{ success: boolean; message: string; details?: any }> {
+  console.log(`[SharePoint] Testing connection for department: ${department}`);
+  
+  try {
+    const deptKey = department.toLowerCase();
+    const departmentConfig = DEPARTMENT_FILES[deptKey];
+    
+    if (!departmentConfig) {
+      return {
+        success: false,
+        message: `Department ${department} not found in configuration`,
+        details: { availableDepartments: Object.keys(DEPARTMENT_FILES) }
+      };
+    }
+
+    console.log(`[SharePoint] Testing department config:`, departmentConfig);
+    
+    // Test site access
+    const siteId = await getSiteId();
+    console.log(`[SharePoint] Site ID obtained: ${siteId}`);
+    
+    // Test Excel file access
+    const excelData = await getExcelData(siteId, departmentConfig.fileId, departmentConfig.tabName);
+    
+    return {
+      success: true,
+      message: `Connection successful! Retrieved ${excelData.length} rows from ${department} department.`,
+      details: {
+        siteId,
+        fileId: departmentConfig.fileId,
+        tabName: departmentConfig.tabName,
+        dataRows: excelData.length
+      }
+    };
+  } catch (error) {
+    console.error(`[SharePoint] Connection test failed for ${department}:`, error);
+    return {
+      success: false,
+      message: `Connection failed for ${department}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      details: error
+    };
+  }
 } 
