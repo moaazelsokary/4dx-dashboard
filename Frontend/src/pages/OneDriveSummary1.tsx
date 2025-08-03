@@ -58,7 +58,7 @@ const Summary: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedQuarter, setSelectedQuarter] = useState(getCurrentQuarterUtil());
+  const [selectedQuarters, setSelectedQuarters] = useState<string[]>(['all']); // Changed to array for multiple selection
   const [selectedProject, setSelectedProject] = useState('all');
   const [selectedChartMetric, setSelectedChartMetric] = useState('Volunteers');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -87,18 +87,18 @@ const Summary: React.FC = () => {
   }, [navigate]);
   
   useEffect(() => {
-    console.log('🔄 Filter effect triggered - data:', !!data, 'quarter:', selectedQuarter, 'project:', selectedProject);
+    console.log('🔄 Filter effect triggered - data:', !!data, 'quarters:', selectedQuarters, 'project:', selectedProject);
     if (data) {
       const metrics = getFilteredMetrics();
       console.log('🔄 Setting filtered metrics:', metrics);
       setFilteredMetrics(metrics);
     }
-  }, [data, selectedQuarter, selectedProject]);
+  }, [data, selectedQuarters, selectedProject]);
 
   // Debug filter changes
   useEffect(() => {
-    console.log('Filter changed - Quarter:', selectedQuarter, 'Project:', selectedProject);
-  }, [selectedQuarter, selectedProject]);
+    console.log('Filter changed - Quarters:', selectedQuarters, 'Project:', selectedProject);
+  }, [selectedQuarters, selectedProject]);
 
   const fetchData = async (forceRefresh = false) => {
     setLoading(true);
@@ -183,9 +183,9 @@ const Summary: React.FC = () => {
 
   const summaryMetrics = getSummaryMetrics();
 
-  // Transform data based on selected quarter (like department dashboard)
+  // Transform data based on selected quarters (like department dashboard)
   const getFilteredMetrics = () => {
-    console.log('🔄 getFilteredMetrics called with quarter:', selectedQuarter, 'project:', selectedProject);
+    console.log('🔄 getFilteredMetrics called with quarters:', selectedQuarters, 'project:', selectedProject);
     
     if (!data) {
       console.log('❌ No data available');
@@ -386,7 +386,7 @@ const Summary: React.FC = () => {
       console.log('⚠️ No project rows found! This might be the issue.');
     }
 
-    // Transform data based on selected quarter (like department dashboard)
+    // Transform data based on selected quarters (like department dashboard)
     let metrics = {
       volunteers: { actual: 0, target: 0, variance: 0 },
       opportunities: { actual: 0, target: 0, variance: 0 },
@@ -396,144 +396,94 @@ const Summary: React.FC = () => {
       cases: { actual: 0, target: 0, variance: 0 }
     };
 
-    // Check if we found any columns for the selected quarter
-    const testQuarterIndices = getQuarterIndices(selectedQuarter === 'all' ? 'Q2' : selectedQuarter);
+    // Determine which quarters to process
+    const quartersToProcess = selectedQuarters.includes('all') ? ['Q1', 'Q2', 'Q3', 'Q4'] : selectedQuarters;
+    console.log('🔍 Processing quarters:', quartersToProcess);
+
+    // Check if we found any columns for the first quarter
+    const testQuarterIndices = getQuarterIndices(quartersToProcess[0]);
     console.log('🔍 Column indices found for test quarter:', testQuarterIndices);
     
     const hasAnyColumns = Object.values(testQuarterIndices).some(metric => 
       Object.values(metric).some(index => index >= 0)
     );
     
-         if (!hasAnyColumns) {
-       console.log('❌ No columns found for any metric! This might indicate a column mapping issue.');
-       // Don't return mock data - let the function continue with zeros so we can see the real issue
-     }
+    if (!hasAnyColumns) {
+      console.log('❌ No columns found for any metric! This might indicate a column mapping issue.');
+      // Don't return mock data - let the function continue with zeros so we can see the real issue
+    }
 
-    if (selectedQuarter === 'all') {
-      // Sum data from all quarters (like department dashboard cumulative)
-      console.log('🔍 DEBUGGING "ALL" QUARTERS LOGIC:');
+    // Process each selected quarter and sum the data
+    projectRows.forEach(row => {
+      console.log(`Processing row "${row[0]}" for quarters:`, quartersToProcess);
       
-      projectRows.forEach(row => {
-        console.log(`Processing row "${row[0]}" for all quarters`);
+      quartersToProcess.forEach(quarter => {
+        const quarterIndices = getQuarterIndices(quarter);
+        console.log(`  Quarter ${quarter} indices:`, quarterIndices);
         
-        // Sum across all quarters for this project
-        ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarter => {
-          const quarterIndices = getQuarterIndices(quarter);
-          console.log(`  Quarter ${quarter} indices:`, quarterIndices);
-          
-          // Sum all metrics for this quarter (like department dashboard)
-          if (quarterIndices.volunteers.actual >= 0) {
-            const value = parseFloat(row[quarterIndices.volunteers.actual]) || 0;
-            metrics.volunteers.actual += value;
-            console.log(`    Volunteers actual (col ${quarterIndices.volunteers.actual}): ${value} -> Total: ${metrics.volunteers.actual}`);
-          }
-          if (quarterIndices.volunteers.target >= 0) {
-            const value = parseFloat(row[quarterIndices.volunteers.target]) || 0;
-            metrics.volunteers.target += value;
-            console.log(`    Volunteers target (col ${quarterIndices.volunteers.target}): ${value} -> Total: ${metrics.volunteers.target}`);
-          }
-          if (quarterIndices.opportunities.actual >= 0) {
-            const value = parseFloat(row[quarterIndices.opportunities.actual]) || 0;
-            metrics.opportunities.actual += value;
-            console.log(`    Opportunities actual (col ${quarterIndices.opportunities.actual}): ${value} -> Total: ${metrics.opportunities.actual}`);
-          }
-          if (quarterIndices.opportunities.target >= 0) {
-            const value = parseFloat(row[quarterIndices.opportunities.target]) || 0;
-            metrics.opportunities.target += value;
-            console.log(`    Opportunities target (col ${quarterIndices.opportunities.target}): ${value} -> Total: ${metrics.opportunities.target}`);
-          }
-          if (quarterIndices.training.actual >= 0) {
-            const value = parseFloat(row[quarterIndices.training.actual]) || 0;
-            metrics.training.actual += value;
-            console.log(`    Training actual (col ${quarterIndices.training.actual}): ${value} -> Total: ${metrics.training.actual}`);
-          }
-          if (quarterIndices.training.target >= 0) {
-            const value = parseFloat(row[quarterIndices.training.target]) || 0;
-            metrics.training.target += value;
-            console.log(`    Training target (col ${quarterIndices.training.target}): ${value} -> Total: ${metrics.training.target}`);
-          }
-          if (quarterIndices.beneficiaries.actual >= 0) {
-            const value = parseFloat(row[quarterIndices.beneficiaries.actual]) || 0;
-            metrics.beneficiaries.actual += value;
-            console.log(`    Beneficiaries actual (col ${quarterIndices.beneficiaries.actual}): ${value} -> Total: ${metrics.beneficiaries.actual}`);
-          }
-          if (quarterIndices.beneficiaries.target >= 0) {
-            const value = parseFloat(row[quarterIndices.beneficiaries.target]) || 0;
-            metrics.beneficiaries.target += value;
-            console.log(`    Beneficiaries target (col ${quarterIndices.beneficiaries.target}): ${value} -> Total: ${metrics.beneficiaries.target}`);
-          }
-          if (quarterIndices.cases.actual >= 0) {
-            const value = parseFloat(row[quarterIndices.cases.actual]) || 0;
-            metrics.cases.actual += value;
-            console.log(`    Cases actual (col ${quarterIndices.cases.actual}): ${value} -> Total: ${metrics.cases.actual}`);
-          }
-          if (quarterIndices.cases.target >= 0) {
-            const value = parseFloat(row[quarterIndices.cases.target]) || 0;
-            metrics.cases.target += value;
-            console.log(`    Cases target (col ${quarterIndices.cases.target}): ${value} -> Total: ${metrics.cases.target}`);
-          }
-          if (quarterIndices.expenditures.actual >= 0) {
-            const value = parseFloat(row[quarterIndices.expenditures.actual]) || 0;
-            metrics.expenditures.actual += value;
-            console.log(`    Expenditures actual (col ${quarterIndices.expenditures.actual}): ${value} -> Total: ${metrics.expenditures.actual}`);
-          }
-          if (quarterIndices.expenditures.target >= 0) {
-            const value = parseFloat(row[quarterIndices.expenditures.target]) || 0;
-            metrics.expenditures.target += value;
-            console.log(`    Expenditures target (col ${quarterIndices.expenditures.target}): ${value} -> Total: ${metrics.expenditures.target}`);
-          }
-        });
-      });
-    } else {
-      // Use data for specific quarter (like department dashboard monthly/quarterly)
-      const quarterIndices = getQuarterIndices(selectedQuarter);
-      
-      projectRows.forEach(row => {
-        console.log('Processing row:', row[0], 'with data length:', row.length);
-        
-        // Extract values using column indices (like department dashboard)
+        // Sum all metrics for this quarter (like department dashboard)
         if (quarterIndices.volunteers.actual >= 0) {
           const value = parseFloat(row[quarterIndices.volunteers.actual]) || 0;
-          metrics.volunteers.actual = value;
-          console.log(`Volunteers actual (col ${quarterIndices.volunteers.actual}): ${value}`);
+          metrics.volunteers.actual += value;
+          console.log(`    Volunteers actual (col ${quarterIndices.volunteers.actual}): ${value} -> Total: ${metrics.volunteers.actual}`);
         }
         if (quarterIndices.volunteers.target >= 0) {
           const value = parseFloat(row[quarterIndices.volunteers.target]) || 0;
-          metrics.volunteers.target = value;
-          console.log(`Volunteers target (col ${quarterIndices.volunteers.target}): ${value}`);
+          metrics.volunteers.target += value;
+          console.log(`    Volunteers target (col ${quarterIndices.volunteers.target}): ${value} -> Total: ${metrics.volunteers.target}`);
         }
         if (quarterIndices.opportunities.actual >= 0) {
-          metrics.opportunities.actual = parseFloat(row[quarterIndices.opportunities.actual]) || 0;
+          const value = parseFloat(row[quarterIndices.opportunities.actual]) || 0;
+          metrics.opportunities.actual += value;
+          console.log(`    Opportunities actual (col ${quarterIndices.opportunities.actual}): ${value} -> Total: ${metrics.opportunities.actual}`);
         }
         if (quarterIndices.opportunities.target >= 0) {
-          metrics.opportunities.target = parseFloat(row[quarterIndices.opportunities.target]) || 0;
+          const value = parseFloat(row[quarterIndices.opportunities.target]) || 0;
+          metrics.opportunities.target += value;
+          console.log(`    Opportunities target (col ${quarterIndices.opportunities.target}): ${value} -> Total: ${metrics.opportunities.target}`);
         }
         if (quarterIndices.training.actual >= 0) {
-          metrics.training.actual = parseFloat(row[quarterIndices.training.actual]) || 0;
+          const value = parseFloat(row[quarterIndices.training.actual]) || 0;
+          metrics.training.actual += value;
+          console.log(`    Training actual (col ${quarterIndices.training.actual}): ${value} -> Total: ${metrics.training.actual}`);
         }
         if (quarterIndices.training.target >= 0) {
-          metrics.training.target = parseFloat(row[quarterIndices.training.target]) || 0;
+          const value = parseFloat(row[quarterIndices.training.target]) || 0;
+          metrics.training.target += value;
+          console.log(`    Training target (col ${quarterIndices.training.target}): ${value} -> Total: ${metrics.training.target}`);
         }
         if (quarterIndices.beneficiaries.actual >= 0) {
-          metrics.beneficiaries.actual = parseFloat(row[quarterIndices.beneficiaries.actual]) || 0;
+          const value = parseFloat(row[quarterIndices.beneficiaries.actual]) || 0;
+          metrics.beneficiaries.actual += value;
+          console.log(`    Beneficiaries actual (col ${quarterIndices.beneficiaries.actual}): ${value} -> Total: ${metrics.beneficiaries.actual}`);
         }
         if (quarterIndices.beneficiaries.target >= 0) {
-          metrics.beneficiaries.target = parseFloat(row[quarterIndices.beneficiaries.target]) || 0;
+          const value = parseFloat(row[quarterIndices.beneficiaries.target]) || 0;
+          metrics.beneficiaries.target += value;
+          console.log(`    Beneficiaries target (col ${quarterIndices.beneficiaries.target}): ${value} -> Total: ${metrics.beneficiaries.target}`);
         }
         if (quarterIndices.cases.actual >= 0) {
-          metrics.cases.actual = parseFloat(row[quarterIndices.cases.actual]) || 0;
+          const value = parseFloat(row[quarterIndices.cases.actual]) || 0;
+          metrics.cases.actual += value;
+          console.log(`    Cases actual (col ${quarterIndices.cases.actual}): ${value} -> Total: ${metrics.cases.actual}`);
         }
         if (quarterIndices.cases.target >= 0) {
-          metrics.cases.target = parseFloat(row[quarterIndices.cases.target]) || 0;
+          const value = parseFloat(row[quarterIndices.cases.target]) || 0;
+          metrics.cases.target += value;
+          console.log(`    Cases target (col ${quarterIndices.cases.target}): ${value} -> Total: ${metrics.cases.target}`);
         }
         if (quarterIndices.expenditures.actual >= 0) {
-          metrics.expenditures.actual = parseFloat(row[quarterIndices.expenditures.actual]) || 0;
+          const value = parseFloat(row[quarterIndices.expenditures.actual]) || 0;
+          metrics.expenditures.actual += value;
+          console.log(`    Expenditures actual (col ${quarterIndices.expenditures.actual}): ${value} -> Total: ${metrics.expenditures.actual}`);
         }
         if (quarterIndices.expenditures.target >= 0) {
-          metrics.expenditures.target = parseFloat(row[quarterIndices.expenditures.target]) || 0;
+          const value = parseFloat(row[quarterIndices.expenditures.target]) || 0;
+          metrics.expenditures.target += value;
+          console.log(`    Expenditures target (col ${quarterIndices.expenditures.target}): ${value} -> Total: ${metrics.expenditures.target}`);
         }
-        });
-      }
+      });
+    });
 
     // Calculate achievement rates (like department dashboard)
     Object.keys(metrics).forEach(key => {
@@ -549,8 +499,8 @@ const Summary: React.FC = () => {
       }
     });
 
-         console.log('✅ Final filtered metrics for quarter', selectedQuarter, 'and project', selectedProject, ':', metrics);
-     return metrics;
+    console.log('✅ Final filtered metrics for quarters', selectedQuarters, 'and project', selectedProject, ':', metrics);
+    return metrics;
   };
 
 
@@ -1101,6 +1051,27 @@ const Summary: React.FC = () => {
                     </div>
                   </div>
                 </Button>
+
+                {/* External Dashboard Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
+                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                >
+                  <div className="text-left flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Life Makers Project Brief</div>
+                      <div className="text-xs text-muted-foreground">All Time Documentation</div>
+                    </div>
+                    <div className="ml-auto flex-shrink-0">
+                      <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                    </div>
+                  </div>
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -1126,26 +1097,39 @@ const Summary: React.FC = () => {
                     </label>
                     <div className="flex flex-wrap gap-1">
                       <Badge
-                        variant={selectedQuarter === 'all' ? "default" : "outline"}
+                        variant={selectedQuarters.includes('all') ? "default" : "outline"}
                         className={`cursor-pointer transition-colors text-xs ${
-                          selectedQuarter === 'all' 
+                          selectedQuarters.includes('all') 
                             ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                             : "hover:bg-muted"
                         }`}
-                        onClick={() => setSelectedQuarter('all')}
+                        onClick={() => setSelectedQuarters(['all'])}
                       >
                         Select all
                       </Badge>
                       {['Q1', 'Q2', 'Q3', 'Q4'].map((quarter) => (
                         <Badge
                           key={quarter}
-                          variant={selectedQuarter === quarter ? "default" : "outline"}
+                          variant={selectedQuarters.includes(quarter) ? "default" : "outline"}
                           className={`cursor-pointer transition-colors text-xs ${
-                            selectedQuarter === quarter 
+                            selectedQuarters.includes(quarter) 
                               ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                               : "hover:bg-muted"
                           }`}
-                          onClick={() => setSelectedQuarter(quarter)}
+                          onClick={() => {
+                            if (selectedQuarters.includes('all')) {
+                              // If "all" is selected, remove it and add the specific quarter
+                              setSelectedQuarters([quarter]);
+                            } else if (selectedQuarters.includes(quarter)) {
+                              // If quarter is already selected, remove it
+                              const newQuarters = selectedQuarters.filter(q => q !== quarter);
+                              // If no quarters left, default to "all"
+                              setSelectedQuarters(newQuarters.length > 0 ? newQuarters : ['all']);
+                            } else {
+                              // Add the quarter to the selection
+                              setSelectedQuarters([...selectedQuarters, quarter]);
+                            }
+                          }}
                         >
                           {quarter}
                         </Badge>
@@ -1302,7 +1286,7 @@ const Summary: React.FC = () => {
                         variant="outline" 
                         className="text-xs px-2 py-0.5"
                       >
-                        {selectedQuarter === 'Q1' || selectedQuarter === 'all' ? (
+                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
                           <>
                             <span className="w-3 h-3 mr-1">-</span>
                             0.0%
@@ -1371,7 +1355,7 @@ const Summary: React.FC = () => {
                         variant="outline" 
                         className="text-xs px-2 py-0.5"
                       >
-                        {selectedQuarter === 'Q1' || selectedQuarter === 'all' ? (
+                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
                           <>
                             <span className="w-3 h-3 mr-1">-</span>
                             0.0%
@@ -1440,7 +1424,7 @@ const Summary: React.FC = () => {
                         variant="outline" 
                         className="text-xs px-2 py-0.5"
                       >
-                        {selectedQuarter === 'Q1' || selectedQuarter === 'all' ? (
+                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
                           <>
                             <span className="w-3 h-3 mr-1">-</span>
                             0.0%
@@ -1509,7 +1493,7 @@ const Summary: React.FC = () => {
                         variant="outline" 
                         className="text-xs px-2 py-0.5"
                       >
-                        {selectedQuarter === 'Q1' || selectedQuarter === 'all' ? (
+                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
                           <>
                             <span className="w-3 h-3 mr-1">-</span>
                             0.0%
@@ -1578,7 +1562,7 @@ const Summary: React.FC = () => {
                         variant="outline" 
                         className="text-xs px-2 py-0.5"
                       >
-                        {selectedQuarter === 'Q1' || selectedQuarter === 'all' ? (
+                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
                           <>
                             <span className="w-3 h-3 mr-1">-</span>
                             0.0%
@@ -1647,7 +1631,7 @@ const Summary: React.FC = () => {
                         variant="outline" 
                         className="text-xs px-2 py-0.5"
                       >
-                        {selectedQuarter === 'Q1' || selectedQuarter === 'all' ? (
+                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
                           <>
                             <span className="w-3 h-3 mr-1">-</span>
                             0.0%

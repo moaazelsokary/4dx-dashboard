@@ -12,7 +12,8 @@ import {
   RefreshCw,
   AlertCircle,
   FolderOpen,
-  ArrowRight
+  ArrowRight,
+  ArrowUpRight
 } from "lucide-react";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
 import LagMetricsCard from "@/components/dashboard/LagMetricsCard";
@@ -703,6 +704,27 @@ const Dashboard = () => {
                         </div>
                         <div className="ml-auto flex-shrink-0">
                           <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                        </div>
+                      </div>
+                    </Button>
+
+                    {/* Life Makers Project Brief Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
+                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                    >
+                      <div className="text-left flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                        </div>
+                        <div>
+                          <div className="font-medium">Life Makers Project Brief</div>
+                          <div className="text-xs text-muted-foreground">All Time Documentation</div>
+                        </div>
+                        <div className="ml-auto flex-shrink-0">
+                          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
                         </div>
                       </div>
                     </Button>

@@ -25,6 +25,7 @@ import {
   LogOut,
   Menu,
   ArrowRight,
+  ArrowUpRight,
   Navigation
 } from 'lucide-react';
 import {
@@ -58,7 +59,7 @@ const ProjectDetails: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedQuarter, setSelectedQuarter] = useState(getCurrentQuarterUtil());
+  const [selectedQuarters, setSelectedQuarters] = useState<string[]>(['all']); // Changed to array for multiple selection
   const [selectedProject, setSelectedProject] = useState('Basic needs');
   const [selectedChartMetric, setSelectedChartMetric] = useState('Volunteers');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -124,7 +125,7 @@ const ProjectDetails: React.FC = () => {
 
     console.log('🔍 Column indices:', columnIndices);
 
-    // Get the correct quarter indices based on selected quarter
+    // Get the correct quarter indices based on selected quarters
     const getQuarterData = (quarter: string) => {
       switch (quarter) {
         case 'Q1':
@@ -140,8 +141,9 @@ const ProjectDetails: React.FC = () => {
       }
     };
 
-    const quarterData = getQuarterData(selectedQuarter);
-    console.log('🔍 Quarter data for', selectedQuarter, ':', quarterData);
+    // Determine which quarters to process
+    const quartersToProcess = selectedQuarters.includes('all') ? ['Q1', 'Q2', 'Q3', 'Q4'] : selectedQuarters;
+    console.log('🔍 Processing quarters:', quartersToProcess);
 
     // Filter service rows (skip header row)
     const serviceRows = servicesData.slice(1).filter(row => {
@@ -172,26 +174,36 @@ const ProjectDetails: React.FC = () => {
     })));
     console.log('🔍 All available projects in services data:', [...new Set(servicesData.slice(1).map(row => row[columnIndices.project]).filter(Boolean))]);
 
-    // Process each service row into metrics
+    // Process each service row into metrics - sum across all selected quarters
     return serviceRows.map(row => {
       const serviceName = String(row[columnIndices.mainServices] || '').trim();
-      const target = parseFloat(String(row[quarterData.target] || '0').replace(/,/g, '')) || 0;
-      const actual = parseFloat(String(row[quarterData.actual] || '0').replace(/,/g, '')) || 0;
-      const variance = actual - target;
+      let totalTarget = 0;
+      let totalActual = 0;
+
+      // Sum data across all selected quarters
+      quartersToProcess.forEach(quarter => {
+        const quarterData = getQuarterData(quarter);
+        const target = parseFloat(String(row[quarterData.target] || '0').replace(/,/g, '')) || 0;
+        const actual = parseFloat(String(row[quarterData.actual] || '0').replace(/,/g, '')) || 0;
+        totalTarget += target;
+        totalActual += actual;
+      });
+
+      const variance = totalActual - totalTarget;
 
       return {
         serviceName,
         metrics: {
-          volunteers: { actual, target, variance },
-          opportunities: { actual, target, variance },
-          training: { actual, target, variance },
-          expenditures: { actual, target, variance },
-          beneficiaries: { actual, target, variance },
-          cases: { actual, target, variance }
+          volunteers: { actual: totalActual, target: totalTarget, variance },
+          opportunities: { actual: totalActual, target: totalTarget, variance },
+          training: { actual: totalActual, target: totalTarget, variance },
+          expenditures: { actual: totalActual, target: totalTarget, variance },
+          beneficiaries: { actual: totalActual, target: totalTarget, variance },
+          cases: { actual: totalActual, target: totalTarget, variance }
         }
       };
     });
-  }, [selectedQuarter, selectedProject]);
+  }, [selectedQuarters, selectedProject]);
 
   // Process Projects data from "Projects" tab
   const processProjectsData = useCallback((projectsData: any) => {
@@ -264,7 +276,7 @@ const ProjectDetails: React.FC = () => {
   const getFilteredMetrics = useCallback(() => {
     if (!data) return null;
     
-    console.log('🔄 getFilteredMetrics called with quarter:', selectedQuarter, 'project:', selectedProject);
+    console.log('🔄 getFilteredMetrics called with quarters:', selectedQuarters, 'project:', selectedProject);
     console.log('🔍 Available tabs in data:', Object.keys(data));
     
     // Check if required tabs exist
@@ -284,7 +296,7 @@ const ProjectDetails: React.FC = () => {
     console.log('Projects data:', projectsData.length);
     console.log('Services data:', servicesData.length);
     
-    // Process services data for the selected project and quarter
+    // Process services data for the selected project and quarters
     const processedServices = processServicesData(servicesData);
     
     // Process projects data
@@ -294,18 +306,18 @@ const ProjectDetails: React.FC = () => {
       services: processedServices,
       projects: processedProjects
     };
-  }, [data, selectedQuarter, selectedProject, processServicesData, processProjectsData]);
+  }, [data, selectedQuarters, selectedProject, processServicesData, processProjectsData]);
   
   // Memoized filtered metrics to prevent unnecessary re-renders
   const memoizedFilteredMetrics = useMemo(() => {
-    console.log('🔄 Filter effect triggered - data:', !!data, 'quarter:', selectedQuarter, 'project:', selectedProject);
+    console.log('🔄 Filter effect triggered - data:', !!data, 'quarters:', selectedQuarters, 'project:', selectedProject);
     if (data) {
       const metrics = getFilteredMetrics();
       console.log('🔄 Setting filtered metrics:', metrics);
       return metrics;
     }
     return null;
-  }, [data, selectedQuarter, selectedProject, getFilteredMetrics]);
+  }, [data, selectedQuarters, selectedProject, getFilteredMetrics]);
   
   // Update filtered metrics when memoized value changes
   useEffect(() => {
@@ -313,18 +325,14 @@ const ProjectDetails: React.FC = () => {
   }, [memoizedFilteredMetrics]);
 
   // Memoized filter handlers to prevent unnecessary re-renders
-  const handleQuarterChange = useCallback((quarter: string) => {
-    setSelectedQuarter(quarter);
-  }, []);
-
   const handleProjectChange = useCallback((project: string) => {
     setSelectedProject(project);
   }, []);
 
   // Debug filter changes
   useEffect(() => {
-    console.log('Filter changed - Quarter:', selectedQuarter, 'Project:', selectedProject);
-  }, [selectedQuarter, selectedProject]);
+    console.log('Filter changed - Quarters:', selectedQuarters, 'Project:', selectedProject);
+  }, [selectedQuarters, selectedProject]);
 
   const fetchData = async (forceRefresh = false) => {
     setLoading(true);
@@ -611,28 +619,14 @@ const ProjectDetails: React.FC = () => {
     // In a full implementation, you'd want to process all quarters
     const metrics = projectService.metrics;
     
-    return [
-      {
-        quarter: 'Q1',
-        value: metrics.volunteers.actual,
-        target: metrics.volunteers.target
-      },
-      {
-        quarter: 'Q2',
-        value: metrics.volunteers.actual,
-        target: metrics.volunteers.target
-      },
-      {
-        quarter: 'Q3',
-        value: metrics.volunteers.actual,
-        target: metrics.volunteers.target
-      },
-      {
-        quarter: 'Q4',
-        value: metrics.volunteers.actual,
-        target: metrics.volunteers.target
-      }
-    ];
+    // Determine which quarters to show based on selection
+    const quartersToShow = selectedQuarters.includes('all') ? ['Q1', 'Q2', 'Q3', 'Q4'] : selectedQuarters;
+    
+    return quartersToShow.map(quarter => ({
+      quarter,
+      value: metrics.volunteers.actual,
+      target: metrics.volunteers.target
+    }));
   };
 
   // Calculate overall health for the selected project
@@ -1073,6 +1067,27 @@ const ProjectDetails: React.FC = () => {
                     </div>
                   </div>
                 </Button>
+
+                {/* External Dashboard Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
+                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
+                >
+                  <div className="text-left flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Life Makers Project Brief</div>
+                      <div className="text-xs text-muted-foreground">All Time Documentation</div>
+                    </div>
+                    <div className="ml-auto flex-shrink-0">
+                      <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
+                    </div>
+                  </div>
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -1098,26 +1113,39 @@ const ProjectDetails: React.FC = () => {
                     </label>
                     <div className="flex flex-wrap gap-1">
                       <Badge
-                        variant={selectedQuarter === 'all' ? "default" : "outline"}
+                        variant={selectedQuarters.includes('all') ? "default" : "outline"}
                         className={`cursor-pointer transition-colors text-xs ${
-                          selectedQuarter === 'all' 
+                          selectedQuarters.includes('all') 
                             ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                             : "hover:bg-muted"
                         }`}
-                        onClick={() => setSelectedQuarter('all')}
+                        onClick={() => setSelectedQuarters(['all'])}
                       >
                         Select all
                       </Badge>
                       {['Q1', 'Q2', 'Q3', 'Q4'].map((quarter) => (
                         <Badge
                           key={quarter}
-                          variant={selectedQuarter === quarter ? "default" : "outline"}
+                          variant={selectedQuarters.includes(quarter) ? "default" : "outline"}
                           className={`cursor-pointer transition-colors text-xs ${
-                            selectedQuarter === quarter 
+                            selectedQuarters.includes(quarter) 
                               ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                               : "hover:bg-muted"
                           }`}
-                          onClick={() => setSelectedQuarter(quarter)}
+                          onClick={() => {
+                            if (selectedQuarters.includes('all')) {
+                              // If "all" is selected, remove it and add the specific quarter
+                              setSelectedQuarters([quarter]);
+                            } else if (selectedQuarters.includes(quarter)) {
+                              // If quarter is already selected, remove it
+                              const newQuarters = selectedQuarters.filter(q => q !== quarter);
+                              // If no quarters left, default to "all"
+                              setSelectedQuarters(newQuarters.length > 0 ? newQuarters : ['all']);
+                            } else {
+                              // Add the quarter to the selection
+                              setSelectedQuarters([...selectedQuarters, quarter]);
+                            }
+                          }}
                         >
                           {quarter}
                         </Badge>
