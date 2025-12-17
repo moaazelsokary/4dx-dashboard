@@ -9,6 +9,10 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string
   readonly VITE_TOKEN_URL: string
   readonly VITE_DATA_REFRESH_INTERVAL: string
+  readonly VITE_Volunteers: string
+  readonly VITE_Humanitarian_Aid: string
+  readonly VITE_Sawa: string
+  readonly VITE_FRONTEX: string
 }
 
 interface ImportMeta {

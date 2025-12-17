@@ -27,6 +27,7 @@ import type { LagMetric } from "@/services/sharepointService";
 import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth } from "@/lib/utils";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { hasPowerBIAccess } from "@/config/powerbi";
+import NavigationBar from "@/components/shared/NavigationBar";
 
 interface User {
   username: string;
@@ -40,7 +41,7 @@ interface LagMetricWithRaw extends LagMetric {
   isLessBetter: boolean;
 }
 
-const Dashboard = () => {
+const WIGPlan2025 = () => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState("monthly");
   const [selectedMonths, setSelectedMonths] = useState<string[]>([getDefaultMonth()]);
@@ -585,26 +586,27 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
       {/* Header */}
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
-                <img 
-                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                  alt="Logo" 
-                  className="w-full h-full object-contain"
-                />
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex flex-col gap-2">
+            {/* Top Row: Logo, Title, Actions */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 flex items-center justify-center p-1">
+                  <img 
+                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
+                    alt="Logo" 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-foreground">
+                    {isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
+                  </h1>
+                  <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-base sm:text-xl font-bold text-foreground">
-                  {isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
-                </h1>
-                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+              
+              <div className="flex items-center gap-2">
                 {user.role === "CEO" ? (
                   <Badge variant="secondary" className="bg-accent text-accent-foreground w-fit text-xs">
                     <Users className="w-3 h-3 mr-1" />
@@ -616,11 +618,6 @@ const Dashboard = () => {
                     {getDepartmentDisplayName(user.departments[0])}
                   </Badge>
                 )}
-                {/* Removed welcome message */}
-              </div>
-              
-              {/* Connection Status - Desktop Only */}
-              <div className="hidden sm:flex sm:flex-row sm:items-center gap-2">
                 {isLoading && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <RefreshCw className="w-3 h-3 animate-spin" />
@@ -630,19 +627,22 @@ const Dashboard = () => {
                 {error && (
                   <div className="flex items-center gap-1 text-xs text-destructive">
                     <AlertCircle className="w-3 h-3" />
-                    Connection Error
+                    Error
                   </div>
                 )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Refresh Data
+                <Button variant="outline" size="sm" onClick={handleRefreshData} className="h-7 px-2 text-xs">
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Refresh
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
-                <LogOut className="w-4 h-4 mr-1" />
-                Sign Out
-              </Button>
+                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
+                  <LogOut className="w-3 h-3 mr-1" />
+                  Sign Out
+                </Button>
               </div>
             </div>
+
+            {/* Navigation Row */}
+            <NavigationBar user={user} />
           </div>
         </div>
       </header>
@@ -660,120 +660,12 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* Combined Filters and Navigation */}
+        {/* Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Navigation - Takes 1/3 of the space, comes first on mobile */}
-              {user && (hasPowerBIAccess(user.role, user.departments || []) || user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                <div className="order-1 lg:order-2 lg:col-span-1">
-                  <div className="space-y-3">
-                    {(user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                      <>
-                        <div className="flex items-center gap-2 mb-3">
-                          <FolderOpen className="w-5 h-5 text-primary" />
-                          <h3 className="font-semibold text-base">Navigation</h3>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate('/summary')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Summary Overview</div>
-                          <div className="text-xs text-muted-foreground">High-level project summaries</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate('/project-details')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <FolderOpen className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Project Details</div>
-                          <div className="text-xs text-muted-foreground">Detailed project view</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                      </>
-                    )}
-
-                    {/* Power BI Dashboards Button - Show for all departments that have access */}
-                    {hasPowerBIAccess(user.role, user.departments || []) && (
-                      <>
-                        {!(user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                          <div className="flex items-center gap-2 mb-3">
-                            <Power className="w-5 h-5 text-primary" />
-                            <h3 className="font-semibold text-base">Navigation</h3>
-                          </div>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate('/powerbi')}
-                          className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <Power className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Power BI Dashboards</div>
-                          <div className="text-xs text-muted-foreground">Interactive data visualizations</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                      </>
-                    )}
-
-                    {/* Life Makers Project Brief Button - Only for CEO/Operations */}
-                    {(user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                      <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Life Makers Project Brief</div>
-                          <div className="text-xs text-muted-foreground">All Time Documentation</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Filters - Takes 2/3 of the space, comes second on mobile */}
-              <div className="order-2 lg:order-1 lg:col-span-2">
+            <div className="w-full">
+              {/* Filters - Full width */}
+              <div>
                 <DashboardFilters
                   selectedPeriod={selectedPeriod}
                   setSelectedPeriod={setSelectedPeriod}
@@ -912,4 +804,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default WIGPlan2025;

@@ -61,9 +61,13 @@ const SignIn = () => {
 
         // Removed welcome toast - silent sign in
 
-        // Redirect project user directly to Summary page
+        // Redirect based on role
         if (user.role === "project") {
           navigate("/summary");
+        } else if (user.role === "CEO") {
+          navigate("/main-plan");
+        } else if (user.role === "department") {
+          navigate("/department-objectives");
         } else {
           navigate("/dashboard");
         }
