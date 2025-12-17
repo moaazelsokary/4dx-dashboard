@@ -1,26 +1,52 @@
-let getPool, sql;
-try {
-  const dbModule = require('./db.cjs');
-  getPool = dbModule.getPool;
-  sql = dbModule.sql;
-} catch (error) {
-  console.error('[WIG API] Failed to load db.cjs:', error);
-  // Export a handler that shows the error
-  exports.handler = async function (event, context) {
-    return {
-      statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        error: 'Module loading error',
-        message: error.message,
-        details: 'Failed to load database module',
-      }),
-    };
+// Inline database connection code (to avoid module resolution issues in Netlify)
+const sql = require('mssql');
+
+let pool = null;
+
+// Parse server and port
+function getDbConfig() {
+  const serverValue = process.env.SERVER || process.env.VITE_SERVER || '';
+  let server, port;
+  if (serverValue.includes(',')) {
+    [server, port] = serverValue.split(',').map(s => s.trim());
+    port = parseInt(port) || 1433;
+  } else {
+    server = serverValue;
+    port = 1433;
+  }
+
+  return {
+    server: server,
+    port: port,
+    database: process.env.DATABASE || process.env.VITE_DATABASE,
+    user: process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
+    password: process.env.PWD || process.env.VITE_PWD,
+    options: {
+      encrypt: true, // Use encryption for Azure SQL
+      trustServerCertificate: true, // Set to true for Azure SQL
+      enableArithAbort: true,
+      requestTimeout: 30000,
+    },
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000,
+    },
   };
-  return;
+}
+
+async function getPool() {
+  if (!pool) {
+    try {
+      const config = getDbConfig();
+      pool = await sql.connect(config);
+      console.log('[DB] Connected to SQL Server');
+    } catch (error) {
+      console.error('[DB] Connection error:', error);
+      throw error;
+    }
+  }
+  return pool;
 }
 
 exports.handler = async function (event, context) {
