@@ -15,17 +15,41 @@ function getDbConfig() {
     port = 1433;
   }
 
+  // Get password - handle both plain text and URL-encoded versions
+  let password = process.env.PWD || process.env.VITE_PWD;
+  
+  if (password) {
+    // If password contains URL encoding (%), try to decode it
+    // This handles cases where Netlify might encode special characters
+    if (password.includes('%')) {
+      try {
+        const decoded = decodeURIComponent(password);
+        console.log('[DB] Password was URL-encoded, decoded it');
+        password = decoded;
+      } catch (e) {
+        console.log('[DB] Password decode failed, using as-is');
+      }
+    }
+    // Remove quotes if they were added (Netlify might add them)
+    if ((password.startsWith('"') && password.endsWith('"')) || 
+        (password.startsWith("'") && password.endsWith("'"))) {
+      password = password.slice(1, -1);
+      console.log('[DB] Removed quotes from password');
+    }
+  }
+
   return {
     server: server,
     port: port,
     database: process.env.DATABASE || process.env.VITE_DATABASE,
     user: process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
-    password: process.env.PWD || process.env.VITE_PWD,
+    password: password,
     options: {
-      encrypt: true, // Use encryption for Azure SQL
-      trustServerCertificate: true, // Set to true for Azure SQL
+      encrypt: true, // Use encryption for SQL Server
+      trustServerCertificate: true, // Set to true for SQL Server
       enableArithAbort: true,
-      requestTimeout: 30000,
+      requestTimeout: 60000, // Increased timeout for external connections
+      connectionTimeout: 30000, // Connection timeout
     },
     pool: {
       max: 10,
@@ -39,10 +63,35 @@ async function getPool() {
   if (!pool) {
     try {
       const config = getDbConfig();
+      console.log('[DB] Attempting connection:', {
+        server: config.server,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        hasPassword: !!config.password,
+      });
       pool = await sql.connect(config);
       console.log('[DB] Connected to SQL Server');
     } catch (error) {
       console.error('[DB] Connection error:', error);
+      console.error('[DB] Error code:', error.code);
+      console.error('[DB] Error message:', error.message);
+      
+      // Provide helpful error messages
+      if (error.code === 'ETIMEOUT' || error.code === 'ECONNREFUSED') {
+        console.error('[DB] Network/Firewall issue: SQL Server is not accessible from Netlify');
+        console.error('[DB] Solution: Configure SQL Server firewall to allow external connections');
+      } else if (error.code === 'ELOGIN') {
+        console.error('[DB] Authentication issue: Check username and password');
+        console.error('[DB] Possible causes:');
+        console.error('[DB] 1. Password encoding issue (special characters)');
+        console.error('[DB] 2. IP whitelist on SQL Server blocking Netlify IPs');
+        console.error('[DB] 3. Incorrect password in Netlify environment variables');
+      } else if (error.code === 'ESOCKET') {
+        console.error('[DB] Socket error: Cannot establish connection to SQL Server');
+        console.error('[DB] Check if SQL Server is accessible from the internet');
+      }
+      
       throw error;
     }
   }
