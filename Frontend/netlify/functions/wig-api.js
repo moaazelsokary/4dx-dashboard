@@ -20,13 +20,17 @@ function getDbConfig() {
   
   // Log password info for debugging (without exposing the actual password)
   if (password) {
-    console.log('[DB] Password info:', {
+    console.log('[DB] Raw password from env:', {
+      source: process.env.PWD ? 'PWD' : 'VITE_PWD',
       length: password.length,
-      hasPercent: password.includes('%'),
-      hasQuotes: password.includes('"') || password.includes("'"),
       firstChar: password[0],
       lastChar: password[password.length - 1],
-      containsSpecialChars: /[&£()]/.test(password),
+      first3Chars: password.substring(0, 3),
+      last3Chars: password.substring(password.length - 3),
+      hasPercent: password.includes('%'),
+      hasQuotes: password.includes('"') || password.includes("'"),
+      hasAt: password.includes('@'),
+      allChars: password.split('').map(c => c.charCodeAt(0)), // Show char codes for debugging
     });
     
     // If password contains URL encoding (%), try to decode it
@@ -34,17 +38,32 @@ function getDbConfig() {
       try {
         const decoded = decodeURIComponent(password);
         console.log('[DB] Password was URL-encoded, decoded. New length:', decoded.length);
+        console.log('[DB] Decoded first/last:', decoded[0], decoded[decoded.length - 1]);
         password = decoded;
       } catch (e) {
         console.log('[DB] Password decode failed, using as-is');
       }
     }
+    
     // Remove quotes if they were added (Netlify might add them)
     if ((password.startsWith('"') && password.endsWith('"')) || 
         (password.startsWith("'") && password.endsWith("'"))) {
       password = password.slice(1, -1);
       console.log('[DB] Removed quotes from password');
     }
+    
+    // Remove any leading/trailing whitespace
+    const trimmed = password.trim();
+    if (trimmed !== password) {
+      console.log('[DB] Removed whitespace from password');
+      password = trimmed;
+    }
+    
+    console.log('[DB] Final password info:', {
+      length: password.length,
+      firstChar: password[0],
+      lastChar: password[password.length - 1],
+    });
   } else {
     console.error('[DB] Password is missing!');
   }
