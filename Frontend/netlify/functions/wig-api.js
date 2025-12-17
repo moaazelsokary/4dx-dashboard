@@ -18,13 +18,22 @@ function getDbConfig() {
   // Get password - handle both plain text and URL-encoded versions
   let password = process.env.PWD || process.env.VITE_PWD;
   
+  // Log password info for debugging (without exposing the actual password)
   if (password) {
+    console.log('[DB] Password info:', {
+      length: password.length,
+      hasPercent: password.includes('%'),
+      hasQuotes: password.includes('"') || password.includes("'"),
+      firstChar: password[0],
+      lastChar: password[password.length - 1],
+      containsSpecialChars: /[&£()]/.test(password),
+    });
+    
     // If password contains URL encoding (%), try to decode it
-    // This handles cases where Netlify might encode special characters
     if (password.includes('%')) {
       try {
         const decoded = decodeURIComponent(password);
-        console.log('[DB] Password was URL-encoded, decoded it');
+        console.log('[DB] Password was URL-encoded, decoded. New length:', decoded.length);
         password = decoded;
       } catch (e) {
         console.log('[DB] Password decode failed, using as-is');
@@ -36,6 +45,8 @@ function getDbConfig() {
       password = password.slice(1, -1);
       console.log('[DB] Removed quotes from password');
     }
+  } else {
+    console.error('[DB] Password is missing!');
   }
 
   return {
@@ -69,6 +80,9 @@ async function getPool() {
         database: config.database,
         user: config.user,
         hasPassword: !!config.password,
+        passwordLength: config.password ? config.password.length : 0,
+        passwordFirstChar: config.password ? config.password[0] : 'none',
+        passwordLastChar: config.password ? config.password[config.password.length - 1] : 'none',
       });
       pool = await sql.connect(config);
       console.log('[DB] Connected to SQL Server');
