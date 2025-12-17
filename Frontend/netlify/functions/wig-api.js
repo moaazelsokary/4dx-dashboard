@@ -1,4 +1,27 @@
-const { getPool, sql } = require('./db.cjs');
+let getPool, sql;
+try {
+  const dbModule = require('./db.cjs');
+  getPool = dbModule.getPool;
+  sql = dbModule.sql;
+} catch (error) {
+  console.error('[WIG API] Failed to load db.cjs:', error);
+  // Export a handler that shows the error
+  exports.handler = async function (event, context) {
+    return {
+      statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        error: 'Module loading error',
+        message: error.message,
+        details: 'Failed to load database module',
+      }),
+    };
+  };
+  return;
+}
 
 exports.handler = async function (event, context) {
   // CORS headers
@@ -56,6 +79,25 @@ exports.handler = async function (event, context) {
 
     // Route handling
     let result;
+
+    // Health check endpoint
+    if (path === '/health' && method === 'GET') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          status: 'ok',
+          message: 'WIG API is running',
+          timestamp: new Date().toISOString(),
+          env: {
+            server: serverValue ? 'set' : 'missing',
+            database: database ? 'set' : 'missing',
+            user: user ? 'set' : 'missing',
+            password: password ? 'set' : 'missing',
+          },
+        }),
+      };
+    }
 
     // Main Plan Objectives
     if (path === '/main-objectives' && method === 'GET') {
