@@ -19,6 +19,35 @@ exports.handler = async function (event, context) {
   }
 
   try {
+    // Check database environment variables
+    const serverValue = process.env.SERVER || process.env.VITE_SERVER || '';
+    const database = process.env.DATABASE || process.env.VITE_DATABASE;
+    const user = process.env.UID || process.env.VITE_UID || process.env.VIE_UID;
+    const password = process.env.PWD || process.env.VITE_PWD;
+
+    if (!serverValue || !database || !user || !password) {
+      console.error('[WIG API] Missing database environment variables:', {
+        server: serverValue ? '✓' : '✗',
+        database: database ? '✓' : '✗',
+        user: user ? '✓' : '✗',
+        password: password ? '✓' : '✗',
+      });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          error: 'Database configuration missing',
+          message: 'Required environment variables: SERVER, DATABASE, UID, PWD',
+          details: process.env.NODE_ENV === 'development' ? {
+            server: serverValue || 'missing',
+            database: database || 'missing',
+            user: user || 'missing',
+            password: password ? '***' : 'missing',
+          } : undefined,
+        }),
+      };
+    }
+
     const pool = await getPool();
     const path = event.path.replace('/.netlify/functions/wig-api', '');
     const method = event.httpMethod;
@@ -110,6 +139,17 @@ exports.handler = async function (event, context) {
     };
   } catch (error) {
     console.error('[WIG API] Error:', error);
+    console.error('[WIG API] Error stack:', error.stack);
+    console.error('[WIG API] Environment check:', {
+      SERVER: process.env.SERVER ? 'set' : 'missing',
+      VITE_SERVER: process.env.VITE_SERVER ? 'set' : 'missing',
+      DATABASE: process.env.DATABASE ? 'set' : 'missing',
+      VITE_DATABASE: process.env.VITE_DATABASE ? 'set' : 'missing',
+      UID: process.env.UID ? 'set' : 'missing',
+      VITE_UID: process.env.VITE_UID ? 'set' : 'missing',
+      PWD: process.env.PWD ? 'set' : 'missing',
+      VITE_PWD: process.env.VITE_PWD ? 'set' : 'missing',
+    });
     return {
       statusCode: 500,
       headers: {
@@ -118,6 +158,8 @@ exports.handler = async function (event, context) {
       },
       body: JSON.stringify({
         error: error.message || 'Internal server error',
+        message: error.message,
+        code: error.code,
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       }),
     };
