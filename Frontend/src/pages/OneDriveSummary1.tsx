@@ -38,11 +38,14 @@ import {
   RefreshCw,
   LogOut,
   AlertCircle,
-  Navigation
+  Navigation,
+  Power
 } from 'lucide-react';
+import NavigationBar from '@/components/shared/NavigationBar';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
 import { dataCacheService } from '@/services/dataCacheService';
+import { hasPowerBIAccess } from '@/config/powerbi';
 
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
@@ -62,6 +65,7 @@ const Summary: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState('all');
   const [selectedChartMetric, setSelectedChartMetric] = useState('Volunteers');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [user, setUser] = useState<any>(null);
   
   // Reactive filtering - recalculate when filters change (like department dashboard)
   const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
@@ -76,14 +80,15 @@ const Summary: React.FC = () => {
       return;
     }
     
-    const user = JSON.parse(userData);
+    const userObj = JSON.parse(userData);
     // Only allow CEO, operations department, or project role
-    if (user.role !== "CEO" && 
-        !(user.role === "department" && user.departments.includes("operations")) &&
-        user.role !== "project") {
+    if (userObj.role !== "CEO" && 
+        !(userObj.role === "department" && userObj.departments.includes("operations")) &&
+        userObj.role !== "project") {
       navigate("/dashboard");
       return;
     }
+    setUser(userObj);
   }, [navigate]);
   
   useEffect(() => {
@@ -926,34 +931,27 @@ const Summary: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
       {/* Header */}
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
-                <img 
-                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                  alt="Logo" 
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div>
-                <h1 className="text-base sm:text-xl font-bold text-foreground">
-                  Program Operations Sector
-                </h1>
-                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
-                  <BarChart3 className="w-3 h-3 mr-1" />
-                  Summary Overview
-                </Badge>
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex flex-col gap-2">
+            {/* Top Row: Logo, Title, Actions */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 flex items-center justify-center p-1">
+                  <img 
+                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
+                    alt="Logo" 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-foreground">
+                    Program Operations Sector
+                  </h1>
+                  <p className="text-xs text-muted-foreground">Summary Overview</p>
+                </div>
               </div>
               
-              {/* Connection Status - Desktop Only */}
-              <div className="hidden sm:flex sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-2">
                 {loading && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <RefreshCw className="w-3 h-3 animate-spin" />
@@ -963,19 +961,22 @@ const Summary: React.FC = () => {
                 {error && (
                   <div className="flex items-center gap-1 text-xs text-destructive">
                     <AlertCircle className="w-3 h-3" />
-                    Connection Error
+                    Error
                   </div>
                 )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Refresh Data
+                <Button variant="outline" size="sm" onClick={handleRefreshData} className="h-7 px-2 text-xs">
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Refresh
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
-                  <LogOut className="w-4 h-4 mr-1" />
+                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
+                  <LogOut className="w-3 h-3 mr-1" />
                   Sign Out
                 </Button>
               </div>
             </div>
+
+            {/* Navigation Row */}
+            <NavigationBar user={user} />
           </div>
         </div>
       </header>
@@ -992,90 +993,6 @@ const Summary: React.FC = () => {
             Sign Out
           </Button>
         </div>
-
-        {/* Navigation Bar */}
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-          <CardContent className="p-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Navigation className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-base">Navigation</h3>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Main Dashboard Button - Only show for non-project users */}
-                {(() => {
-                  const userData = localStorage.getItem("user");
-                  const user = userData ? JSON.parse(userData) : null;
-                  const isProjectUser = user && user.role === "project";
-                  
-                  return !isProjectUser ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate('/dashboard')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Main Dashboard</div>
-                          <div className="text-xs text-muted-foreground">Department overview</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                  ) : null;
-                })()}
-                
-                {/* Project Details Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/project-details')}
-                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                >
-                  <div className="text-left flex items-center gap-3">
-                    <div className="flex-shrink-0">
-                      <FolderOpen className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Project Details</div>
-                      <div className="text-xs text-muted-foreground">Detailed project view</div>
-                    </div>
-                    <div className="ml-auto flex-shrink-0">
-                      <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                    </div>
-                  </div>
-                </Button>
-
-                {/* External Dashboard Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
-                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                >
-                  <div className="text-left flex items-center gap-3">
-                    <div className="flex-shrink-0">
-                      <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Life Makers Project Brief</div>
-                      <div className="text-xs text-muted-foreground">All Time Documentation</div>
-                    </div>
-                    <div className="ml-auto flex-shrink-0">
-                      <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                    </div>
-                  </div>
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Combined Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
@@ -1117,18 +1034,10 @@ const Summary: React.FC = () => {
                               : "hover:bg-muted"
                           }`}
                           onClick={() => {
-                            if (selectedQuarters.includes('all')) {
-                              // If "all" is selected, remove it and add the specific quarter
-                              setSelectedQuarters([quarter]);
-                            } else if (selectedQuarters.includes(quarter)) {
-                              // If quarter is already selected, remove it
-                              const newQuarters = selectedQuarters.filter(q => q !== quarter);
-                              // If no quarters left, default to "all"
-                              setSelectedQuarters(newQuarters.length > 0 ? newQuarters : ['all']);
-                            } else {
-                              // Add the quarter to the selection
-                              setSelectedQuarters([...selectedQuarters, quarter]);
-                            }
+                            const newQuarters = selectedQuarters.includes(quarter)
+                              ? selectedQuarters.filter(q => q !== quarter && q !== 'all')
+                              : [...selectedQuarters.filter(q => q !== 'all'), quarter];
+                            setSelectedQuarters(newQuarters.length === 0 ? ['all'] : newQuarters);
                           }}
                         >
                           {quarter}
@@ -1226,613 +1135,169 @@ const Summary: React.FC = () => {
           </CardContent>
         </Card>
 
-          {/* Loading State */}
-          {loading && (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p className="text-gray-600">Loading OneDrive data...</p>
+        {/* Loading State */}
+        {loading && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center text-muted-foreground py-8">
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
+                Loading data...
               </div>
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Error State */}
-          {error && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 text-red-600">
-                  <div className="w-4 h-4 rounded-full bg-red-600"></div>
-                  <div>
-                    <h3 className="font-semibold">Error Loading Data</h3>
-                    <p className="text-sm text-red-500">{error}</p>
+        {/* Error State */}
+        {error && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center text-destructive py-8">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                <p className="font-medium">{error}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshData}
+                  className="mt-4"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Try Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Data Display */}
+        {!loading && !error && displayMetrics && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Metrics Cards */}
+            {Object.entries(displayMetrics).map(([key, metric]: [string, any]) => {
+              const statusInfo = getStatusInfo(metric.variance, metric.actual, metric.target);
+              return (
+                <Card key={key} className="border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <Badge variant={statusInfo.variant} className={statusInfo.className}>
+                        {statusInfo.text}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Actual</span>
+                        <span className="text-lg font-semibold">{formatNumber(metric.actual)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Target</span>
+                        <span className="text-lg font-semibold">{formatNumber(metric.target)}</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Quarterly Breakdown</span>
+                          <span>{selectedQuarters.includes('all') ? 'All Quarters' : selectedQuarters.join(', ')}</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${getProgressColor(metric.variance)}`}
+                            style={{ width: `${Math.min(metric.variance, 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground text-right">
+                          {metric.variance.toFixed(1)}% of target
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Chart Section */}
+        {!loading && !error && displayMetrics && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Quarterly Trends</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Select
+                  value={selectedChartMetric}
+                  onValueChange={setSelectedChartMetric}
+                >
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Select metric" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Volunteers">Volunteers</SelectItem>
+                    <SelectItem value="Volunteer Opportunities">Volunteer Opportunities</SelectItem>
+                    <SelectItem value="Volunteers Training">Volunteers Training</SelectItem>
+                    <SelectItem value="Expenditures">Expenditures</SelectItem>
+                    <SelectItem value="Beneficiaries">Beneficiaries</SelectItem>
+                    <SelectItem value="Cases Story">Cases Story</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={getQuarterlyData()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="quarter" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: any) => formatNumber(value)}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#8884d8"
+                    strokeWidth={2}
+                    name="Actual"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="target"
+                    stroke="#82ca9d"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name="Target"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Health Indicators */}
+        {!loading && !error && displayMetrics && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Overall Health</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-center">
+                  <div
+                    className="w-32 h-32 rounded-full flex items-center justify-center text-2xl font-bold"
+                    style={{
+                      background: `conic-gradient(${getBloodColor(calculateOverallHealth())} 0% ${calculateOverallHealth()}%, #e5e7eb ${calculateOverallHealth()}% 100%)`
+                    }}
+                  >
+                    {calculateOverallHealth().toFixed(0)}%
                   </div>
+                </div>
+                <div className="mt-4 text-center">
+                  <p className={`text-lg font-semibold ${getHealthColor(calculateOverallHealth())}`}>
+                    {getHealthStatus(calculateOverallHealth())}
+                  </p>
                 </div>
               </CardContent>
             </Card>
-          )}
-
-          {/* Metrics Grid */}
-          {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Volunteers Actual vs Target */}
-              <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">👥</span>
-                      <span className="text-muted-foreground">Volunteers</span>
-                    </div>
-                    <Badge 
-                                      variant={getStatusInfo(displayMetrics.volunteers.variance, displayMetrics.volunteers.actual, displayMetrics.volunteers.target).variant}
-                className={getStatusInfo(displayMetrics.volunteers.variance, displayMetrics.volunteers.actual, displayMetrics.volunteers.target).className}
-              >
-                {getStatusInfo(displayMetrics.volunteers.variance, displayMetrics.volunteers.actual, displayMetrics.volunteers.target).text}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {formatNumber(displayMetrics.volunteers.actual)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        / {formatNumber(displayMetrics.volunteers.target)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5"
-                      >
-                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
-                          <>
-                            <span className="w-3 h-3 mr-1">-</span>
-                            0.0%
-                          </>
-                        ) : displayMetrics.volunteers.variance >= 100 ? (
-                          <>
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {displayMetrics.volunteers.variance.toFixed(1)}%
-                          </>
-                        ) : (
-                          <>
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                            {displayMetrics.volunteers.variance.toFixed(1)}%
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">vs last period</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{Math.max(0, displayMetrics.volunteers.variance).toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-1000 ${getProgressColor(displayMetrics.volunteers.variance)}`}
-                        style={{ width: `${Math.min(100, Math.max(0, displayMetrics.volunteers.variance))}%` }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Volunteer Opportunities Actual vs Target */}
-              <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🎯</span>
-                      <span className="text-muted-foreground">Volunteer Opportunities</span>
-                    </div>
-                    <Badge 
-                                      variant={getStatusInfo(displayMetrics.opportunities.variance, displayMetrics.opportunities.actual, displayMetrics.opportunities.target).variant}
-                className={getStatusInfo(displayMetrics.opportunities.variance, displayMetrics.opportunities.actual, displayMetrics.opportunities.target).className}
-              >
-                {getStatusInfo(displayMetrics.opportunities.variance, displayMetrics.opportunities.actual, displayMetrics.opportunities.target).text}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {formatNumber(displayMetrics.opportunities.actual)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        / {formatNumber(displayMetrics.opportunities.target)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5"
-                      >
-                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
-                          <>
-                            <span className="w-3 h-3 mr-1">-</span>
-                            0.0%
-                          </>
-                        ) : displayMetrics.opportunities.variance >= 100 ? (
-                          <>
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {displayMetrics.opportunities.variance.toFixed(1)}%
-                          </>
-                        ) : (
-                          <>
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                            {displayMetrics.opportunities.variance.toFixed(1)}%
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">vs last period</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{Math.max(0, displayMetrics.opportunities.variance).toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-1000 ${getProgressColor(displayMetrics.opportunities.variance)}`}
-                        style={{ width: `${Math.min(100, Math.max(0, displayMetrics.opportunities.variance))}%` }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Volunteers Training Actual vs Target */}
-              <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📚</span>
-                      <span className="text-muted-foreground">Volunteers Training</span>
-                    </div>
-                    <Badge 
-                                      variant={getStatusInfo(displayMetrics.training.variance, displayMetrics.training.actual, displayMetrics.training.target).variant}
-                className={getStatusInfo(displayMetrics.training.variance, displayMetrics.training.actual, displayMetrics.training.target).className}
-              >
-                {getStatusInfo(displayMetrics.training.variance, displayMetrics.training.actual, displayMetrics.training.target).text}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {formatNumber(displayMetrics.training.actual)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        / {formatNumber(displayMetrics.training.target)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5"
-                      >
-                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
-                          <>
-                            <span className="w-3 h-3 mr-1">-</span>
-                            0.0%
-                          </>
-                        ) : displayMetrics.training.variance >= 100 ? (
-                          <>
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {displayMetrics.training.variance.toFixed(1)}%
-                          </>
-                        ) : (
-                          <>
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                            {displayMetrics.training.variance.toFixed(1)}%
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">vs last period</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{Math.max(0, displayMetrics.training.variance).toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-1000 ${getProgressColor(displayMetrics.training.variance)}`}
-                        style={{ width: `${Math.min(100, Math.max(0, displayMetrics.training.variance))}%` }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Expenditures - Same format as other brackets */}
-              <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">💰</span>
-                      <span className="text-muted-foreground">Expenditures</span>
-                    </div>
-                    <Badge 
-                                      variant={getStatusInfo(displayMetrics.expenditures.variance, displayMetrics.expenditures.actual, displayMetrics.expenditures.target).variant}
-                className={getStatusInfo(displayMetrics.expenditures.variance, displayMetrics.expenditures.actual, displayMetrics.expenditures.target).className}
-              >
-                {getStatusInfo(displayMetrics.expenditures.variance, displayMetrics.expenditures.actual, displayMetrics.expenditures.target).text}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {formatNumber(displayMetrics.expenditures.actual)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        / {formatNumber(displayMetrics.expenditures.target)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5"
-                      >
-                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
-                          <>
-                            <span className="w-3 h-3 mr-1">-</span>
-                            0.0%
-                          </>
-                        ) : displayMetrics.expenditures.variance >= 100 ? (
-                          <>
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {displayMetrics.expenditures.variance.toFixed(1)}%
-                          </>
-                        ) : (
-                          <>
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                            {displayMetrics.expenditures.variance.toFixed(1)}%
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">vs last period</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{Math.max(0, displayMetrics.expenditures.variance).toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-1000 ${getProgressColor(displayMetrics.expenditures.variance)}`}
-                        style={{ width: `${Math.min(100, Math.max(0, displayMetrics.expenditures.variance))}%` }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Beneficiaries Actual vs Target */}
-              <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🤝</span>
-                      <span className="text-muted-foreground">Beneficiaries</span>
-                    </div>
-                    <Badge 
-                                      variant={getStatusInfo(displayMetrics.beneficiaries.variance, displayMetrics.beneficiaries.actual, displayMetrics.beneficiaries.target).variant}
-                className={getStatusInfo(displayMetrics.beneficiaries.variance, displayMetrics.beneficiaries.actual, displayMetrics.beneficiaries.target).className}
-              >
-                {getStatusInfo(displayMetrics.beneficiaries.variance, displayMetrics.beneficiaries.actual, displayMetrics.beneficiaries.target).text}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {formatNumber(displayMetrics.beneficiaries.actual)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        / {formatNumber(displayMetrics.beneficiaries.target)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5"
-                      >
-                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
-                          <>
-                            <span className="w-3 h-3 mr-1">-</span>
-                            0.0%
-                          </>
-                        ) : displayMetrics.beneficiaries.variance >= 100 ? (
-                          <>
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {displayMetrics.beneficiaries.variance.toFixed(1)}%
-                          </>
-                        ) : (
-                          <>
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                            {displayMetrics.beneficiaries.variance.toFixed(1)}%
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">vs last period</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{Math.max(0, displayMetrics.beneficiaries.variance).toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-1000 ${getProgressColor(displayMetrics.beneficiaries.variance)}`}
-                        style={{ width: `${Math.min(100, Math.max(0, displayMetrics.beneficiaries.variance))}%` }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Cases Story Actual vs Target */}
-              <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📖</span>
-                      <span className="text-muted-foreground">Cases Story</span>
-                    </div>
-                    <Badge 
-                      variant={getStatusInfo(displayMetrics.cases.variance, displayMetrics.cases.actual, displayMetrics.cases.target).variant}
-                      className={getStatusInfo(displayMetrics.cases.variance, displayMetrics.cases.actual, displayMetrics.cases.target).className}
-                    >
-                      {getStatusInfo(displayMetrics.cases.variance, displayMetrics.cases.actual, displayMetrics.cases.target).text}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {formatNumber(displayMetrics.cases.actual)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        / {formatNumber(displayMetrics.cases.target)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs px-2 py-0.5"
-                      >
-                        {selectedQuarters[0] === 'Q1' || selectedQuarters[0] === 'all' ? (
-                          <>
-                            <span className="w-3 h-3 mr-1">-</span>
-                            0.0%
-                          </>
-                        ) : displayMetrics.cases.variance >= 100 ? (
-                          <>
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {displayMetrics.cases.variance.toFixed(1)}%
-                          </>
-                        ) : (
-                          <>
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                            {displayMetrics.cases.variance.toFixed(1)}%
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">vs last period</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{Math.max(0, displayMetrics.cases.variance).toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full transition-all duration-1000 ${getProgressColor(displayMetrics.cases.variance)}`}
-                        style={{ width: `${Math.min(100, Math.max(0, displayMetrics.cases.variance))}%` }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-                         </div>
-           )}
-
-           {/* Additional Visualizations */}
-           {!loading && !error && (
-             <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-               {/* Line Chart - Left Side */}
-               <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-                 <CardHeader>
-                   <CardTitle className="flex items-center justify-between text-base">
-                     <div className="flex items-center gap-2">
-                       <BarChart3 className="w-4 h-4 text-primary" />
-                       Quarterly Trend
-                     </div>
-                     <Select value={selectedChartMetric} onValueChange={setSelectedChartMetric}>
-                       <SelectTrigger className="w-48">
-                         <SelectValue />
-                       </SelectTrigger>
-                       <SelectContent>
-                         <SelectItem value="Volunteers">Volunteers</SelectItem>
-                         <SelectItem value="Volunteer Opportunities">Volunteer Opportunities</SelectItem>
-                         <SelectItem value="Volunteers Training">Volunteers Training</SelectItem>
-                         <SelectItem value="Expenditures">Expenditures</SelectItem>
-                         <SelectItem value="Beneficiaries">Beneficiaries</SelectItem>
-                         <SelectItem value="Cases Story">Cases Story</SelectItem>
-                       </SelectContent>
-                     </Select>
-                   </CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                   <div className="h-64">
-                     <ResponsiveContainer width="100%" height="100%">
-                       <LineChart data={getQuarterlyData()}>
-                         <XAxis dataKey="quarter" />
-                         <YAxis 
-                           tickFormatter={(value) => {
-                             if (value >= 1000000) {
-                               return (value / 1000000).toFixed(2).replace(/\.?0+$/, '') + 'M';
-                             }
-                             return value.toLocaleString();
-                           }}
-                         />
-                         <Tooltip 
-                           formatter={(value, name, props) => {
-                             if (name === 'value') {
-                               return [
-                                 `Actual: ${formatNumber(Number(value))}`,
-                                 'Actual'
-                               ];
-                             }
-                             return [formatNumber(Number(value)), name];
-                           }}
-                           labelFormatter={(label) => `${label}`}
-                           content={({ active, payload, label }) => {
-                             if (active && payload && payload.length) {
-                               const data = payload[0].payload;
-                               return (
-                                 <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-                                   <p className="font-semibold text-gray-900">{label}</p>
-                                   <p className="text-blue-600">
-                                     Actual: {data.value ? formatNumber(data.value) : '0'}
-                                   </p>
-                                   <p className="text-green-600">
-                                     Target: {data.target ? formatNumber(data.target) : '0'}
-                                   </p>
-                                 </div>
-                               );
-                             }
-                             return null;
-                           }}
-                         />
-                         <Line 
-                           type="monotone" 
-                           dataKey="value" 
-                           stroke="#3b82f6" 
-                           strokeWidth={2}
-                           strokeDasharray="5 5"
-                           dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
-                           connectNulls={false}
-                         />
-                       </LineChart>
-                     </ResponsiveContainer>
-                   </div>
-                 </CardContent>
-               </Card>
-
-               {/* Heart Visual - Right Side */}
-               <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-                 <CardHeader>
-                   <CardTitle className="flex items-center gap-2 text-base">
-                     <Activity className="w-4 h-4 text-primary" />
-                     Overall Health Score
-                   </CardTitle>
-                 </CardHeader>
-                 <CardContent className="space-y-4">
-                   {/* Heart Visual */}
-                   <div className="flex flex-col items-center space-y-4">
-                     <div className="relative">
-                       <svg 
-                         width="120" 
-                         height="108" 
-                         viewBox="0 0 24 24" 
-                         className="w-24 h-24"
-                       >
-                         {/* Heart outline */}
-                         <path
-                           d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-                           fill="none"
-                           stroke={getBloodColor(calculateOverallHealth())}
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           strokeLinejoin="round"
-                         />
-                         
-                         {/* Heart fill based on percentage */}
-                         <defs>
-                           <clipPath id="heart-clip-onedrive">
-                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                           </clipPath>
-                           <linearGradient id="fillGradient-onedrive" x1="0%" y1="100%" x2="0%" y2="0%">
-                             <stop offset="0%" stopColor={getBloodColor(calculateOverallHealth())} stopOpacity="0.8" />
-                             <stop offset={`${100 - calculateOverallHealth()}%`} stopColor={getBloodColor(calculateOverallHealth())} stopOpacity="0.8" />
-                             <stop offset={`${100 - calculateOverallHealth()}%`} stopColor="transparent" stopOpacity="0" />
-                             <stop offset="100%" stopColor="transparent" stopOpacity="0" />
-                           </linearGradient>
-                         </defs>
-                         
-                         <rect
-                           x="0"
-                           y="0"
-                           width="24"
-                           height="24"
-                           fill="url(#fillGradient-onedrive)"
-                           clipPath="url(#heart-clip-onedrive)"
-                           className="health-heart"
-                         />
-                       </svg>
-                       
-                       {/* Blood flow animation */}
-                       <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2">
-                         <div 
-                           className="w-2 h-12 health-blood rounded-full opacity-70"
-                           style={{ backgroundColor: getBloodColor(calculateOverallHealth()) }}
-                         />
-                       </div>
-                     </div>
-                     
-                     <div className="text-center space-y-2">
-                       <div className={`text-3xl font-bold ${getHealthColor(calculateOverallHealth())}`}>
-                         {calculateOverallHealth().toFixed(0)}%
-                       </div>
-                       <div className="text-sm text-muted-foreground">
-                         Overall Health Score
-                       </div>
-                       <div className={`text-base font-semibold ${getHealthColor(calculateOverallHealth())}`}>
-                         {getHealthStatus(calculateOverallHealth())}
-                       </div>
-                       <div className="text-xs text-muted-foreground max-w-xs">
-                         Health Calculation: Based on average Program Operations Sector. Higher scores indicate better alignment with projects.
-                       </div>
-                     </div>
-                   </div>
-                 </CardContent>
-               </Card>
-             </div>
-           )}
+          </div>
+        )}
       </div>
     </div>
   );

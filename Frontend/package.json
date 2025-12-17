@@ -9,9 +9,16 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "init-db": "node scripts/init-database.cjs",
+    "import-wig": "node scripts/import-wig-data.cjs",
+    "import-rasci": "node scripts/import-rasci-data.cjs",
+    "import-rasci-dept": "node scripts/import-rasci-by-dept.cjs scripts/rasci-data.txt",
+    "ensure-all-kpis-rasci": "node scripts/ensure-all-kpis-rasci.cjs",
+    "init-all-kpis-rasci": "node scripts/init-all-kpis-rasci.cjs",
     "proxy": "node proxy-server.cjs",
     "onedrive-proxy": "node onedrive-proxy.cjs",
-    "proxies": "concurrently \"npm run proxy\" \"npm run onedrive-proxy\""
+    "wig-proxy": "node wig-proxy.cjs",
+    "proxies": "concurrently \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -43,6 +50,7 @@
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.4",
     "@tanstack/react-query": "^5.56.2",
+    "@types/mapbox-gl": "^3.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -55,8 +63,12 @@
     "http-proxy-middleware": "^3.0.5",
     "input-otp": "^1.2.4",
     "lucide-react": "^0.462.0",
+    "mapbox-gl": "^3.14.0",
+    "mssql": "^10.0.4",
     "next-themes": "^0.3.0",
     "node-fetch": "^2.6.7",
+    "powerbi-client": "^2.23.1",
+    "powerbi-models": "^1.15.2",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -68,9 +80,7 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.3",
-    "zod": "^3.23.8",
-    "mapbox-gl": "^3.14.0",
-    "@types/mapbox-gl": "^3.4.1"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

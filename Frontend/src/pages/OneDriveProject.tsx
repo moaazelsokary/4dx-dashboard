@@ -26,7 +26,8 @@ import {
   Menu,
   ArrowRight,
   ArrowUpRight,
-  Navigation
+  Navigation,
+  Power
 } from 'lucide-react';
 import {
   LineChart,
@@ -39,6 +40,8 @@ import {
 } from 'recharts';
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
 import { dataCacheService } from '@/services/dataCacheService';
+import { hasPowerBIAccess } from '@/config/powerbi';
+import NavigationBar from '@/components/shared/NavigationBar';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -63,6 +66,7 @@ const ProjectDetails: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState('Basic needs');
   const [selectedChartMetric, setSelectedChartMetric] = useState('Volunteers');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [user, setUser] = useState<any>(null);
   
   // Reactive filtering - recalculate when filters change (like department dashboard)
   const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
@@ -77,14 +81,15 @@ const ProjectDetails: React.FC = () => {
       return;
     }
     
-    const user = JSON.parse(userData);
+    const userObj = JSON.parse(userData);
     // Only allow CEO, operations department, or project role
-    if (user.role !== "CEO" && 
-        !(user.role === "department" && user.departments.includes("operations")) &&
-        user.role !== "project") {
+    if (userObj.role !== "CEO" && 
+        !(userObj.role === "department" && userObj.departments.includes("operations")) &&
+        userObj.role !== "project") {
       navigate("/dashboard");
       return;
     }
+    setUser(userObj);
   }, [navigate]);
   
   // Process Services data from "Services Target Q Vs Actual" tab
@@ -942,34 +947,27 @@ const ProjectDetails: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
       {/* Header */}
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
-                <img 
-                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                  alt="Logo" 
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div>
-                <h1 className="text-base sm:text-xl font-bold text-foreground">
-                  Project Details
-                </h1>
-                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
-                  <FolderOpen className="w-3 h-3 mr-1" />
-                  Project Details
-                </Badge>
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex flex-col gap-2">
+            {/* Top Row: Logo, Title, Actions */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 flex items-center justify-center p-1">
+                  <img 
+                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
+                    alt="Logo" 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div>
+                  <h1 className="text-sm font-bold text-foreground">
+                    Project Details
+                  </h1>
+                  <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
+                </div>
               </div>
               
-              {/* Connection Status - Desktop Only */}
-              <div className="hidden sm:flex sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-2">
                 {loading && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <RefreshCw className="w-3 h-3 animate-spin" />
@@ -979,19 +977,22 @@ const ProjectDetails: React.FC = () => {
                 {error && (
                   <div className="flex items-center gap-1 text-xs text-destructive">
                     <AlertCircle className="w-3 h-3" />
-                    Connection Error
+                    Error
                   </div>
                 )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Refresh Data
+                <Button variant="outline" size="sm" onClick={handleRefreshData} className="h-7 px-2 text-xs">
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Refresh
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
-                  <LogOut className="w-4 h-4 mr-1" />
+                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
+                  <LogOut className="w-3 h-3 mr-1" />
                   Sign Out
                 </Button>
               </div>
             </div>
+
+            {/* Navigation Row */}
+            <NavigationBar user={user} />
           </div>
         </div>
       </header>
@@ -1008,90 +1009,6 @@ const ProjectDetails: React.FC = () => {
             Sign Out
           </Button>
         </div>
-
-        {/* Navigation Bar */}
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-          <CardContent className="p-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Navigation className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-base">Navigation</h3>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Main Dashboard Button - Only show for non-project users */}
-                {(() => {
-                  const userData = localStorage.getItem("user");
-                  const user = userData ? JSON.parse(userData) : null;
-                  const isProjectUser = user && user.role === "project";
-                  
-                  return !isProjectUser ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate('/dashboard')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Main Dashboard</div>
-                          <div className="text-xs text-muted-foreground">Department overview</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                  ) : null;
-                })()}
-                
-                {/* Summary Overview Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/summary')}
-                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                >
-                  <div className="text-left flex items-center gap-3">
-                    <div className="flex-shrink-0">
-                      <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Summary Overview</div>
-                      <div className="text-xs text-muted-foreground">High-level project summaries</div>
-                    </div>
-                    <div className="ml-auto flex-shrink-0">
-                      <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                    </div>
-                  </div>
-                </Button>
-
-                {/* External Dashboard Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
-                  className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                >
-                  <div className="text-left flex items-center gap-3">
-                    <div className="flex-shrink-0">
-                      <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Life Makers Project Brief</div>
-                      <div className="text-xs text-muted-foreground">All Time Documentation</div>
-                    </div>
-                    <div className="ml-auto flex-shrink-0">
-                      <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                    </div>
-                  </div>
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Combined Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
@@ -1167,6 +1084,7 @@ const ProjectDetails: React.FC = () => {
                           <SelectValue placeholder="Select a project" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="all">Select all</SelectItem>
                           {getProjectNames().map((projectName: string) => (
                             <SelectItem key={projectName} value={projectName}>
                               {projectName}
@@ -1181,6 +1099,17 @@ const ProjectDetails: React.FC = () => {
                       <div className="space-y-2">
                         {/* First row of projects */}
                         <div className="flex flex-wrap gap-1">
+                          <Badge
+                            variant={selectedProject === 'all' ? "default" : "outline"}
+                            className={`cursor-pointer transition-colors text-[10px] px-2 py-1 ${
+                              selectedProject === 'all' 
+                                ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                                : "hover:bg-muted"
+                            }`}
+                            onClick={() => handleProjectChange('all')}
+                          >
+                            Select all
+                          </Badge>
                           {projectNames.length > 0 ? (
                             projectNames.slice(0, Math.ceil(projectNames.length / 2)).map((projectName: string) => (
                               <Badge
@@ -1252,132 +1181,6 @@ const ProjectDetails: React.FC = () => {
 
         {!loading && !error && (
           <div className="space-y-6">
-                         {/* Project Navigator */}
-             {selectedProjectData && (
-               <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-                 <CardHeader>
-                   <CardTitle className="text-lg font-bold text-gray-900">Project Overview</CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                     {/* Project Name */}
-                     <Card className="backdrop-blur-md bg-white/20 border border-white/30 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-                       <CardHeader className="pb-3">
-                         <CardTitle className="flex items-center justify-between text-sm font-medium">
-                           <div className="flex items-center gap-2">
-                             <span className="text-lg">📋</span>
-                             <span className="text-muted-foreground">Project Name</span>
-                           </div>
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <div className="flex items-baseline gap-2">
-                             <span className="text-lg font-bold text-foreground">
-                               {selectedProjectData.projectName}
-                             </span>
-                           </div>
-                         </div>
-                       </CardContent>
-                     </Card>
-                     
-                     {/* Duration */}
-                     <Card className="backdrop-blur-md bg-white/20 border border-white/30 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-                       <CardHeader className="pb-3">
-                         <CardTitle className="flex items-center justify-between text-sm font-medium">
-                           <div className="flex items-center gap-2">
-                             <span className="text-lg">⏱️</span>
-                             <span className="text-muted-foreground">Duration</span>
-                           </div>
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <div className="flex items-baseline gap-2">
-                             <span className="text-lg font-bold text-foreground">
-                               {selectedProjectData.durationMonths}
-                             </span>
-                             <span className="text-sm text-muted-foreground">
-                               Months
-                             </span>
-                           </div>
-                         </div>
-                       </CardContent>
-                     </Card>
-                     
-                     {/* Source of Fund */}
-                     <Card className="backdrop-blur-md bg-white/20 border border-white/30 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-                       <CardHeader className="pb-3">
-                         <CardTitle className="flex items-center justify-between text-sm font-medium">
-                           <div className="flex items-center gap-2">
-                             <span className="text-lg">🏦</span>
-                             <span className="text-muted-foreground">Source of Fund</span>
-                           </div>
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <div className="flex items-baseline gap-2">
-                             <span className="text-sm font-bold text-foreground truncate">
-                               {selectedProjectData.sourceOfFund}
-                             </span>
-                           </div>
-                         </div>
-                       </CardContent>
-                     </Card>
-                     
-                     {/* Fund Amount */}
-                     <Card className="backdrop-blur-md bg-white/20 border border-white/30 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-                       <CardHeader className="pb-3">
-                         <CardTitle className="flex items-center justify-between text-sm font-medium">
-                           <div className="flex items-center gap-2">
-                             <span className="text-lg">💰</span>
-                             <span className="text-muted-foreground">Fund Amount</span>
-                           </div>
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <div className="flex items-baseline gap-2">
-                             <span className="text-lg font-bold text-foreground">
-                               {formatNumber(selectedProjectData.fundEGP)}
-                             </span>
-                             <span className="text-sm text-muted-foreground">
-                               EGP
-                             </span>
-                           </div>
-                         </div>
-                       </CardContent>
-                     </Card>
-                     
-                     {/* Active Governorates */}
-                     <Card className="backdrop-blur-md bg-white/20 border border-white/30 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-                       <CardHeader className="pb-3">
-                         <CardTitle className="flex items-center justify-between text-sm font-medium">
-                           <div className="flex items-center gap-2">
-                             <span className="text-lg">🗺️</span>
-                             <span className="text-muted-foreground">Active Governorates</span>
-                           </div>
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <div className="flex items-baseline gap-2">
-                             <span className="text-lg font-bold text-foreground">
-                               {selectedProjectData.activeGovernorates}
-                             </span>
-                             <span className="text-sm text-muted-foreground">
-                               Governorates
-                             </span>
-                           </div>
-                         </div>
-                       </CardContent>
-                     </Card>
-                   </div>
-                 </CardContent>
-               </Card>
-             )}
-
              {/* Project Services Table and Visuals */}
              {selectedProjectData && filteredMetrics?.services && (
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,0 +1,1567 @@
+1/Human Resources (HR)	
+	
+	
+	
+	
+	
+	
+R	internship
+	
+R	
+R	
+R	inernship مع جهات اخرى 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	موظفين وبيئة عمل العمل
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+	
+A, R	
+A, R	
+R	
+R	
+R	
+R	
+R	
+	
+	
+	
+2/Procurement & Supply Chain	
+	
+	
+R	متطوعو الشراء 
+	
+	
+	
+R	
+	
+R	متطوعو الشراء 
+R	
+	
+	
+	
+	
+	
+	
+	
+R	
+S	
+	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+	
+A, R	الموردين 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+	
+A, R	
+A, R	
+S	
+S	
+R	
+R	
+R	
+	
+	
+	
+3/Operations / Program Implementation	
+R	
+R	
+R	
+R	
+R	
+R	
+R	
+	
+R	
+R	
+	
+	
+R	
+	
+	
+A, R	
+R	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+	
+	
+A, R	partners  و مستفيدين 
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+	
+R	
+A, R	
+R, A	
+A, R	
+A, R	
+A	
+	
+A, R	
+	
+R	
+R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+A, R	
+	
+A, R	
+S	
+S	
+R	
+	
+	
+A, R	
+	
+	
+R	
+R	
+R	
+	
+	
+	
+4/Finance	
+	
+	
+	
+	
+	
+	
+R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+S	
+S	
+	
+	
+	
+	
+	
+R	بنوك و موردين  و تقارير مالية مع الشركاء 
+	
+S	
+S	
+	
+S	
+	
+S	
+S, I	
+S	
+S	
+S	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+	
+	
+A, R	
+S, I	
+A, R	
+A, R	
+	
+	
+R	
+R	
+R	
+	
+	
+	
+5/Administration & Legal Affairs	
+S	الجمعيات
+S	الجمعيات
+S	الجمعيات
+S	الجمعيات
+S	الجمعيات
+	
+	
+	
+S	الجمعيات
+S	الجمعيات
+	
+	
+	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+S	التراخيص والتصاريح
+S	التراخيص والتصاريح
+S	
+S	
+	
+	
+	
+A, R	النزعات القضائية و الشكاوى 
+R	
+R	
+R	
+R	
+A, R	
+	
+S	
+	
+S	
+S	
+	
+	
+	
+	
+S	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+S	
+S	
+	
+	
+	
+	
+	
+	
+S	
+S	
+	
+	
+	
+	
+	
+	
+	
+S	
+S	
+S	
+S	
+S	
+S	
+S	
+	
+	
+A, R	
+A, R	
+	
+	
+R	
+R	
+	
+	
+A, R, C	
+A, R, C	
+6/Information Technology (IT)	
+S	
+S	
+S	
+S	
+S	
+S	
+S	
+	
+S	
+S	
+	
+S	
+R, S	
+	
+	
+S	
+	
+	
+	
+	
+	
+S	
+	
+S	
+	
+	
+	
+	
+	
+	
+	
+S	
+	
+	
+	
+	
+A, R	
+	
+	
+	
+	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+	
+A, R	
+A, R	
+S	
+S	
+R, A	
+A, R	
+A, R	
+A, R	
+	
+	
+7/Communication	
+S	
+S	
+R	متطوعو الاتصال 
+S	
+S	
+	
+R	متطوعو الاتصال 
+	
+R	متطوعو الاتصال 
+R	
+R	
+	
+S	
+	
+	
+S	
+R	اصدار قصص النجاح
+	
+S	
+	
+S	
+	
+	
+	
+	
+R	
+R	
+R	
+R	
+	
+	
+S	
+S	
+	
+A, R	
+A, R	
+A, R	
+S	
+S	
+S	
+S	
+S	
+S	
+S	
+S	
+A, R	
+	
+	
+	
+	
+	
+S	
+R	
+A, R	
+	
+R	
+	
+	
+	
+	
+	
+R	
+R	
+S	
+S	
+S	
+S	
+	
+	
+S, R	
+S, R	
+	
+	
+	
+	
+S	
+	
+S	
+	
+S	
+S	
+S	
+S	
+S	
+S	
+S	
+	
+	
+A, R	
+A, R	
+S	
+S	
+R	
+R	
+R	
+	
+	
+	
+8/Direct Fundraising / Resource Mobilization	
+R	
+R	
+R	متطوعو التمويل 
+R	
+R	
+	
+R	متطوعو التمويل 
+	
+R	متطوعو التمويل 
+R	
+	
+	
+	
+	
+	
+R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+R	
+R	
+	
+R	
+	
+A, R	donors , customer services 
+R, A	
+S	
+R	
+	
+	
+	
+R	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+R	
+	
+	
+A, R	
+	
+	
+R	
+R	
+R	
+	
+	
+	
+9/Monitoring, Evaluation & Learning (MEL)	
+I	
+I	
+I	
+I	
+S	
+I, S	
+R	متطوعو المتابعة 
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+	
+	
+I	
+I, S, R	
+S, I	
+I, S	
+	
+I, S	
+A, S	استبيان وتحليل علي مدار 3 سنين
+	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+S	
+S	
+S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+	
+I, S	
+	
+	
+A, R	
+	
+	
+	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I	
+I	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I	
+I	
+	
+R	
+R	
+	
+	
+	
+	
+	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+I, S	
+	
+	
+I, S	
+I, S	
+I, S	
+I, S	
+A, R	
+I, S, A, R	
+I, S, A, R	
+I, S, R, A	
+A, R, S, I	
+A, R, S, I	
+10/Case Management	
+R	
+R	
+R	متطوعو ادارة الحالة 
+R	
+R	
+	
+R	متطوعو ادارة الحالة 
+	
+R	متطوعو ادارة الحالة 
+R	
+	
+	
+	
+	
+	
+A, R	
+	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+R	
+	
+R	
+	
+A, R	المستفيدين 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+A, R	
+	
+R	
+A, R	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+	
+	
+R	
+R	
+	
+	
+	
+	
+11/Business Development	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	النخيل من ناحية التوثيق و المتبرعبن ، الكلى من ناحية المستفيدين و الشركاء في المقاطعة 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+	
+R	
+R	
+	
+	
+	
+	
+12/Volunteer Management	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+	
+A, R	
+A, R	
+	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+A, R	
+	
+	
+	
+	
+A, R	
+A, R	
+	
+A, R	الانشطة التطوعية و السلوك التطوعي 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+	
+A, R	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+	
+	
+R	
+R	
+R	
+A, R	
+	
+A, R	
+	
+	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+R	
+	
+	
+R	
+R	
+	
+	
+	
+A, R	
+	
+	
+R	
+R	
+	
+	
+	
+	
+13/LMF Community	
+	
+R	
+R	متطوعو التنظيم 
+	
+	
+	
+R	متطوعو التنظيم 
+	
+R	متطوعو التنظيم 
+R	
+	
+	
+R	
+	
+	
+	
+R	
+	
+R	
+	
+R	
+R	
+	
+R	
+R	
+R	
+R	
+R	
+R	
+	
+	
+	
+	
+	
+R	
+R	
+	بيئة العمل و الايفنتات 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+A, R	
+S	
+S	
+R	
+R	
+	
+	
+	
+	
+14/Security&Safety	
+	
+S	التصاريح الامنية
+	
+	
+	
+	
+	
+	
+S	التصاريح الامنية
+	
+	
+	
+	
+	
+	
+	
+	
+	
+S	التصاريح الامنية
+	
+	
+S	التصاريح الامنية
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+R	
+	
+	
+R	
+R	
+	
+	
+	
+	
+15/Offices&P	
+R	
+A, R	
+A, R	
+A, R	
+A, R	
+R, A	
+R, A	
+R, A	
+A, R	
+A, R	
+R	جهات محلية 
+A, R	
+R	
+A, R	
+	
+R	
+R	
+A, R	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+	
+	
+	
+	
+	
+	
+R	
+A, R	
+R	
+A, R	
+	
+A, R	
+R	محلية
+	
+R, A	
+	
+R	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+A, R	
+	
+	
+A, R	
+	
+	
+	
+	
+	
+A, R	
+A, R	
+	
+	
+R	
+R	
+R	
+A, R	
+	
+A, R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+R	
+R	
+	
+R	
+R	
+R	
+	
+	
+A, R	
+A, R	
+	
+	
+R	
+R	
+	
+	
+	
+	
+16/SiS	
+	
+	
+	
+	
+	
+S, C	
+S, C	
+R	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+C, S	
+	
+	
+	
+S	
+	
+R	
+	
+	
+	
+C, S	
+C, S	
+S	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+S, I	
+	
+S	
+S	
+A, R	
+A, R	
+C, S	
+	
+	
+	
+	
+	
