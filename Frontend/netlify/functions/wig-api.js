@@ -552,62 +552,84 @@ async function createDepartmentObjective(pool, body) {
 }
 
 async function updateDepartmentObjective(pool, id, body) {
-  // Validate KPI has RASCI if KPI is being updated
-  if (body.kpi) {
-    const rasciCheck = pool.request();
-    rasciCheck.input('kpi', sql.NVarChar, body.kpi);
-    const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
-    
-    if (rasciResult.recordset[0].count === 0) {
-      throw new Error('KPI must have at least one RASCI assignment');
-    }
-  }
+  try {
+    // Get current objective to check if KPI is actually changing
+    const currentRequest = pool.request();
+    currentRequest.input('id', sql.Int, id);
+    const currentResult = await currentRequest.query(`
+      SELECT kpi FROM department_objectives WHERE id = @id
+    `);
 
-  const request = pool.request();
-  request.input('id', sql.Int, id);
-  const updates = [];
-  const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov'];
-  
-  fields.forEach((field) => {
-    if (body[field] !== undefined) {
-      if (field === 'main_objective_id') {
-        request.input(field, sql.Int, body[field] || null);
-      } else if (field === 'department_id' || field === 'activity_target') {
-        request.input(field, field === 'department_id' ? sql.Int : sql.Decimal(18, 2), body[field]);
-      } else {
-        request.input(field, sql.NVarChar, body[field]);
+    if (currentResult.recordset.length === 0) {
+      throw new Error('Department objective not found');
+    }
+
+    const currentKpi = currentResult.recordset[0].kpi;
+    const newKpi = body.kpi;
+
+    // Only validate RASCI if KPI is actually being changed
+    if (newKpi !== undefined && newKpi !== currentKpi) {
+      const rasciCheck = pool.request();
+      rasciCheck.input('kpi', sql.NVarChar, newKpi);
+      const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
+      
+      if (rasciResult.recordset[0].count === 0) {
+        throw new Error('KPI must have at least one RASCI assignment');
       }
-      updates.push(`${field} = @${field}`);
     }
-  });
 
-  if (updates.length === 0) {
-    throw new Error('No fields to update');
+    const request = pool.request();
+    request.input('id', sql.Int, id);
+    const updates = [];
+    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov'];
+    
+    fields.forEach((field) => {
+      if (body[field] !== undefined) {
+        if (field === 'main_objective_id') {
+          request.input(field, sql.Int, body[field] || null);
+        } else if (field === 'department_id' || field === 'activity_target') {
+          request.input(field, field === 'department_id' ? sql.Int : sql.Decimal(18, 2), body[field]);
+        } else {
+          request.input(field, sql.NVarChar, body[field]);
+        }
+        updates.push(`${field} = @${field}`);
+      }
+    });
+
+    if (updates.length === 0) {
+      throw new Error('No fields to update');
+    }
+
+    // Update without OUTPUT clause due to triggers
+    const updateResult = await request.query(`
+      UPDATE department_objectives
+      SET ${updates.join(', ')}, updated_at = GETDATE()
+      WHERE id = @id
+    `);
+
+    if (updateResult.rowsAffected[0] === 0) {
+      throw new Error('Department objective not found');
+    }
+
+    // Select the updated record
+    const selectRequest = pool.request();
+    selectRequest.input('id', sql.Int, id);
+    const selectResult = await selectRequest.query(`
+      SELECT * FROM department_objectives WHERE id = @id
+    `);
+
+    if (selectResult.recordset.length === 0) {
+      throw new Error('Department objective not found after update');
+    }
+
+    return selectResult.recordset[0];
+  } catch (error) {
+    console.error('[updateDepartmentObjective] Error:', error.message);
+    console.error('[updateDepartmentObjective] Error code:', error.code);
+    console.error('[updateDepartmentObjective] Error stack:', error.stack);
+    console.error('[updateDepartmentObjective] Body received:', JSON.stringify(body));
+    throw error;
   }
-
-  // Update without OUTPUT clause due to triggers
-  const updateResult = await request.query(`
-    UPDATE department_objectives
-    SET ${updates.join(', ')}, updated_at = GETDATE()
-    WHERE id = @id
-  `);
-
-  if (updateResult.rowsAffected[0] === 0) {
-    throw new Error('Department objective not found');
-  }
-
-  // Select the updated record
-  const selectRequest = pool.request();
-  selectRequest.input('id', sql.Int, id);
-  const selectResult = await selectRequest.query(`
-    SELECT * FROM department_objectives WHERE id = @id
-  `);
-
-  if (selectResult.recordset.length === 0) {
-    throw new Error('Department objective not found after update');
-  }
-
-  return selectResult.recordset[0];
 }
 
 async function deleteDepartmentObjective(pool, id) {
