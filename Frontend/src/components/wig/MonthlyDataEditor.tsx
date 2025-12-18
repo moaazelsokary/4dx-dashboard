@@ -80,14 +80,24 @@ export default function MonthlyDataEditor({ kpi, departmentId, trigger }: Monthl
       setSaving(true);
       const promises: Promise<MonthlyData>[] = [];
       
-      data.forEach((item, month) => {
+      // Save all months, even if they haven't been edited
+      MONTHS.forEach((month) => {
+        const monthData = data.get(month) || {
+          id: 0,
+          kpi: kpi,
+          department_id: departmentId,
+          month: `${month}-01`,
+          target_value: null,
+          actual_value: null,
+        };
+        
         promises.push(
           createOrUpdateMonthlyData({
             kpi: kpi,
             department_id: departmentId,
             month: `${month}-01`,
-            target_value: item.target_value,
-            actual_value: item.actual_value,
+            target_value: monthData.target_value,
+            actual_value: monthData.actual_value,
           })
         );
       });
@@ -101,9 +111,10 @@ export default function MonthlyDataEditor({ kpi, departmentId, trigger }: Monthl
       
       setOpen(false);
     } catch (err) {
+      console.error('Error saving monthly data:', err);
       toast({
         title: 'Error',
-        description: 'Failed to save monthly data',
+        description: err instanceof Error ? err.message : 'Failed to save monthly data',
         variant: 'destructive',
       });
     } finally {
@@ -162,19 +173,27 @@ export default function MonthlyDataEditor({ kpi, departmentId, trigger }: Monthl
                   <div>
                     <Input
                       type="number"
+                      id={`target-${month}`}
+                      name={`target-${month}`}
+                      autoComplete="off"
                       value={monthData.target_value?.toString() || ''}
                       onChange={(e) => updateMonthData(month, 'target_value', e.target.value)}
                       placeholder="Target"
                       className="text-right"
+                      aria-label={`Target value for ${monthLabel}`}
                     />
                   </div>
                   <div>
                     <Input
                       type="number"
+                      id={`actual-${month}`}
+                      name={`actual-${month}`}
+                      autoComplete="off"
                       value={monthData.actual_value?.toString() || ''}
                       onChange={(e) => updateMonthData(month, 'actual_value', e.target.value)}
                       placeholder="Actual"
                       className="text-right"
+                      aria-label={`Actual value for ${monthLabel}`}
                     />
                   </div>
                   <div className="text-right text-sm text-muted-foreground">
@@ -185,10 +204,10 @@ export default function MonthlyDataEditor({ kpi, departmentId, trigger }: Monthl
             })}
             
             <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} aria-label="Cancel editing monthly data" title="Cancel">
                 Cancel
               </Button>
-              <Button onClick={saveAll} disabled={saving}>
+              <Button type="button" onClick={saveAll} disabled={saving} aria-label="Save all monthly data" title="Save all monthly data">
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
