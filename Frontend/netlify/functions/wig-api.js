@@ -15,8 +15,15 @@ function getDbConfig() {
     port = 1433;
   }
 
-  // Get password - handle both plain text and URL-encoded versions
-  let password = process.env.PWD || process.env.VITE_PWD;
+  // Get password - PWD is a system variable in Unix/Linux, use DB_PASSWORD instead
+  // Priority: DB_PASSWORD > VITE_PWD > PWD (as fallback, but PWD is usually the working directory)
+  let password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PWD;
+  
+  // If PWD looks like a path (starts with /), it's the system variable, not our password
+  if (password && password.startsWith('/') && password.includes('/')) {
+    console.warn('[DB] PWD appears to be system path, not password. Use DB_PASSWORD instead.');
+    password = process.env.DB_PASSWORD || process.env.VITE_PWD;
+  }
   
   // Log password info for debugging (without exposing the actual password)
   if (password) {
@@ -72,7 +79,7 @@ function getDbConfig() {
     server: server,
     port: port,
     database: process.env.DATABASE || process.env.VITE_DATABASE,
-    user: process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
+    user: process.env.DB_USER || process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
     password: password,
     options: {
       encrypt: true, // Use encryption for SQL Server
