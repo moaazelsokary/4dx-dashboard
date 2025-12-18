@@ -114,17 +114,22 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
     setEditData({});
   };
 
-  const saveEdit = async () => {
+  const saveEdit = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!editingId) return;
 
     try {
-      await updateMainObjective(editingId, editData);
+      const updated = await updateMainObjective(editingId, editData);
       toast({
         title: 'Success',
         description: 'Objective updated successfully',
       });
       setEditingId(null);
       setEditData({});
+      // Refresh data without showing loading spinner
       onUpdate();
     } catch (err) {
       toast({
@@ -210,6 +215,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
     <>
       <div className="mb-6">
         <Button 
+          type="button"
           onClick={() => setIsAdding(true)}
           className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200"
         >
@@ -314,10 +320,10 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button size="sm" onClick={handleAdd} aria-label="Save new objective">
+                    <Button type="button" size="sm" onClick={handleAdd} aria-label="Save new objective">
                       <Save className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setIsAdding(false)} aria-label="Cancel adding objective">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setIsAdding(false)} aria-label="Cancel adding objective">
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -457,10 +463,10 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" onClick={saveEdit} aria-label="Save changes">
+                          <Button type="button" size="sm" onClick={saveEdit} aria-label="Save changes">
                             <Save className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={cancelEdit} aria-label="Cancel editing">
+                          <Button type="button" size="sm" variant="outline" onClick={cancelEdit} aria-label="Cancel editing">
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
@@ -494,6 +500,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button 
+                            type="button"
                             size="sm" 
                             variant="outline" 
                             onClick={() => startEdit(obj)}
@@ -504,6 +511,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button 
+                            type="button"
                             size="sm" 
                             variant="outline" 
                             onClick={() => setDeletingId(obj.id)}
