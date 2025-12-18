@@ -127,7 +127,7 @@ BEGIN
     ('Information Technology', 'it'),
     ('Operations', 'operations'),
     ('Communication', 'communication'),
-    ('DFR', 'dfr'),
+    ('Direct Fundraising / Resource Mobilization', 'dfr'),
     ('Case Management', 'case'),
     ('Business Development', 'bdm'),
     ('Security', 'security'),

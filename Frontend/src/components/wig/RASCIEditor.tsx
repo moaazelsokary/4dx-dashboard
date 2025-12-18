@@ -62,15 +62,11 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
   }, [selectedKPI]);
 
   // Helper function to normalize department names for matching
-  // Handles cases like "DFR" = "Direct Fundraising / Resource Mobilization"
+  // Always use "Direct Fundraising / Resource Mobilization" for DFR
   const normalizeDepartmentName = (name: string, code: string): string => {
-    // If code is "dfr", check if name contains "Direct Fundraising" or "Resource Mobilization"
+    // If code is "dfr", always use the full name
     if (code.toLowerCase() === 'dfr') {
-      if (name.toLowerCase().includes('direct fundraising') || 
-          name.toLowerCase().includes('resource mobilization') ||
-          name.toLowerCase() === 'dfr') {
-        return 'DFR'; // Use the database name
-      }
+      return 'Direct Fundraising / Resource Mobilization';
     }
     return name;
   };
@@ -82,14 +78,14 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
       return true;
     }
     
-    // Handle DFR special case
+    // Handle DFR special case - match both "DFR" and "Direct Fundraising / Resource Mobilization"
     if (deptCode.toLowerCase() === 'dfr') {
-      const normalizedName = normalizeDepartmentName(deptName, deptCode);
+      const normalizedName = 'Direct Fundraising / Resource Mobilization';
       if (dbDepartment === normalizedName || 
           dbDepartment === 'DFR' || 
           dbDepartment.toLowerCase() === 'dfr' ||
-          (dbDepartment.toLowerCase().includes('direct fundraising') && deptName.toLowerCase().includes('direct fundraising')) ||
-          (dbDepartment.toLowerCase().includes('resource mobilization') && deptName.toLowerCase().includes('resource mobilization'))) {
+          dbDepartment.toLowerCase().includes('direct fundraising') ||
+          dbDepartment.toLowerCase().includes('resource mobilization')) {
         return true;
       }
     }
@@ -115,17 +111,13 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
         // Match by name or code, with special handling for DFR
         const existing = data.find((r) => matchDepartment(r.department, dept.name, dept.code));
         if (existing) {
-          // Normalize the department name to what the database expects
-          // If it's DFR-related, use the database name
+          // Normalize the department name - always use "Direct Fundraising / Resource Mobilization" for DFR
           const normalizedDeptName = normalizeDepartmentName(dept.name, dept.code);
-          const finalDepartmentName = (dept.code.toLowerCase() === 'dfr' && existing.department === 'DFR') 
-            ? 'DFR' 
-            : normalizedDeptName;
           
-          // Update the existing record to use the correct department name
+          // Update the existing record to use the normalized department name
           const updatedExisting = {
             ...existing,
-            department: finalDepartmentName
+            department: normalizedDeptName
           };
           
           rasciMap.set(dept.name, updatedExisting);
@@ -193,15 +185,11 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
         // Find the department to get the correct name/code
         const dept = departments.find(d => d.name === rasci.department || d.code === rasci.department);
         
-        // Normalize department name - if it's DFR-related, use "DFR" for database
+        // Normalize department name - if it's DFR-related, always use "Direct Fundraising / Resource Mobilization"
         let dbDepartmentName = rasci.department;
         if (dept && dept.code.toLowerCase() === 'dfr') {
-          // Check if the department name contains DFR-related terms
-          if (rasci.department.toLowerCase().includes('direct fundraising') || 
-              rasci.department.toLowerCase().includes('resource mobilization') ||
-              rasci.department === 'DFR') {
-            dbDepartmentName = 'DFR'; // Use database name
-          }
+          // Always use the full name for DFR
+          dbDepartmentName = 'Direct Fundraising / Resource Mobilization';
         }
         
         if (hasAnyRole) {
