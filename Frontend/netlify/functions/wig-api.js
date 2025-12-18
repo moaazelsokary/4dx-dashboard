@@ -289,8 +289,11 @@ exports.handler = async function (event, context) {
     }
     // Monthly Data
     else if (path.startsWith('/monthly-data/') && method === 'GET') {
-      const deptObjId = parseInt(path.split('/monthly-data/')[1]);
-      result = await getMonthlyData(pool, deptObjId);
+      // Path format: /monthly-data/{kpi}/{department_id}
+      const parts = path.split('/monthly-data/')[1].split('/');
+      const kpi = decodeURIComponent(parts[0]);
+      const departmentId = parseInt(parts[1]);
+      result = await getMonthlyData(pool, kpi, departmentId);
     } else if (path === '/monthly-data' && method === 'POST') {
       result = await createOrUpdateMonthlyData(pool, body);
     } else {
@@ -582,18 +585,29 @@ async function updateDepartmentObjective(pool, id, body) {
     throw new Error('No fields to update');
   }
 
-  const result = await request.query(`
+  // Update without OUTPUT clause due to triggers
+  const updateResult = await request.query(`
     UPDATE department_objectives
-    SET ${updates.join(', ')}
-    OUTPUT INSERTED.*
+    SET ${updates.join(', ')}, updated_at = GETDATE()
     WHERE id = @id
   `);
 
-  if (result.recordset.length === 0) {
+  if (updateResult.rowsAffected[0] === 0) {
     throw new Error('Department objective not found');
   }
 
-  return result.recordset[0];
+  // Select the updated record
+  const selectRequest = pool.request();
+  selectRequest.input('id', sql.Int, id);
+  const selectResult = await selectRequest.query(`
+    SELECT * FROM department_objectives WHERE id = @id
+  `);
+
+  if (selectResult.recordset.length === 0) {
+    throw new Error('Department objective not found after update');
+  }
+
+  return selectResult.recordset[0];
 }
 
 async function deleteDepartmentObjective(pool, id) {
@@ -954,13 +968,14 @@ async function calculatePlanCheckers(pool) {
 }
 
 // Monthly Data Functions
-async function getMonthlyData(pool, deptObjId) {
+async function getMonthlyData(pool, kpi, departmentId) {
   const request = pool.request();
-  request.input('dept_obj_id', sql.Int, deptObjId);
+  request.input('kpi', sql.NVarChar, kpi);
+  request.input('department_id', sql.Int, departmentId);
 
   const result = await request.query(`
     SELECT * FROM department_monthly_data 
-    WHERE department_objective_id = @dept_obj_id 
+    WHERE kpi = @kpi AND department_id = @department_id
     ORDER BY month
   `);
 
@@ -969,25 +984,39 @@ async function getMonthlyData(pool, deptObjId) {
 
 async function createOrUpdateMonthlyData(pool, body) {
   const request = pool.request();
-  request.input('department_objective_id', sql.Int, body.department_objective_id);
+  request.input('kpi', sql.NVarChar, body.kpi);
+  request.input('department_id', sql.Int, body.department_id);
   request.input('month', sql.Date, body.month);
   request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
   request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-  const result = await request.query(`
-    MERGE department_monthly_data AS target
-    USING (SELECT @department_objective_id AS dept_obj_id, @month AS month) AS source
-    ON target.department_objective_id = source.dept_obj_id AND target.month = source.month
-    WHEN MATCHED THEN
-      UPDATE SET 
-        target_value = @target_value,
-        actual_value = @actual_value
-    WHEN NOT MATCHED THEN
-      INSERT (department_objective_id, month, target_value, actual_value)
-      VALUES (@department_objective_id, @month, @target_value, @actual_value)
-    OUTPUT INSERTED.*;
+  // Update without OUTPUT clause due to triggers
+  const updateResult = await request.query(`
+    UPDATE department_monthly_data
+    SET target_value = @target_value,
+        actual_value = @actual_value,
+        updated_at = GETDATE()
+    WHERE kpi = @kpi AND department_id = @department_id AND month = @month
   `);
 
-  return result.recordset[0];
+  if (updateResult.rowsAffected[0] === 0) {
+    // Insert new record
+    await request.query(`
+      INSERT INTO department_monthly_data (kpi, department_id, month, target_value, actual_value)
+      VALUES (@kpi, @department_id, @month, @target_value, @actual_value)
+    `);
+  }
+
+  // Select the updated/inserted record
+  const selectRequest = pool.request();
+  selectRequest.input('kpi', sql.NVarChar, body.kpi);
+  selectRequest.input('department_id', sql.Int, body.department_id);
+  selectRequest.input('month', sql.Date, body.month);
+  const selectResult = await selectRequest.query(`
+    SELECT * FROM department_monthly_data 
+    WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+  `);
+
+  return selectResult.recordset[0];
 }
 
