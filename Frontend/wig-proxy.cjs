@@ -434,13 +434,24 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
     const mainObjectiveId = mainObjective?.id || null;
     const annualTarget = mainObjective?.annual_target || 0;
 
-    // Get department breakdown by matching KPI name exactly
+    // Normalize the KPI name by removing numeric prefix (e.g., "2.1.3 عدد..." -> "عدد...")
+    // This allows matching department objectives that may not have the prefix
+    function normalizeKPI(kpi) {
+      if (!kpi) return '';
+      return kpi.replace(/^\d+(\.\d+)*\s*/, '').trim();
+    }
+    
+    const normalizedKPI = normalizeKPI(kpi);
+
+    // Get department breakdown by matching KPI name with flexible matching
+    // Try exact match first, then normalized match (without numeric prefix)
     // Only match by KPI name, not by main_objective_id, to ensure we only show
-    // department objectives with the exact same KPI as the strategic plan KPI
+    // department objectives with the same KPI as the strategic plan KPI
     const deptRequest = pool.request();
     deptRequest.input('kpi', sql.NVarChar, kpi);
+    deptRequest.input('normalizedKPI', sql.NVarChar, normalizedKPI);
 
-    // Build query that matches by KPI name only
+    // Build query that matches by KPI name (exact or normalized)
     // Only include Direct type objectives
     const deptQuery = `
       SELECT 
@@ -451,7 +462,8 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
         COUNT(do.id) as objective_count
       FROM department_objectives do
       INNER JOIN departments d ON do.department_id = d.id
-      WHERE do.type = 'Direct' AND do.kpi = @kpi
+      WHERE do.type = 'Direct' 
+        AND (do.kpi = @kpi OR do.kpi = @normalizedKPI)
       GROUP BY d.id, d.name, d.code
       ORDER BY d.name
     `;
