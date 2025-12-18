@@ -606,9 +606,17 @@ async function getRASCIByKPI(pool, kpi) {
     request.input('kpi', sql.NVarChar, kpi);
 
     const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
-    return result.recordset;
+    return result.recordset || [];
   } catch (error) {
     console.error('[RASCI] Error in getRASCIByKPI:', error);
+    console.error('[RASCI] Error message:', error.message);
+    
+    // If table doesn't exist, return empty array instead of error
+    if (error.message && error.message.includes('Invalid object name')) {
+      console.warn('[RASCI] Table rasci_metrics does not exist. Returning empty array.');
+      return [];
+    }
+    
     throw error;
   }
 }
@@ -652,7 +660,16 @@ async function createOrUpdateRASCI(pool, body) {
     return result.recordset[0];
   } catch (error) {
     console.error('[RASCI] Error in createOrUpdateRASCI:', error);
+    console.error('[RASCI] Error message:', error.message);
     console.error('[RASCI] Body received:', JSON.stringify(body));
+    
+    // If table doesn't exist, provide helpful error message
+    if (error.message && error.message.includes('Invalid object name')) {
+      const helpfulError = new Error('Table rasci_metrics does not exist. Please run database initialization script.');
+      helpfulError.code = 'TABLE_NOT_FOUND';
+      throw helpfulError;
+    }
+    
     throw error;
   }
 }
@@ -667,13 +684,26 @@ async function deleteRASCI(pool, id) {
 
 // KPI Functions
 async function getKPIsWithRASCI(pool) {
-  const request = pool.request();
-  const result = await request.query(`
-    SELECT DISTINCT kpi 
-    FROM rasci_metrics 
-    ORDER BY kpi
-  `);
-  return result.recordset.map((r) => r.kpi);
+  try {
+    const request = pool.request();
+    const result = await request.query(`
+      SELECT DISTINCT kpi 
+      FROM rasci_metrics 
+      ORDER BY kpi
+    `);
+    return result.recordset ? result.recordset.map((r) => r.kpi) : [];
+  } catch (error) {
+    console.error('[RASCI] Error in getKPIsWithRASCI:', error);
+    console.error('[RASCI] Error message:', error.message);
+    
+    // If table doesn't exist, return empty array instead of error
+    if (error.message && error.message.includes('Invalid object name')) {
+      console.warn('[RASCI] Table rasci_metrics does not exist. Returning empty array.');
+      return [];
+    }
+    
+    throw error;
+  }
 }
 
 async function getKPIBreakdown(pool, kpi) {
