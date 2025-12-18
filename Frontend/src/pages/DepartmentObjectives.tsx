@@ -365,24 +365,24 @@ export default function DepartmentObjectives() {
                           placeholder="MOV"
                         />
                       </TableCell>
-                      <TableCell>
-                        <Select
-                          value={newData.main_objective_id?.toString() || ''}
-                          onValueChange={(value) => setNewData({ ...newData, main_objective_id: value ? parseInt(value) : null })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Link to Main Objective" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="">None</SelectItem>
-                            {mainObjectives.map((obj) => (
-                              <SelectItem key={obj.id} value={obj.id.toString()}>
-                                {obj.objective} - {obj.kpi}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
+                          <TableCell>
+                            <Select
+                              value={newData.main_objective_id?.toString() || 'none'}
+                              onValueChange={(value) => setNewData({ ...newData, main_objective_id: value === 'none' ? null : parseInt(value) })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Link to Main Objective" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {mainObjectives.map((obj) => (
+                                  <SelectItem key={obj.id} value={obj.id.toString()}>
+                                    {obj.objective} - {obj.kpi}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" onClick={(e) => handleAdd(e)}>
@@ -448,14 +448,14 @@ export default function DepartmentObjectives() {
                           </TableCell>
                           <TableCell>
                             <Select
-                              value={editData.main_objective_id?.toString() || obj.main_objective_id?.toString() || ''}
-                              onValueChange={(value) => setEditData({ ...editData, main_objective_id: value ? parseInt(value) : null })}
+                              value={editData.main_objective_id?.toString() || obj.main_objective_id?.toString() || 'none'}
+                              onValueChange={(value) => setEditData({ ...editData, main_objective_id: value === 'none' ? null : parseInt(value) })}
                             >
                               <SelectTrigger>
                                 <SelectValue placeholder="Link to Main Objective" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">None</SelectItem>
+                                <SelectItem value="none">None</SelectItem>
                                 {mainObjectives.map((mainObj) => (
                                   <SelectItem key={mainObj.id} value={mainObj.id.toString()}>
                                     {mainObj.objective} - {mainObj.kpi}
