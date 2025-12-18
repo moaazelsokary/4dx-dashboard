@@ -627,16 +627,9 @@ async function createOrUpdateRASCI(pool, body) {
       throw new Error('KPI and department are required');
     }
     
-    const request = pool.request();
-    request.input('kpi', sql.NVarChar, body.kpi);
-    request.input('department', sql.NVarChar, body.department);
-    request.input('responsible', sql.Bit, body.responsible || false);
-    request.input('accountable', sql.Bit, body.accountable || false);
-    request.input('supportive', sql.Bit, body.supportive || false);
-    request.input('consulted', sql.Bit, body.consulted || false);
-    request.input('informed', sql.Bit, body.informed || false);
-
-    // Use MERGE with OUTPUT INTO temp table (required when table has triggers)
+    // Check if all roles are false - if so, delete the record instead
+    const hasAnyRole = body.responsible || body.accountable || body.supportive || body.consulted || body.informed;
+    
     // First check if record exists
     const checkRequest = pool.request();
     checkRequest.input('kpi', sql.NVarChar, body.kpi);
@@ -646,37 +639,55 @@ async function createOrUpdateRASCI(pool, body) {
     );
 
     if (existing.recordset && existing.recordset.length > 0) {
-      // Update existing record
-      const updateRequest = pool.request();
-      updateRequest.input('kpi', sql.NVarChar, body.kpi);
-      updateRequest.input('department', sql.NVarChar, body.department);
-      updateRequest.input('responsible', sql.Bit, body.responsible || false);
-      updateRequest.input('accountable', sql.Bit, body.accountable || false);
-      updateRequest.input('supportive', sql.Bit, body.supportive || false);
-      updateRequest.input('consulted', sql.Bit, body.consulted || false);
-      updateRequest.input('informed', sql.Bit, body.informed || false);
+      // Record exists
+      if (!hasAnyRole) {
+        // Delete if all roles are false
+        const deleteRequest = pool.request();
+        deleteRequest.input('kpi', sql.NVarChar, body.kpi);
+        deleteRequest.input('department', sql.NVarChar, body.department);
+        await deleteRequest.query(
+          'DELETE FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+        );
+        return { deleted: true, id: existing.recordset[0].id };
+      } else {
+        // Update existing record
+        const updateRequest = pool.request();
+        updateRequest.input('kpi', sql.NVarChar, body.kpi);
+        updateRequest.input('department', sql.NVarChar, body.department);
+        updateRequest.input('responsible', sql.Bit, body.responsible || false);
+        updateRequest.input('accountable', sql.Bit, body.accountable || false);
+        updateRequest.input('supportive', sql.Bit, body.supportive || false);
+        updateRequest.input('consulted', sql.Bit, body.consulted || false);
+        updateRequest.input('informed', sql.Bit, body.informed || false);
 
-      await updateRequest.query(`
-        UPDATE rasci_metrics
-        SET 
-          responsible = @responsible,
-          accountable = @accountable,
-          supportive = @supportive,
-          consulted = @consulted,
-          informed = @informed
-        WHERE kpi = @kpi AND department = @department
-      `);
+        await updateRequest.query(`
+          UPDATE rasci_metrics
+          SET 
+            responsible = @responsible,
+            accountable = @accountable,
+            supportive = @supportive,
+            consulted = @consulted,
+            informed = @informed
+          WHERE kpi = @kpi AND department = @department
+        `);
 
-      // Fetch updated record
-      const fetchRequest = pool.request();
-      fetchRequest.input('kpi', sql.NVarChar, body.kpi);
-      fetchRequest.input('department', sql.NVarChar, body.department);
-      const fetchResult = await fetchRequest.query(
-        'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
-      );
+        // Fetch updated record
+        const fetchRequest = pool.request();
+        fetchRequest.input('kpi', sql.NVarChar, body.kpi);
+        fetchRequest.input('department', sql.NVarChar, body.department);
+        const fetchResult = await fetchRequest.query(
+          'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+        );
 
-      return fetchResult.recordset[0];
+        return fetchResult.recordset[0];
+      }
     } else {
+      // Record doesn't exist
+      if (!hasAnyRole) {
+        // Don't create a record with all false values
+        return { id: 0, kpi: body.kpi, department: body.department, responsible: false, accountable: false, supportive: false, consulted: false, informed: false };
+      }
+      
       // Insert new record
       const insertRequest = pool.request();
       insertRequest.input('kpi', sql.NVarChar, body.kpi);
