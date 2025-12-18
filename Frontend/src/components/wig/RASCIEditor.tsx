@@ -134,9 +134,16 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
       const promises: Promise<any>[] = [];
       
       rasciData.forEach((rasci) => {
-        // Always save - backend will handle deletion if all roles are false
-        // This ensures we can remove assignments by unchecking all roles
-        promises.push(createOrUpdateRASCI(rasci));
+        const hasAnyRole = rasci.responsible || rasci.accountable || rasci.supportive || rasci.consulted || rasci.informed;
+        
+        if (hasAnyRole) {
+          // Save if at least one role is assigned
+          promises.push(createOrUpdateRASCI(rasci));
+        } else if (rasci.id && rasci.id > 0) {
+          // Delete if no roles assigned AND record exists in database (has id > 0)
+          promises.push(deleteRASCI(rasci.id));
+        }
+        // If no roles and no id (id === 0), it was never saved, so do nothing
       });
 
       await Promise.all(promises);
