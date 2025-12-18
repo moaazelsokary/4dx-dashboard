@@ -37,9 +37,11 @@ export default function MainPlanObjectives() {
     loadData();
   }, [navigate]);
 
-  const loadData = async () => {
+  const loadData = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       const [hierarchical, table] = await Promise.all([
         getHierarchicalPlan(),
         getMainObjectives(),
@@ -53,7 +55,9 @@ export default function MainPlanObjectives() {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -140,7 +144,7 @@ export default function MainPlanObjectives() {
                 <CardTitle>Main Plan Objectives</CardTitle>
               </CardHeader>
               <CardContent>
-                <MainPlanTable objectives={tableData} onUpdate={loadData} />
+                <MainPlanTable objectives={tableData} onUpdate={() => loadData(false)} />
               </CardContent>
             </Card>
           </TabsContent>
