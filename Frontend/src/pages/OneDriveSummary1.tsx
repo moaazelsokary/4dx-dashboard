@@ -935,22 +935,22 @@ const Summary: React.FC = () => {
           <div className="flex flex-col gap-2">
             {/* Top Row: Logo, Title, Actions */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                 <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <img 
-                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                    alt="Logo" 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                    Program Operations Sector
-                  </h1>
-                  <p className="text-xs text-muted-foreground">Summary Overview</p>
-                </div>
+                <img 
+                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                />
               </div>
-              
+              <div>
+                  <h1 className="text-sm font-bold text-foreground">
+                  Program Operations Sector
+                </h1>
+                  <p className="text-xs text-muted-foreground">Summary Overview</p>
+              </div>
+            </div>
+            
               <div className="flex items-center gap-2">
                 {loading && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -1135,17 +1135,17 @@ const Summary: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Loading State */}
-        {loading && (
+          {/* Loading State */}
+          {loading && (
           <Card>
             <CardContent className="pt-6">
               <div className="text-center text-muted-foreground py-8">
                 <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
                 Loading data...
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         {/* Error State */}
         {error && (
@@ -1155,7 +1155,7 @@ const Summary: React.FC = () => {
                 <AlertCircle className="h-8 w-8 mx-auto mb-2" />
                 <p className="font-medium">{error}</p>
                 <Button
-                  variant="outline"
+                        variant="outline" 
                   size="sm"
                   onClick={handleRefreshData}
                   className="mt-4"
@@ -1163,9 +1163,9 @@ const Summary: React.FC = () => {
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Try Again
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  </div>
+                </CardContent>
+              </Card>
         )}
 
         {/* Data Display */}
@@ -1181,46 +1181,46 @@ const Summary: React.FC = () => {
                       <span>{key.replace(/([A-Z])/g, ' $1').trim()}</span>
                       <Badge variant={statusInfo.variant} className={statusInfo.className}>
                         {statusInfo.text}
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Actual</span>
                         <span className="text-lg font-semibold">{formatNumber(metric.actual)}</span>
-                      </div>
+                    </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Target</span>
                         <span className="text-lg font-semibold">{formatNumber(metric.target)}</span>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs text-muted-foreground">
+                    </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
                           <span>Quarterly Breakdown</span>
                           <span>{selectedQuarters.includes('all') ? 'All Quarters' : selectedQuarters.join(', ')}</span>
-                        </div>
+                    </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
+                      <div 
                             className={`h-full transition-all ${getProgressColor(metric.variance)}`}
                             style={{ width: `${Math.min(metric.variance, 100)}%` }}
-                          />
-                        </div>
+                      />
+                    </div>
                         <div className="text-xs text-muted-foreground text-right">
                           {metric.variance.toFixed(1)}% of target
-                        </div>
-                      </div>
+                  </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
               );
             })}
-          </div>
+                    </div>
         )}
 
         {/* Chart Section */}
         {!loading && !error && displayMetrics && (
           <Card>
-            <CardHeader>
+                 <CardHeader>
               <CardTitle>Quarterly Trends</CardTitle>
             </CardHeader>
             <CardContent>
@@ -1231,28 +1231,28 @@ const Summary: React.FC = () => {
                 >
                   <SelectTrigger className="w-64">
                     <SelectValue placeholder="Select metric" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Volunteers">Volunteers</SelectItem>
-                    <SelectItem value="Volunteer Opportunities">Volunteer Opportunities</SelectItem>
-                    <SelectItem value="Volunteers Training">Volunteers Training</SelectItem>
-                    <SelectItem value="Expenditures">Expenditures</SelectItem>
-                    <SelectItem value="Beneficiaries">Beneficiaries</SelectItem>
-                    <SelectItem value="Cases Story">Cases Story</SelectItem>
-                  </SelectContent>
-                </Select>
+                       </SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value="Volunteers">Volunteers</SelectItem>
+                         <SelectItem value="Volunteer Opportunities">Volunteer Opportunities</SelectItem>
+                         <SelectItem value="Volunteers Training">Volunteers Training</SelectItem>
+                         <SelectItem value="Expenditures">Expenditures</SelectItem>
+                         <SelectItem value="Beneficiaries">Beneficiaries</SelectItem>
+                         <SelectItem value="Cases Story">Cases Story</SelectItem>
+                       </SelectContent>
+                     </Select>
               </div>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={getQuarterlyData()}>
+                       <LineChart data={getQuarterlyData()}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="quarter" />
+                         <XAxis dataKey="quarter" />
                   <YAxis />
-                  <Tooltip
+                         <Tooltip 
                     formatter={(value: any) => formatNumber(value)}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
+                         />
+                         <Line 
+                           type="monotone" 
+                           dataKey="value" 
                     stroke="#8884d8"
                     strokeWidth={2}
                     name="Actual"
@@ -1261,23 +1261,23 @@ const Summary: React.FC = () => {
                     type="monotone"
                     dataKey="target"
                     stroke="#82ca9d"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
+                           strokeWidth={2}
+                           strokeDasharray="5 5"
                     name="Target"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+                         />
+                       </LineChart>
+                     </ResponsiveContainer>
+                 </CardContent>
+               </Card>
         )}
 
         {/* Health Indicators */}
         {!loading && !error && displayMetrics && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card>
-              <CardHeader>
+                 <CardHeader>
                 <CardTitle className="text-sm">Overall Health</CardTitle>
-              </CardHeader>
+                 </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-center">
                   <div
@@ -1286,18 +1286,18 @@ const Summary: React.FC = () => {
                       background: `conic-gradient(${getBloodColor(calculateOverallHealth())} 0% ${calculateOverallHealth()}%, #e5e7eb ${calculateOverallHealth()}% 100%)`
                     }}
                   >
-                    {calculateOverallHealth().toFixed(0)}%
-                  </div>
-                </div>
+                         {calculateOverallHealth().toFixed(0)}%
+                       </div>
+                       </div>
                 <div className="mt-4 text-center">
                   <p className={`text-lg font-semibold ${getHealthColor(calculateOverallHealth())}`}>
-                    {getHealthStatus(calculateOverallHealth())}
+                         {getHealthStatus(calculateOverallHealth())}
                   </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                   </div>
+                 </CardContent>
+               </Card>
+             </div>
+           )}
       </div>
     </div>
   );

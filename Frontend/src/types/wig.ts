@@ -47,7 +47,9 @@ export interface DepartmentObjective {
 
 export interface MonthlyData {
   id: number;
-  department_objective_id: number;
+  department_objective_id?: number; // Kept for backward compatibility
+  kpi: string;
+  department_id: number;
   month: string; // YYYY-MM format
   target_value: number | null;
   actual_value: number | null;

@@ -10,7 +10,8 @@ import { Calendar, Loader2 } from 'lucide-react';
 import { format, parse, addMonths, startOfMonth } from 'date-fns';
 
 interface MonthlyDataEditorProps {
-  departmentObjectiveId: number;
+  kpi: string;
+  departmentId: number;
   trigger?: React.ReactNode;
 }
 
@@ -20,7 +21,7 @@ const MONTHS = [
   '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06',
 ];
 
-export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: MonthlyDataEditorProps) {
+export default function MonthlyDataEditor({ kpi, departmentId, trigger }: MonthlyDataEditorProps) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Map<string, MonthlyData>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -30,12 +31,12 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     if (open) {
       loadData();
     }
-  }, [open, departmentObjectiveId]);
+  }, [open, kpi, departmentId]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const monthlyData = await getMonthlyData(departmentObjectiveId);
+      const monthlyData = await getMonthlyData(kpi, departmentId);
       const dataMap = new Map<string, MonthlyData>();
       
       monthlyData.forEach((item) => {
@@ -59,7 +60,8 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     const updated = new Map(data);
     const existing = updated.get(month) || {
       id: 0,
-      department_objective_id: departmentObjectiveId,
+      kpi: kpi,
+      department_id: departmentId,
       month: `${month}-01`,
       target_value: null,
       actual_value: null,
@@ -81,7 +83,8 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       data.forEach((item, month) => {
         promises.push(
           createOrUpdateMonthlyData({
-            department_objective_id: departmentObjectiveId,
+            kpi: kpi,
+            department_id: departmentId,
             month: `${month}-01`,
             target_value: item.target_value,
             actual_value: item.actual_value,
@@ -139,7 +142,8 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
             {MONTHS.map((month) => {
               const monthData = data.get(month) || {
                 id: 0,
-                department_objective_id: departmentObjectiveId,
+                kpi: kpi,
+                department_id: departmentId,
                 month: `${month}-01`,
                 target_value: null,
                 actual_value: null,

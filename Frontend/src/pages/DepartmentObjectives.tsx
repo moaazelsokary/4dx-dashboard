@@ -69,9 +69,11 @@ export default function DepartmentObjectives() {
     loadData();
   }, [navigate]);
 
-  const loadData = async () => {
+  const loadData = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       const userData = localStorage.getItem('user');
       if (!userData) return;
       
@@ -94,7 +96,9 @@ export default function DepartmentObjectives() {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -108,7 +112,11 @@ export default function DepartmentObjectives() {
     setEditData({});
   };
 
-  const saveEdit = async () => {
+  const saveEdit = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!editingId) return;
 
     try {
@@ -119,7 +127,8 @@ export default function DepartmentObjectives() {
       });
       setEditingId(null);
       setEditData({});
-      loadData();
+      // Refresh data without showing loading spinner
+      loadData(false);
     } catch (err) {
       toast({
         title: 'Error',
@@ -139,7 +148,8 @@ export default function DepartmentObjectives() {
         description: 'Objective deleted successfully',
       });
       setDeletingId(null);
-      loadData();
+      // Refresh data without showing loading spinner
+      loadData(false);
     } catch (err) {
       toast({
         title: 'Error',
@@ -149,7 +159,11 @@ export default function DepartmentObjectives() {
     }
   };
 
-  const handleAdd = async () => {
+  const handleAdd = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!newData.kpi || !newData.activity || !newData.activity_target || !newData.responsible_person || !newData.mov) {
       toast({
         title: 'Error',
@@ -201,7 +215,8 @@ export default function DepartmentObjectives() {
         mov: '',
         main_objective_id: null,
       });
-      loadData();
+      // Refresh data without showing loading spinner
+      loadData(false);
     } catch (err) {
       toast({
         title: 'Error',
@@ -253,7 +268,7 @@ export default function DepartmentObjectives() {
               </div>
               
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={loadData} className="h-7 px-2 text-xs">
+                <Button type="button" variant="outline" size="sm" onClick={() => loadData()} className="h-7 px-2 text-xs">
                   <RefreshCw className="w-3 h-3 mr-1" />
                   Refresh
                 </Button>
@@ -370,10 +385,10 @@ export default function DepartmentObjectives() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" onClick={handleAdd}>
+                          <Button type="button" size="sm" onClick={(e) => handleAdd(e)}>
                             Save
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => setIsAdding(false)}>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setIsAdding(false)}>
                             Cancel
                           </Button>
                         </div>
@@ -451,10 +466,10 @@ export default function DepartmentObjectives() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <Button size="sm" onClick={saveEdit}>
+                              <Button type="button" size="sm" onClick={saveEdit}>
                                 Save
                               </Button>
-                              <Button size="sm" variant="outline" onClick={cancelEdit}>
+                              <Button type="button" size="sm" variant="outline" onClick={cancelEdit}>
                                 Cancel
                               </Button>
                             </div>
@@ -479,15 +494,19 @@ export default function DepartmentObjectives() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <MonthlyDataEditor departmentObjectiveId={obj.id}>
-                                <Button size="sm" variant="outline">
-                                  <Calendar className="h-4 w-4" />
-                                </Button>
-                              </MonthlyDataEditor>
-                              <Button size="sm" variant="outline" onClick={() => startEdit(obj)}>
+                              <MonthlyDataEditor 
+                                kpi={obj.kpi} 
+                                departmentId={obj.department_id}
+                                trigger={
+                                  <Button type="button" size="sm" variant="outline" aria-label="Edit monthly data" title="Edit monthly data">
+                                    <Calendar className="h-4 w-4" />
+                                  </Button>
+                                }
+                              />
+                              <Button type="button" size="sm" variant="outline" onClick={() => startEdit(obj)} aria-label={`Edit objective ${obj.id}`} title="Edit objective">
                                 <Edit2 className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => setDeletingId(obj.id)}>
+                              <Button type="button" size="sm" variant="outline" onClick={() => setDeletingId(obj.id)} aria-label={`Delete objective ${obj.id}`} title="Delete objective">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>

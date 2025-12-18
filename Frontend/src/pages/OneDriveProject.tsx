@@ -951,22 +951,22 @@ const ProjectDetails: React.FC = () => {
           <div className="flex flex-col gap-2">
             {/* Top Row: Logo, Title, Actions */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                 <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <img 
-                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                    alt="Logo" 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                    Project Details
-                  </h1>
-                  <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-                </div>
+                <img 
+                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                />
               </div>
-              
+              <div>
+                  <h1 className="text-sm font-bold text-foreground">
+                  Project Details
+                </h1>
+                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
+              </div>
+            </div>
+            
               <div className="flex items-center gap-2">
                 {loading && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
