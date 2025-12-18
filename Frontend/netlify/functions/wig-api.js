@@ -1011,12 +1011,27 @@ async function createOrUpdateMonthlyData(pool, body) {
       throw new Error('Missing required fields: kpi, department_id, or month');
     }
 
+    // Get department_objective_id if it exists (for backward compatibility)
+    // We'll use the first matching department objective for this KPI and department
+    const deptObjRequest = pool.request();
+    deptObjRequest.input('kpi', sql.NVarChar, body.kpi);
+    deptObjRequest.input('department_id', sql.Int, body.department_id);
+    const deptObjResult = await deptObjRequest.query(`
+      SELECT TOP 1 id FROM department_objectives 
+      WHERE kpi = @kpi AND department_id = @department_id
+    `);
+    
+    const department_objective_id = deptObjResult.recordset.length > 0 
+      ? deptObjResult.recordset[0].id 
+      : null;
+
     const request = pool.request();
     request.input('kpi', sql.NVarChar, body.kpi);
     request.input('department_id', sql.Int, body.department_id);
     request.input('month', sql.Date, body.month);
     request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+    request.input('department_objective_id', sql.Int, department_objective_id);
 
     // Update without OUTPUT clause due to triggers
     const updateResult = await request.query(`
@@ -1035,11 +1050,29 @@ async function createOrUpdateMonthlyData(pool, body) {
       insertRequest.input('month', sql.Date, body.month);
       insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
       insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+      insertRequest.input('department_objective_id', sql.Int, department_objective_id);
       
-      await insertRequest.query(`
-        INSERT INTO department_monthly_data (kpi, department_id, month, target_value, actual_value)
-        VALUES (@kpi, @department_id, @month, @target_value, @actual_value)
-      `);
+      // Insert with department_objective_id if available, otherwise try without it
+      if (department_objective_id !== null) {
+        await insertRequest.query(`
+          INSERT INTO department_monthly_data (kpi, department_id, month, target_value, actual_value, department_objective_id)
+          VALUES (@kpi, @department_id, @month, @target_value, @actual_value, @department_objective_id)
+        `);
+      } else {
+        // Try without department_objective_id - this will fail if column is NOT NULL
+        // In that case, we need to make the column nullable
+        try {
+          await insertRequest.query(`
+            INSERT INTO department_monthly_data (kpi, department_id, month, target_value, actual_value)
+            VALUES (@kpi, @department_id, @month, @target_value, @actual_value)
+          `);
+        } catch (insertError) {
+          if (insertError.message.includes('department_objective_id') && insertError.message.includes('nulls')) {
+            throw new Error('department_objective_id column is required. Please run migration to make it nullable or ensure department objectives exist for this KPI.');
+          }
+          throw insertError;
+        }
+      }
     }
 
     // Select the updated/inserted record
