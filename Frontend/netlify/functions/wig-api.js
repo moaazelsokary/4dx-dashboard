@@ -27,8 +27,10 @@ function getDbConfig() {
   
   // Log password info for debugging (without exposing the actual password)
   if (password) {
+    const passwordSource = process.env.DB_PASSWORD ? 'DB_PASSWORD' : 
+                          (process.env.VITE_PWD ? 'VITE_PWD' : 'PWD');
     console.log('[DB] Raw password from env:', {
-      source: process.env.PWD ? 'PWD' : 'VITE_PWD',
+      source: passwordSource,
       length: password.length,
       firstChar: password[0],
       lastChar: password[password.length - 1],
