@@ -61,6 +61,48 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
     }
   }, [selectedKPI]);
 
+  // Helper function to normalize department names for matching
+  // Handles cases like "DFR" = "Direct Fundraising / Resource Mobilization"
+  const normalizeDepartmentName = (name: string, code: string): string => {
+    // If code is "dfr", check if name contains "Direct Fundraising" or "Resource Mobilization"
+    if (code.toLowerCase() === 'dfr') {
+      if (name.toLowerCase().includes('direct fundraising') || 
+          name.toLowerCase().includes('resource mobilization') ||
+          name.toLowerCase() === 'dfr') {
+        return 'DFR'; // Use the database name
+      }
+    }
+    return name;
+  };
+
+  // Helper function to match department from database with frontend department
+  const matchDepartment = (dbDepartment: string, deptName: string, deptCode: string): boolean => {
+    // Exact match
+    if (dbDepartment === deptName || dbDepartment === deptCode) {
+      return true;
+    }
+    
+    // Handle DFR special case
+    if (deptCode.toLowerCase() === 'dfr') {
+      const normalizedName = normalizeDepartmentName(deptName, deptCode);
+      if (dbDepartment === normalizedName || 
+          dbDepartment === 'DFR' || 
+          dbDepartment.toLowerCase() === 'dfr' ||
+          (dbDepartment.toLowerCase().includes('direct fundraising') && deptName.toLowerCase().includes('direct fundraising')) ||
+          (dbDepartment.toLowerCase().includes('resource mobilization') && deptName.toLowerCase().includes('resource mobilization'))) {
+        return true;
+      }
+    }
+    
+    // Case-insensitive match
+    if (dbDepartment.toLowerCase() === deptName.toLowerCase() || 
+        dbDepartment.toLowerCase() === deptCode.toLowerCase()) {
+      return true;
+    }
+    
+    return false;
+  };
+
   const loadRASCIForKPI = async (kpi: string) => {
     try {
       setLoading(true);
@@ -70,11 +112,23 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
       // Initialize with all departments
       // Use department name as key since database stores department names
       departments.forEach((dept) => {
-        // API returns department as name, match by name
-        const existing = data.find((r) => r.department === dept.name || r.department === dept.code);
+        // Match by name or code, with special handling for DFR
+        const existing = data.find((r) => matchDepartment(r.department, dept.name, dept.code));
         if (existing) {
-          // Use department name as key (what database expects)
-          rasciMap.set(dept.name, existing);
+          // Normalize the department name to what the database expects
+          // If it's DFR-related, use the database name
+          const normalizedDeptName = normalizeDepartmentName(dept.name, dept.code);
+          const finalDepartmentName = (dept.code.toLowerCase() === 'dfr' && existing.department === 'DFR') 
+            ? 'DFR' 
+            : normalizedDeptName;
+          
+          // Update the existing record to use the correct department name
+          const updatedExisting = {
+            ...existing,
+            department: finalDepartmentName
+          };
+          
+          rasciMap.set(dept.name, updatedExisting);
         } else {
           // Create new entry with department name (not code)
           rasciMap.set(dept.name, {
@@ -136,10 +190,28 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
       rasciData.forEach((rasci) => {
         const hasAnyRole = rasci.responsible || rasci.accountable || rasci.supportive || rasci.consulted || rasci.informed;
         
+        // Find the department to get the correct name/code
+        const dept = departments.find(d => d.name === rasci.department || d.code === rasci.department);
+        
+        // Normalize department name - if it's DFR-related, use "DFR" for database
+        let dbDepartmentName = rasci.department;
+        if (dept && dept.code.toLowerCase() === 'dfr') {
+          // Check if the department name contains DFR-related terms
+          if (rasci.department.toLowerCase().includes('direct fundraising') || 
+              rasci.department.toLowerCase().includes('resource mobilization') ||
+              rasci.department === 'DFR') {
+            dbDepartmentName = 'DFR'; // Use database name
+          }
+        }
+        
         if (hasAnyRole) {
           // Save if at least one role is assigned
-          promises.push(createOrUpdateRASCI(rasci).catch(err => {
-            console.error(`Error saving RASCI for ${rasci.department}:`, err);
+          const rasciToSave = {
+            ...rasci,
+            department: dbDepartmentName // Use normalized name
+          };
+          promises.push(createOrUpdateRASCI(rasciToSave).catch(err => {
+            console.error(`Error saving RASCI for ${rasciToSave.department}:`, err);
             throw err;
           }));
         } else if (rasci.id && rasci.id > 0) {
@@ -153,14 +225,15 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
         // If no roles and no id (id === 0), it was never saved, so do nothing
       });
 
-      await Promise.all(promises);
+      const results = await Promise.all(promises);
+      console.log('RASCI save results:', results);
       
       toast({
         title: 'Success',
         description: 'RASCI assignments saved successfully',
       });
       
-      // Reload data
+      // Reload data to reflect deletions and updates
       await loadRASCIForKPI(selectedKPI);
     } catch (err) {
       console.error('Error saving RASCI:', err);
