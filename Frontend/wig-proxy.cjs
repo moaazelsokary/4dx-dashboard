@@ -457,6 +457,22 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
       ORDER BY d.name, do.kpi
     `);
 
+    // Helper function to extract meaningful words from KPI (removes common words)
+    function extractKeywords(kpiText) {
+      if (!kpiText) return [];
+      // Remove common Arabic words and keep meaningful terms
+      const commonWords = ['عدد', 'نسبة', 'معدل', 'مستوى', 'حجم', 'من', 'مع', 'في', 'على', 'إلى', 'و', 'أو', 'ال', 'هذا', 'تلك', 'التي', 'الذي'];
+      const words = kpiText.toLowerCase()
+        .replace(/[^\u0600-\u06FF\s]/g, ' ') // Keep only Arabic and spaces
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !commonWords.includes(w));
+      return words;
+    }
+
+    // Extract keywords from main KPI
+    const mainKeywords = extractKeywords(normalizedMainKPI);
+    const mainKeywordsSet = new Set(mainKeywords);
+    
     // Group matching objectives by department
     const departmentMap = new Map();
     
@@ -464,12 +480,52 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
       const deptKPI = row.kpi;
       const normalizedDeptKPI = normalizeKPI(deptKPI).trim().toLowerCase();
       
-      // Match if normalized KPIs are equal (handles prefix differences)
-      // Also try exact match as fallback
-      const isMatch = normalizedDeptKPI === normalizedMainKPI || 
-                      deptKPI.trim().toLowerCase() === kpi.trim().toLowerCase() ||
-                      normalizedDeptKPI === kpi.trim().toLowerCase() ||
-                      deptKPI.trim().toLowerCase() === normalizedMainKPI;
+      // Try multiple matching strategies
+      let isMatch = false;
+      
+      // Strategy 1: Exact normalized match (handles prefix differences)
+      if (normalizedDeptKPI === normalizedMainKPI) {
+        isMatch = true;
+      }
+      // Strategy 2: Exact match (original vs original)
+      else if (deptKPI.trim().toLowerCase() === kpi.trim().toLowerCase()) {
+        isMatch = true;
+      }
+      // Strategy 3: Cross-match (normalized vs original)
+      else if (normalizedDeptKPI === kpi.trim().toLowerCase() || 
+               deptKPI.trim().toLowerCase() === normalizedMainKPI) {
+        isMatch = true;
+      }
+      // Strategy 4: Keyword-based matching (if significant overlap)
+      else if (mainKeywords.length > 0) {
+        const deptKeywords = extractKeywords(normalizedDeptKPI);
+        const deptKeywordsSet = new Set(deptKeywords);
+        
+        // Count matching keywords
+        const matchingKeywords = mainKeywords.filter(kw => deptKeywordsSet.has(kw));
+        const matchRatio = matchingKeywords.length / Math.max(mainKeywords.length, deptKeywords.length);
+        
+        // Match if at least 60% of keywords match and at least 3 keywords match
+        if (matchRatio >= 0.6 && matchingKeywords.length >= 3) {
+          isMatch = true;
+        }
+        // Also match if all main keywords are found in department KPI (even if department has more)
+        else if (matchingKeywords.length === mainKeywords.length && mainKeywords.length >= 2) {
+          isMatch = true;
+        }
+      }
+      // Strategy 5: Substring match for longer KPIs (if normalized main KPI is contained in dept KPI or vice versa)
+      else if (normalizedMainKPI.length > 20 && normalizedDeptKPI.length > 20) {
+        if (normalizedDeptKPI.includes(normalizedMainKPI) || 
+            normalizedMainKPI.includes(normalizedDeptKPI)) {
+          // Ensure significant overlap (at least 70% of shorter string)
+          const shorter = Math.min(normalizedMainKPI.length, normalizedDeptKPI.length);
+          const longer = Math.max(normalizedMainKPI.length, normalizedDeptKPI.length);
+          if (shorter / longer >= 0.7) {
+            isMatch = true;
+          }
+        }
+      }
       
       if (isMatch) {
         const deptKey = row.department_id;
