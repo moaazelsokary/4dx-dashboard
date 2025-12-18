@@ -1059,19 +1059,15 @@ async function getKPIBreakdown(pool, kpi) {
   const mainObjectiveId = mainObjective?.id || null;
   const annualTarget = mainObjective?.annual_target || 0;
 
-  // Get department breakdown by linking through:
-  // 1. KPI name match (do.kpi = @kpi)
-  // 2. main_objective_id link (do.main_objective_id = main objective ID)
-  // This ensures we capture all department objectives linked to this strategic plan KPI
+  // Get department breakdown by matching KPI name exactly
+  // Only match by KPI name, not by main_objective_id, to ensure we only show
+  // department objectives with the exact same KPI as the strategic plan KPI
   const deptRequest = pool.request();
   deptRequest.input('kpi', sql.NVarChar, kpi);
-  if (mainObjectiveId) {
-    deptRequest.input('main_objective_id', sql.Int, mainObjectiveId);
-  }
 
-  // Build query that links by both KPI name and main_objective_id
+  // Build query that matches by KPI name only
   // Only include Direct type objectives
-  let deptQuery = `
+  const deptQuery = `
     SELECT 
       d.id as department_id,
       d.name as department,
@@ -1080,13 +1076,7 @@ async function getKPIBreakdown(pool, kpi) {
       COUNT(do.id) as objective_count
     FROM department_objectives do
     INNER JOIN departments d ON do.department_id = d.id
-    WHERE do.type = 'Direct' AND (do.kpi = @kpi`;
-  
-  if (mainObjectiveId) {
-    deptQuery += ` OR do.main_objective_id = @main_objective_id`;
-  }
-  
-  deptQuery += `)
+    WHERE do.type = 'Direct' AND do.kpi = @kpi
     GROUP BY d.id, d.name, d.code
     ORDER BY d.name
   `;
