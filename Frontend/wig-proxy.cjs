@@ -444,70 +444,42 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
     }
 
     // Build query that links by both KPI name and main_objective_id
+    // Only include Direct type objectives
     let deptQuery = `
       SELECT 
         d.id as department_id,
         d.name as department,
         d.code as department_code,
-        do.type,
         SUM(do.activity_target) as sum,
         COUNT(do.id) as objective_count
       FROM department_objectives do
       INNER JOIN departments d ON do.department_id = d.id
-      WHERE (do.kpi = @kpi`;
+      WHERE do.type = 'Direct' AND (do.kpi = @kpi`;
     
     if (mainObjectiveId) {
       deptQuery += ` OR do.main_objective_id = @main_objective_id`;
     }
     
     deptQuery += `)
-      GROUP BY d.id, d.name, d.code, do.type
-      ORDER BY d.name, do.type
+      GROUP BY d.id, d.name, d.code
+      ORDER BY d.name
     `;
 
     const deptResult = await deptRequest.query(deptQuery);
 
-    // Group by department and type
-    const departmentMap = new Map();
-    
-    deptResult.recordset.forEach((row) => {
-      const key = `${row.department_id}_${row.type}`;
-      if (!departmentMap.has(key)) {
-        departmentMap.set(key, {
-          department: row.department,
-          departmentId: row.department_id,
-          departmentCode: row.department_code,
-          type: row.type,
-          directSum: 0,
-          indirectSum: 0,
-          directCount: 0,
-          indirectCount: 0,
-        });
-      }
-      
-      const dept = departmentMap.get(key);
-      if (row.type === 'Direct') {
-        dept.directSum = parseFloat(row.sum) || 0;
-        dept.directCount = parseInt(row.objective_count) || 0;
-      } else {
-        dept.indirectSum = parseFloat(row.sum) || 0;
-        dept.indirectCount = parseInt(row.objective_count) || 0;
-      }
-    });
-
-    // Convert to array format, combining Direct and In direct for each department
-    const breakdown = Array.from(departmentMap.values()).map((dept) => {
-      const totalSum = dept.directSum + dept.indirectSum;
+    // Convert to array format - only Direct type
+    const breakdown = deptResult.recordset.map((row) => {
+      const sum = parseFloat(row.sum) || 0;
       return {
-        department: dept.department,
-        departmentId: dept.departmentId,
-        departmentCode: dept.departmentCode,
-        sum: totalSum,
-        directSum: dept.directSum,
-        indirectSum: dept.indirectSum,
-        directCount: dept.directCount,
-        indirectCount: dept.indirectCount,
-        percentage: annualTarget > 0 ? (totalSum / annualTarget) * 100 : 0,
+        department: row.department,
+        departmentId: row.department_id,
+        departmentCode: row.department_code,
+        sum: sum,
+        directSum: sum,
+        indirectSum: 0,
+        directCount: parseInt(row.objective_count) || 0,
+        indirectCount: 0,
+        percentage: annualTarget > 0 ? (sum / annualTarget) * 100 : 0,
       };
     });
 
