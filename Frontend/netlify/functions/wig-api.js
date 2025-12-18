@@ -566,47 +566,71 @@ async function deleteDepartmentObjective(pool, id) {
 
 // RASCI Functions
 async function getRASCI(pool, queryParams) {
-  const request = pool.request();
-  const result = await request.query('SELECT * FROM rasci_metrics ORDER BY kpi, department');
-  return result.recordset;
+  try {
+    const request = pool.request();
+    const result = await request.query('SELECT * FROM rasci_metrics ORDER BY kpi, department');
+    return result.recordset;
+  } catch (error) {
+    console.error('[RASCI] Error in getRASCI:', error);
+    throw error;
+  }
 }
 
 async function getRASCIByKPI(pool, kpi) {
-  const request = pool.request();
-  request.input('kpi', sql.NVarChar, kpi);
+  try {
+    const request = pool.request();
+    request.input('kpi', sql.NVarChar, kpi);
 
-  const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
-  return result.recordset;
+    const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
+    return result.recordset;
+  } catch (error) {
+    console.error('[RASCI] Error in getRASCIByKPI:', error);
+    throw error;
+  }
 }
 
 async function createOrUpdateRASCI(pool, body) {
-  const request = pool.request();
-  request.input('kpi', sql.NVarChar, body.kpi);
-  request.input('department', sql.NVarChar, body.department);
-  request.input('responsible', sql.Bit, body.responsible || false);
-  request.input('accountable', sql.Bit, body.accountable || false);
-  request.input('supportive', sql.Bit, body.supportive || false);
-  request.input('consulted', sql.Bit, body.consulted || false);
-  request.input('informed', sql.Bit, body.informed || false);
+  try {
+    if (!body.kpi || !body.department) {
+      throw new Error('KPI and department are required');
+    }
+    
+    const request = pool.request();
+    request.input('kpi', sql.NVarChar, body.kpi);
+    request.input('department', sql.NVarChar, body.department);
+    request.input('responsible', sql.Bit, body.responsible || false);
+    request.input('accountable', sql.Bit, body.accountable || false);
+    request.input('supportive', sql.Bit, body.supportive || false);
+    request.input('consulted', sql.Bit, body.consulted || false);
+    request.input('informed', sql.Bit, body.informed || false);
 
-  const result = await request.query(`
-    MERGE rasci_metrics AS target
-    USING (SELECT @kpi AS kpi, @department AS department) AS source
-    ON target.kpi = source.kpi AND target.department = source.department
-    WHEN MATCHED THEN
-      UPDATE SET 
-        responsible = @responsible,
-        accountable = @accountable,
-        supportive = @supportive,
-        consulted = @consulted,
-        informed = @informed
-    WHEN NOT MATCHED THEN
-      INSERT (kpi, department, responsible, accountable, supportive, consulted, informed)
-      VALUES (@kpi, @department, @responsible, @accountable, @supportive, @consulted, @informed)
-    OUTPUT INSERTED.*;
-  `);
+    const result = await request.query(`
+      MERGE rasci_metrics AS target
+      USING (SELECT @kpi AS kpi, @department AS department) AS source
+      ON target.kpi = source.kpi AND target.department = source.department
+      WHEN MATCHED THEN
+        UPDATE SET 
+          responsible = @responsible,
+          accountable = @accountable,
+          supportive = @supportive,
+          consulted = @consulted,
+          informed = @informed
+      WHEN NOT MATCHED THEN
+        INSERT (kpi, department, responsible, accountable, supportive, consulted, informed)
+        VALUES (@kpi, @department, @responsible, @accountable, @supportive, @consulted, @informed)
+      OUTPUT INSERTED.*;
+    `);
 
-  return result.recordset[0];
+    if (!result.recordset || result.recordset.length === 0) {
+      throw new Error('Failed to create or update RASCI metric');
+    }
+
+    return result.recordset[0];
+  } catch (error) {
+    console.error('[RASCI] Error in createOrUpdateRASCI:', error);
+    console.error('[RASCI] Body received:', JSON.stringify(body));
+    throw error;
+  }
 }
 
 async function deleteRASCI(pool, id) {
