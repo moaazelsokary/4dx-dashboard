@@ -300,18 +300,30 @@ exports.handler = async function (event, context) {
       body: JSON.stringify(result),
     };
   } catch (error) {
+    const path = event.path.replace('/.netlify/functions/wig-api', '');
     console.error('[WIG API] Error:', error);
+    console.error('[WIG API] Path:', path);
+    console.error('[WIG API] Method:', event.httpMethod);
     console.error('[WIG API] Error stack:', error.stack);
+    console.error('[WIG API] Error code:', error.code);
+    console.error('[WIG API] Error message:', error.message);
     console.error('[WIG API] Environment check:', {
       SERVER: process.env.SERVER ? 'set' : 'missing',
-      VITE_SERVER: process.env.VITE_SERVER ? 'set' : 'missing',
       DATABASE: process.env.DATABASE ? 'set' : 'missing',
-      VITE_DATABASE: process.env.VITE_DATABASE ? 'set' : 'missing',
+      DB_USER: process.env.DB_USER ? 'set' : 'missing',
       UID: process.env.UID ? 'set' : 'missing',
-      VITE_UID: process.env.VITE_UID ? 'set' : 'missing',
-      PWD: process.env.PWD ? 'set' : 'missing',
+      DB_PASSWORD: process.env.DB_PASSWORD ? 'set' : 'missing',
       VITE_PWD: process.env.VITE_PWD ? 'set' : 'missing',
     });
+    
+    // Check if it's a SQL error (table doesn't exist, etc.)
+    let sqlError = null;
+    if (error.message && error.message.includes('Invalid object name')) {
+      sqlError = 'Table does not exist. Please run database initialization script.';
+    } else if (error.message && error.message.includes('Cannot find')) {
+      sqlError = 'Database object not found.';
+    }
+    
     return {
       statusCode: 500,
       headers: {
@@ -322,6 +334,9 @@ exports.handler = async function (event, context) {
         error: error.message || 'Internal server error',
         message: error.message,
         code: error.code,
+        sqlError: sqlError,
+        path: path,
+        method: event.httpMethod,
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       }),
     };
