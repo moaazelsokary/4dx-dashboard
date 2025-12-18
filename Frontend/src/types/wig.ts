@@ -37,7 +37,7 @@ export interface DepartmentObjective {
   department_code?: string;
   kpi: string;
   activity: string;
-  type: 'Direct' | 'In direct';
+  type: 'Direct' | 'In direct' | 'M&E' | '';
   activity_target: number;
   responsible_person: string;
   mov: string;
