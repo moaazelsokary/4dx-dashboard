@@ -627,15 +627,26 @@ async function createOrUpdateRASCI(pool, body) {
       throw new Error('KPI and department are required');
     }
     
+    // Normalize department name - always use "Direct Fundraising / Resource Mobilization" for DFR
+    let departmentName = body.department;
+    if (departmentName === 'DFR' || departmentName.toLowerCase() === 'dfr' ||
+        departmentName.toLowerCase().includes('direct fundraising') ||
+        departmentName.toLowerCase().includes('resource mobilization')) {
+      departmentName = 'Direct Fundraising / Resource Mobilization';
+    }
+    
     // Check if all roles are false - if so, delete the record instead
     const hasAnyRole = body.responsible || body.accountable || body.supportive || body.consulted || body.informed;
     
-    // First check if record exists
+    // First check if record exists - check both old "DFR" and new "Direct Fundraising / Resource Mobilization"
     const checkRequest = pool.request();
     checkRequest.input('kpi', sql.NVarChar, body.kpi);
-    checkRequest.input('department', sql.NVarChar, body.department);
+    checkRequest.input('department', sql.NVarChar, departmentName);
+    checkRequest.input('oldDepartment', sql.NVarChar, 'DFR');
     const existing = await checkRequest.query(
-      'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+      `SELECT * FROM rasci_metrics 
+       WHERE kpi = @kpi 
+       AND (department = @department OR (department = @oldDepartment AND @department = 'Direct Fundraising / Resource Mobilization'))`
     );
 
     if (existing.recordset && existing.recordset.length > 0) {
@@ -645,37 +656,43 @@ async function createOrUpdateRASCI(pool, body) {
         const deleteRequest = pool.request();
         deleteRequest.input('kpi', sql.NVarChar, body.kpi);
         deleteRequest.input('department', sql.NVarChar, body.department);
-        const deleteResult = await deleteRequest.query(
-          'DELETE FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+        const deleteResult =         // Delete both old "DFR" and new "Direct Fundraising / Resource Mobilization" if they exist
+        await deleteRequest.query(
+          `DELETE FROM rasci_metrics 
+           WHERE kpi = @kpi 
+           AND (department = @department OR (department = @oldDepartment AND @department = 'Direct Fundraising / Resource Mobilization'))`
         );
-        console.log(`[RASCI] Deleted record via createOrUpdateRASCI: kpi=${body.kpi}, department=${body.department}, rows affected: ${deleteResult.rowsAffected[0]}`);
+        console.log(`[RASCI] Deleted record via createOrUpdateRASCI: kpi=${body.kpi}, department=${departmentName}, rows affected: ${deleteResult.rowsAffected[0]}`);
         return { deleted: true, id: existing.recordset[0].id };
       } else {
-        // Update existing record
+        // Update existing record - also handle migration from "DFR" to "Direct Fundraising / Resource Mobilization"
         const updateRequest = pool.request();
         updateRequest.input('kpi', sql.NVarChar, body.kpi);
-        updateRequest.input('department', sql.NVarChar, body.department);
+        updateRequest.input('department', sql.NVarChar, departmentName);
+        updateRequest.input('oldDepartment', sql.NVarChar, existing.recordset[0].department);
         updateRequest.input('responsible', sql.Bit, body.responsible || false);
         updateRequest.input('accountable', sql.Bit, body.accountable || false);
         updateRequest.input('supportive', sql.Bit, body.supportive || false);
         updateRequest.input('consulted', sql.Bit, body.consulted || false);
         updateRequest.input('informed', sql.Bit, body.informed || false);
 
+        // Update the record, and migrate department name if it's "DFR"
         await updateRequest.query(`
           UPDATE rasci_metrics
           SET 
+            department = @department,
             responsible = @responsible,
             accountable = @accountable,
             supportive = @supportive,
             consulted = @consulted,
             informed = @informed
-          WHERE kpi = @kpi AND department = @department
+          WHERE kpi = @kpi AND (department = @department OR department = @oldDepartment)
         `);
 
         // Fetch updated record
         const fetchRequest = pool.request();
         fetchRequest.input('kpi', sql.NVarChar, body.kpi);
-        fetchRequest.input('department', sql.NVarChar, body.department);
+        fetchRequest.input('department', sql.NVarChar, departmentName);
         const fetchResult = await fetchRequest.query(
           'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
         );
@@ -692,7 +709,7 @@ async function createOrUpdateRASCI(pool, body) {
       // Insert new record
       const insertRequest = pool.request();
       insertRequest.input('kpi', sql.NVarChar, body.kpi);
-      insertRequest.input('department', sql.NVarChar, body.department);
+      insertRequest.input('department', sql.NVarChar, departmentName);
       insertRequest.input('responsible', sql.Bit, body.responsible || false);
       insertRequest.input('accountable', sql.Bit, body.accountable || false);
       insertRequest.input('supportive', sql.Bit, body.supportive || false);
@@ -707,7 +724,7 @@ async function createOrUpdateRASCI(pool, body) {
       // Fetch inserted record
       const fetchRequest = pool.request();
       fetchRequest.input('kpi', sql.NVarChar, body.kpi);
-      fetchRequest.input('department', sql.NVarChar, body.department);
+      fetchRequest.input('department', sql.NVarChar, departmentName);
       const fetchResult = await fetchRequest.query(
         'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
       );
