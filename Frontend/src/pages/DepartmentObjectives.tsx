@@ -28,8 +28,14 @@ import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import type { DepartmentObjective, MainPlanObjective, Department } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
+
+interface MEEKPI {
+  id?: number;
+  me_kpi: string;
+  mov: string;
+}
 
 export default function DepartmentObjectives() {
   const [user, setUser] = useState<any>(null);
@@ -40,6 +46,9 @@ export default function DepartmentObjectives() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [isAddingME, setIsAddingME] = useState(false);
+  const [meKPIs, setMeKPIs] = useState<MEEKPI[]>([]);
+  const [newMEKPI, setNewMEKPI] = useState<MEEKPI>({ me_kpi: '', mov: '' });
   const [editData, setEditData] = useState<Partial<DepartmentObjective>>({});
   const [newData, setNewData] = useState<Partial<DepartmentObjective>>({
     kpi: '',
@@ -50,6 +59,18 @@ export default function DepartmentObjectives() {
     mov: '',
     main_objective_id: null,
   });
+  
+  // Filter states for Excel-like filtering
+  const [filters, setFilters] = useState({
+    kpi: '',
+    activity: '',
+    type: '',
+    target: '',
+    responsible: '',
+    mov: '',
+    mainObjective: '',
+  });
+  
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -241,6 +262,87 @@ export default function DepartmentObjectives() {
 
   const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
 
+  // Filter objectives based on filter values
+  const filteredObjectives = objectives.filter((obj) => {
+    const matchesKPI = !filters.kpi || obj.kpi.toLowerCase().includes(filters.kpi.toLowerCase());
+    const matchesActivity = !filters.activity || obj.activity.toLowerCase().includes(filters.activity.toLowerCase());
+    const matchesType = !filters.type || obj.type === filters.type || (filters.type === '' && !obj.type);
+    const matchesTarget = !filters.target || obj.activity_target.toString().includes(filters.target);
+    const matchesResponsible = !filters.responsible || obj.responsible_person.toLowerCase().includes(filters.responsible.toLowerCase());
+    const matchesMOV = !filters.mov || obj.mov.toLowerCase().includes(filters.mov.toLowerCase());
+    const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
+    const matchesMainObjective = !filters.mainObjective || 
+      (mainObj && (mainObj.objective.toLowerCase().includes(filters.mainObjective.toLowerCase()) || 
+                   mainObj.kpi.toLowerCase().includes(filters.mainObjective.toLowerCase()))) ||
+      (!obj.main_objective_id && filters.mainObjective.toLowerCase().includes('not linked'));
+    
+    return matchesKPI && matchesActivity && matchesType && matchesTarget && 
+           matchesResponsible && matchesMOV && matchesMainObjective;
+  });
+
+  // Get unique values for filter dropdowns
+  const uniqueTypes = Array.from(new Set(objectives.map(o => o.type).filter(Boolean)));
+  const uniqueMainObjectives = mainObjectives.map(o => o.objective);
+
+  const clearFilter = (filterKey: keyof typeof filters) => {
+    setFilters({ ...filters, [filterKey]: '' });
+  };
+
+  const handleAddMEKPI = async () => {
+    if (!newMEKPI.me_kpi || !newMEKPI.mov) {
+      toast({
+        title: 'Error',
+        description: 'Please fill both M&E KPI and MOV fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      
+      const userObj = JSON.parse(userData);
+      const department = departments.find((d) => d.code === userObj.departments?.[0]);
+      
+      if (!department) {
+        toast({
+          title: 'Error',
+          description: 'Department not found',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Store M&E KPI as a department objective with special activity marker
+      await createDepartmentObjective({
+        department_id: department.id,
+        kpi: newMEKPI.me_kpi,
+        activity: '[M&E] ' + newMEKPI.me_kpi, // Mark as M&E
+        type: 'M&E' as any, // Use M&E type
+        activity_target: 0,
+        responsible_person: '',
+        mov: newMEKPI.mov,
+        main_objective_id: null,
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'M&E KPI created successfully',
+      });
+      
+      setIsAddingME(false);
+      setNewMEKPI({ me_kpi: '', mov: '' });
+      loadData(false);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to create M&E KPI',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
       {/* Header */}
@@ -311,6 +413,161 @@ export default function DepartmentObjectives() {
                     <TableHead>Main Objective</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
+                  {/* Filter Row */}
+                  <TableRow className="bg-muted/50">
+                    <TableHead>
+                      <div className="relative">
+                        <Input
+                          placeholder="Filter KPI..."
+                          value={filters.kpi}
+                          onChange={(e) => setFilters({ ...filters, kpi: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                        {filters.kpi && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-8 w-8 p-0"
+                            onClick={() => clearFilter('kpi')}
+                            aria-label="Clear KPI filter"
+                            title="Clear KPI filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="relative">
+                        <Input
+                          placeholder="Filter Activity..."
+                          value={filters.activity}
+                          onChange={(e) => setFilters({ ...filters, activity: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                        {filters.activity && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-8 w-8 p-0"
+                            onClick={() => clearFilter('activity')}
+                            aria-label="Clear Activity filter"
+                            title="Clear Activity filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <Select
+                        value={filters.type}
+                        onValueChange={(value) => setFilters({ ...filters, type: value })}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Filter Type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All Types</SelectItem>
+                          {uniqueTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableHead>
+                    <TableHead>
+                      <div className="relative">
+                        <Input
+                          placeholder="Filter Target..."
+                          value={filters.target}
+                          onChange={(e) => setFilters({ ...filters, target: e.target.value })}
+                          className="h-8 text-xs text-right"
+                          type="number"
+                        />
+                        {filters.target && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-8 w-8 p-0"
+                            onClick={() => clearFilter('target')}
+                            aria-label="Clear Target filter"
+                            title="Clear Target filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="relative">
+                        <Input
+                          placeholder="Filter Responsible..."
+                          value={filters.responsible}
+                          onChange={(e) => setFilters({ ...filters, responsible: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                        {filters.responsible && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-8 w-8 p-0"
+                            onClick={() => clearFilter('responsible')}
+                            aria-label="Clear Responsible filter"
+                            title="Clear Responsible filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="relative">
+                        <Input
+                          placeholder="Filter MOV..."
+                          value={filters.mov}
+                          onChange={(e) => setFilters({ ...filters, mov: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                        {filters.mov && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-8 w-8 p-0"
+                            onClick={() => clearFilter('mov')}
+                            aria-label="Clear MOV filter"
+                            title="Clear MOV filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="relative">
+                        <Input
+                          placeholder="Filter Main Objective..."
+                          value={filters.mainObjective}
+                          onChange={(e) => setFilters({ ...filters, mainObjective: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                        {filters.mainObjective && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-8 w-8 p-0"
+                            onClick={() => clearFilter('mainObjective')}
+                            aria-label="Clear Main Objective filter"
+                            title="Clear Main Objective filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isAdding && (
@@ -339,6 +596,8 @@ export default function DepartmentObjectives() {
                           <SelectContent>
                             <SelectItem value="Direct">Direct</SelectItem>
                             <SelectItem value="In direct">In direct</SelectItem>
+                            <SelectItem value="M&E">M&E</SelectItem>
+                            <SelectItem value="">Blank</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -396,7 +655,7 @@ export default function DepartmentObjectives() {
                     </TableRow>
                   )}
 
-                  {objectives.map((obj) => (
+                  {filteredObjectives.map((obj) => (
                     <TableRow key={obj.id}>
                       {editingId === obj.id ? (
                         <>
@@ -515,6 +774,96 @@ export default function DepartmentObjectives() {
                       )}
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* M&E KPIs Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>M&E KPIs</CardTitle>
+              <Button onClick={() => setIsAddingME(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add M&E KPI
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-md overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>M&E KPI</TableHead>
+                    <TableHead>MOV</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isAddingME && (
+                    <TableRow>
+                      <TableCell>
+                        <Input
+                          value={newMEKPI.me_kpi}
+                          onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
+                          placeholder="M&E KPI"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={newMEKPI.mov}
+                          onChange={(e) => setNewMEKPI({ ...newMEKPI, mov: e.target.value })}
+                          placeholder="MOV"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" size="sm" onClick={handleAddMEKPI}>
+                            Save
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setIsAddingME(false)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  
+                  {/* Display M&E KPIs (objectives with type='M&E' or activity starting with '[M&E]') */}
+                  {filteredObjectives
+                    .filter(obj => obj.type === 'M&E' || obj.activity?.startsWith('[M&E]'))
+                    .map((obj) => (
+                      <TableRow key={obj.id}>
+                        <TableCell className="font-medium">
+                          {obj.type === 'M&E' || obj.activity?.startsWith('[M&E]') ? obj.kpi : obj.activity?.replace('[M&E] ', '')}
+                        </TableCell>
+                        <TableCell>{obj.mov}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => setDeletingId(obj.id)}
+                              aria-label={`Delete M&E KPI ${obj.id}`}
+                              title="Delete M&E KPI"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  
+                  {filteredObjectives.filter(obj => obj.type === 'M&E' || obj.activity?.startsWith('[M&E]')).length === 0 && !isAddingME && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                        No M&E KPIs found. Click "Add M&E KPI" to add one.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
