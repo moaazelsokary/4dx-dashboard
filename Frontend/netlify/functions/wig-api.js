@@ -636,6 +636,7 @@ async function createOrUpdateRASCI(pool, body) {
     request.input('consulted', sql.Bit, body.consulted || false);
     request.input('informed', sql.Bit, body.informed || false);
 
+    // Use MERGE statement to insert or update
     const result = await request.query(`
       MERGE rasci_metrics AS target
       USING (SELECT @kpi AS kpi, @department AS department) AS source
@@ -653,8 +654,23 @@ async function createOrUpdateRASCI(pool, body) {
       OUTPUT INSERTED.*;
     `);
 
+    // MERGE with OUTPUT should always return a row
     if (!result.recordset || result.recordset.length === 0) {
-      throw new Error('Failed to create or update RASCI metric');
+      console.error('[RASCI] MERGE returned no rows. This should not happen.');
+      // Try to fetch the record to verify it was created/updated
+      const checkRequest = pool.request();
+      checkRequest.input('kpi', sql.NVarChar, body.kpi);
+      checkRequest.input('department', sql.NVarChar, body.department);
+      const checkResult = await checkRequest.query(
+        'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+      );
+      
+      if (checkResult.recordset && checkResult.recordset.length > 0) {
+        console.log('[RASCI] Record exists, returning it despite MERGE OUTPUT issue');
+        return checkResult.recordset[0];
+      }
+      
+      throw new Error('Failed to create or update RASCI metric - no record returned');
     }
 
     return result.recordset[0];
