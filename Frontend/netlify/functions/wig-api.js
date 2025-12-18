@@ -532,8 +532,25 @@ async function createDepartmentObjective(pool, body) {
     throw new Error('KPI must have at least one RASCI assignment');
   }
 
+  // Auto-link to main objective if main_objective_id not provided but KPI matches
+  let mainObjectiveId = body.main_objective_id || null;
+  if (!mainObjectiveId && body.kpi) {
+    const linkRequest = pool.request();
+    linkRequest.input('kpi', sql.NVarChar, body.kpi);
+    const linkResult = await linkRequest.query(`
+      SELECT TOP 1 id 
+      FROM main_plan_objectives 
+      WHERE kpi = @kpi
+      ORDER BY id
+    `);
+    if (linkResult.recordset.length > 0) {
+      mainObjectiveId = linkResult.recordset[0].id;
+      console.log(`[createDepartmentObjective] Auto-linked KPI "${body.kpi}" to main_objective_id: ${mainObjectiveId}`);
+    }
+  }
+
   const request = pool.request();
-  request.input('main_objective_id', sql.Int, body.main_objective_id || null);
+  request.input('main_objective_id', sql.Int, mainObjectiveId);
   request.input('department_id', sql.Int, body.department_id);
   request.input('kpi', sql.NVarChar, body.kpi);
   request.input('activity', sql.NVarChar, body.activity);
@@ -557,7 +574,7 @@ async function updateDepartmentObjective(pool, id, body) {
     const currentRequest = pool.request();
     currentRequest.input('id', sql.Int, id);
     const currentResult = await currentRequest.query(`
-      SELECT kpi FROM department_objectives WHERE id = @id
+      SELECT kpi, main_objective_id FROM department_objectives WHERE id = @id
     `);
 
     if (currentResult.recordset.length === 0) {
@@ -565,6 +582,7 @@ async function updateDepartmentObjective(pool, id, body) {
     }
 
     const currentKpi = currentResult.recordset[0].kpi;
+    const currentMainObjectiveId = currentResult.recordset[0].main_objective_id;
     const newKpi = body.kpi;
 
     // Only validate RASCI if KPI is actually being changed
@@ -575,6 +593,28 @@ async function updateDepartmentObjective(pool, id, body) {
       
       if (rasciResult.recordset[0].count === 0) {
         throw new Error('KPI must have at least one RASCI assignment');
+      }
+    }
+
+    // Auto-link to main objective if:
+    // 1. main_objective_id is not explicitly set in body (or set to null)
+    // 2. KPI is being updated or main_objective_id is currently null
+    // 3. A matching KPI exists in main_plan_objectives
+    if (body.main_objective_id === undefined || body.main_objective_id === null) {
+      const kpiToCheck = body.kpi !== undefined ? body.kpi : currentKpi;
+      if (kpiToCheck && (!currentMainObjectiveId || body.kpi !== undefined)) {
+        const linkRequest = pool.request();
+        linkRequest.input('kpi', sql.NVarChar, kpiToCheck);
+        const linkResult = await linkRequest.query(`
+          SELECT TOP 1 id 
+          FROM main_plan_objectives 
+          WHERE kpi = @kpi
+          ORDER BY id
+        `);
+        if (linkResult.recordset.length > 0) {
+          body.main_objective_id = linkResult.recordset[0].id;
+          console.log(`[updateDepartmentObjective] Auto-linked KPI "${kpiToCheck}" to main_objective_id: ${body.main_objective_id}`);
+        }
       }
     }
 
@@ -851,42 +891,101 @@ async function getKPIBreakdown(pool, kpi) {
   const request = pool.request();
   request.input('kpi', sql.NVarChar, kpi);
 
-  // Get main objective annual target for this KPI
+  // Get main objective info (ID and annual target) for this KPI
   const mainRequest = pool.request();
   mainRequest.input('kpi', sql.NVarChar, kpi);
   const mainResult = await mainRequest.query(`
-    SELECT TOP 1 annual_target 
+    SELECT TOP 1 id, annual_target 
     FROM main_plan_objectives 
     WHERE kpi = @kpi
   `);
 
-  const annualTarget = mainResult.recordset[0]?.annual_target || 0;
+  const mainObjective = mainResult.recordset[0];
+  const mainObjectiveId = mainObjective?.id || null;
+  const annualTarget = mainObjective?.annual_target || 0;
 
-  // Get department sums (Direct only)
-  const deptResult = await request.query(`
+  // Get department breakdown by linking through:
+  // 1. KPI name match (do.kpi = @kpi)
+  // 2. main_objective_id link (do.main_objective_id = main objective ID)
+  // This ensures we capture all department objectives linked to this strategic plan KPI
+  const deptRequest = pool.request();
+  deptRequest.input('kpi', sql.NVarChar, kpi);
+  if (mainObjectiveId) {
+    deptRequest.input('main_objective_id', sql.Int, mainObjectiveId);
+  }
+
+  // Build query that links by both KPI name and main_objective_id
+  let deptQuery = `
     SELECT 
       d.id as department_id,
       d.name as department,
       d.code as department_code,
-      SUM(do.activity_target) as sum
+      do.type,
+      SUM(do.activity_target) as sum,
+      COUNT(do.id) as objective_count
     FROM department_objectives do
     INNER JOIN departments d ON do.department_id = d.id
-    WHERE do.kpi = @kpi AND do.type = 'Direct'
-    GROUP BY d.id, d.name, d.code
-    ORDER BY d.name
-  `);
+    WHERE (do.kpi = @kpi`;
+  
+  if (mainObjectiveId) {
+    deptQuery += ` OR do.main_objective_id = @main_objective_id`;
+  }
+  
+  deptQuery += `)
+    GROUP BY d.id, d.name, d.code, do.type
+    ORDER BY d.name, do.type
+  `;
 
-  const breakdown = deptResult.recordset.map((row) => ({
-    department: row.department,
-    departmentId: row.department_id,
-    departmentCode: row.department_code,
-    sum: parseFloat(row.sum) || 0,
-    percentage: annualTarget > 0 ? ((parseFloat(row.sum) || 0) / annualTarget) * 100 : 0,
-  }));
+  const deptResult = await deptRequest.query(deptQuery);
+
+  // Group by department and type
+  const departmentMap = new Map();
+  
+  deptResult.recordset.forEach((row) => {
+    const key = `${row.department_id}_${row.type}`;
+    if (!departmentMap.has(key)) {
+      departmentMap.set(key, {
+        department: row.department,
+        departmentId: row.department_id,
+        departmentCode: row.department_code,
+        type: row.type,
+        directSum: 0,
+        indirectSum: 0,
+        directCount: 0,
+        indirectCount: 0,
+      });
+    }
+    
+    const dept = departmentMap.get(key);
+    if (row.type === 'Direct') {
+      dept.directSum = parseFloat(row.sum) || 0;
+      dept.directCount = parseInt(row.objective_count) || 0;
+    } else {
+      dept.indirectSum = parseFloat(row.sum) || 0;
+      dept.indirectCount = parseInt(row.objective_count) || 0;
+    }
+  });
+
+  // Convert to array format, combining Direct and In direct for each department
+  const breakdown = Array.from(departmentMap.values()).map((dept) => {
+    const totalSum = dept.directSum + dept.indirectSum;
+    return {
+      department: dept.department,
+      departmentId: dept.departmentId,
+      departmentCode: dept.departmentCode,
+      sum: totalSum,
+      directSum: dept.directSum,
+      indirectSum: dept.indirectSum,
+      directCount: dept.directCount,
+      indirectCount: dept.indirectCount,
+      percentage: annualTarget > 0 ? (totalSum / annualTarget) * 100 : 0,
+    };
+  });
 
   return {
     kpi,
     annual_target: annualTarget,
+    main_objective_id: mainObjectiveId,
     breakdown,
   };
 }

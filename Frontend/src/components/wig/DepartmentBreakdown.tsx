@@ -82,7 +82,9 @@ export default function DepartmentBreakdown({ kpi, annualTarget }: DepartmentBre
             <TableHeader>
               <TableRow>
                 <TableHead>Department</TableHead>
-                <TableHead className="text-right">Sum</TableHead>
+                <TableHead className="text-right">Direct</TableHead>
+                <TableHead className="text-right">In direct</TableHead>
+                <TableHead className="text-right">Total Sum</TableHead>
                 <TableHead className="text-right">Percentage</TableHead>
                 <TableHead>Visual</TableHead>
               </TableRow>
@@ -90,15 +92,28 @@ export default function DepartmentBreakdown({ kpi, annualTarget }: DepartmentBre
             <TableBody>
               {data.breakdown.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
                     No department objectives found for this KPI
                   </TableCell>
                 </TableRow>
               ) : (
                 data.breakdown.map((item) => (
                   <TableRow key={item.departmentId}>
-                    <TableCell className="font-medium">{item.department}</TableCell>
-                    <TableCell className="text-right">{item.sum.toLocaleString()}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>{item.department}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.directCount > 0 && `${item.directCount} Direct`}
+                        {item.directCount > 0 && item.indirectCount > 0 && ' • '}
+                        {item.indirectCount > 0 && `${item.indirectCount} In direct`}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.directSum > 0 ? item.directSum.toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.indirectSum > 0 ? item.indirectSum.toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{item.sum.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{item.percentage.toFixed(2)}%</TableCell>
                     <TableCell>
                       <Progress value={item.percentage} className="h-2" />

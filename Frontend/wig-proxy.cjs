@@ -421,42 +421,100 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
     const request = pool.request();
     request.input('kpi', sql.NVarChar, kpi);
 
-    // Get main objective annual target for this KPI
+    // Get main objective info (ID and annual target) for this KPI
     const mainRequest = pool.request();
     mainRequest.input('kpi', sql.NVarChar, kpi);
     const mainResult = await mainRequest.query(`
-      SELECT TOP 1 annual_target 
+      SELECT TOP 1 id, annual_target 
       FROM main_plan_objectives 
       WHERE kpi = @kpi
     `);
 
-    const annualTarget = mainResult.recordset[0]?.annual_target || 0;
+    const mainObjective = mainResult.recordset[0];
+    const mainObjectiveId = mainObjective?.id || null;
+    const annualTarget = mainObjective?.annual_target || 0;
 
-    // Get department sums (Direct only)
-    const deptResult = await request.query(`
+    // Get department breakdown by linking through:
+    // 1. KPI name match (do.kpi = @kpi)
+    // 2. main_objective_id link (do.main_objective_id = main objective ID)
+    const deptRequest = pool.request();
+    deptRequest.input('kpi', sql.NVarChar, kpi);
+    if (mainObjectiveId) {
+      deptRequest.input('main_objective_id', sql.Int, mainObjectiveId);
+    }
+
+    // Build query that links by both KPI name and main_objective_id
+    let deptQuery = `
       SELECT 
         d.id as department_id,
         d.name as department,
         d.code as department_code,
-        SUM(do.activity_target) as sum
+        do.type,
+        SUM(do.activity_target) as sum,
+        COUNT(do.id) as objective_count
       FROM department_objectives do
       INNER JOIN departments d ON do.department_id = d.id
-      WHERE do.kpi = @kpi AND do.type = 'Direct'
-      GROUP BY d.id, d.name, d.code
-      ORDER BY d.name
-    `);
+      WHERE (do.kpi = @kpi`;
+    
+    if (mainObjectiveId) {
+      deptQuery += ` OR do.main_objective_id = @main_objective_id`;
+    }
+    
+    deptQuery += `)
+      GROUP BY d.id, d.name, d.code, do.type
+      ORDER BY d.name, do.type
+    `;
 
-    const breakdown = deptResult.recordset.map((row) => ({
-      department: row.department,
-      departmentId: row.department_id,
-      departmentCode: row.department_code,
-      sum: parseFloat(row.sum) || 0,
-      percentage: annualTarget > 0 ? ((parseFloat(row.sum) || 0) / annualTarget) * 100 : 0,
-    }));
+    const deptResult = await deptRequest.query(deptQuery);
+
+    // Group by department and type
+    const departmentMap = new Map();
+    
+    deptResult.recordset.forEach((row) => {
+      const key = `${row.department_id}_${row.type}`;
+      if (!departmentMap.has(key)) {
+        departmentMap.set(key, {
+          department: row.department,
+          departmentId: row.department_id,
+          departmentCode: row.department_code,
+          type: row.type,
+          directSum: 0,
+          indirectSum: 0,
+          directCount: 0,
+          indirectCount: 0,
+        });
+      }
+      
+      const dept = departmentMap.get(key);
+      if (row.type === 'Direct') {
+        dept.directSum = parseFloat(row.sum) || 0;
+        dept.directCount = parseInt(row.objective_count) || 0;
+      } else {
+        dept.indirectSum = parseFloat(row.sum) || 0;
+        dept.indirectCount = parseInt(row.objective_count) || 0;
+      }
+    });
+
+    // Convert to array format, combining Direct and In direct for each department
+    const breakdown = Array.from(departmentMap.values()).map((dept) => {
+      const totalSum = dept.directSum + dept.indirectSum;
+      return {
+        department: dept.department,
+        departmentId: dept.departmentId,
+        departmentCode: dept.departmentCode,
+        sum: totalSum,
+        directSum: dept.directSum,
+        indirectSum: dept.indirectSum,
+        directCount: dept.directCount,
+        indirectCount: dept.indirectCount,
+        percentage: annualTarget > 0 ? (totalSum / annualTarget) * 100 : 0,
+      };
+    });
 
     res.json({
       kpi,
       annual_target: annualTarget,
+      main_objective_id: mainObjectiveId,
       breakdown,
     });
   } catch (error) {

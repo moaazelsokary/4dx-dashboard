@@ -99,13 +99,18 @@ export interface DepartmentBreakdown {
   department: string;
   departmentId: number;
   departmentCode: string;
-  sum: number; // Sum of Direct activity_target for this KPI
-  percentage: number; // Percentage of annual_target
+  sum: number; // Total sum (Direct + In direct) of activity_target for this KPI
+  directSum: number; // Sum of Direct type activity_target
+  indirectSum: number; // Sum of In direct type activity_target
+  directCount: number; // Number of Direct objectives
+  indirectCount: number; // Number of In direct objectives
+  percentage: number; // Percentage of annual_target (based on total sum)
 }
 
 export interface KPIBreakdownResponse {
   kpi: string;
   annual_target: number;
+  main_objective_id?: number | null; // ID of the main objective this KPI belongs to
   breakdown: DepartmentBreakdown[];
 }
 
