@@ -440,7 +440,12 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
       return kpi.replace(/^\d+(\.\d+)*\s*/, '').trim();
     }
     
-    const normalizedMainKPI = normalizeKPI(kpi).trim().toLowerCase();
+    // Normalize both the strategic plan KPI and prepare for comparison
+    // Normalization removes numeric prefixes (e.g., "1.3.1 " or "2.1.3 ")
+    // This handles both directions: main has prefix/dept doesn't, and vice versa
+    const mainKPIOriginal = kpi.trim();
+    const mainKPINormalized = normalizeKPI(kpi).trim();
+    const normalizedMainKPI = mainKPINormalized.toLowerCase();
 
     // Get ALL Direct department objectives and match them in JavaScript
     // This gives us full control over the matching logic and ensures accuracy
@@ -477,28 +482,42 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
     const departmentMap = new Map();
     
     for (const row of allDeptObjsResult.recordset) {
-      const deptKPI = row.kpi;
-      const normalizedDeptKPI = normalizeKPI(deptKPI).trim().toLowerCase();
+      const deptKPIOriginal = row.kpi.trim();
+      const deptKPINormalized = normalizeKPI(row.kpi).trim();
+      const deptKPIOriginalLower = deptKPIOriginal.toLowerCase();
+      const deptKPINormalizedLower = deptKPINormalized.toLowerCase();
       
-      // Try multiple matching strategies
+      // Try multiple matching strategies - handles both directions:
+      // 1. Main has prefix, dept doesn't: "1.3.1 عدد..." matches "عدد..."
+      // 2. Main doesn't have prefix, dept has: "عدد..." matches "1.3.1 عدد..."
+      // 3. Both have prefixes: "1.3.1 عدد..." matches "1.3.1 عدد..." (exact)
+      // 4. Neither has prefix: "عدد..." matches "عدد..." (exact)
       let isMatch = false;
       
-      // Strategy 1: Exact normalized match (handles prefix differences)
-      if (normalizedDeptKPI === normalizedMainKPI) {
+      // Strategy 1: Exact normalized match (handles prefix differences in both directions)
+      // This is the primary strategy - removes prefixes from both and compares
+      // Works for: "1.3.1 عدد..." vs "عدد..." AND "عدد..." vs "1.3.1 عدد..."
+      if (deptKPINormalizedLower === normalizedMainKPI) {
         isMatch = true;
       }
-      // Strategy 2: Exact match (original vs original)
-      else if (deptKPI.trim().toLowerCase() === kpi.trim().toLowerCase()) {
+      // Strategy 2: Exact match (original vs original) - both have same format
+      else if (deptKPIOriginalLower === mainKPIOriginal.toLowerCase()) {
         isMatch = true;
       }
-      // Strategy 3: Cross-match (normalized vs original)
-      else if (normalizedDeptKPI === kpi.trim().toLowerCase() || 
-               deptKPI.trim().toLowerCase() === normalizedMainKPI) {
+      // Strategy 3: Cross-match - normalized main vs original dept (main has prefix, dept doesn't)
+      // Example: "1.3.1 عدد..." (normalized to "عدد...") matches "عدد..."
+      else if (deptKPIOriginalLower === normalizedMainKPI) {
         isMatch = true;
       }
-      // Strategy 4: Keyword-based matching (if significant overlap)
+      // Strategy 4: Reverse cross-match - original main vs normalized dept (dept has prefix, main doesn't)
+      // Example: "عدد..." matches "1.3.1 عدد..." (normalized to "عدد...")
+      else if (deptKPINormalizedLower === mainKPIOriginal.toLowerCase()) {
+        isMatch = true;
+      }
+      // Strategy 5: Keyword-based matching (if significant overlap)
+      // Use normalized versions for keyword extraction to ignore prefixes
       else if (mainKeywords.length > 0) {
-        const deptKeywords = extractKeywords(normalizedDeptKPI);
+        const deptKeywords = extractKeywords(deptKPINormalizedLower);
         const deptKeywordsSet = new Set(deptKeywords);
         
         // Count matching keywords
@@ -514,13 +533,13 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
           isMatch = true;
         }
       }
-      // Strategy 5: Substring match for longer KPIs (if normalized main KPI is contained in dept KPI or vice versa)
-      else if (normalizedMainKPI.length > 20 && normalizedDeptKPI.length > 20) {
-        if (normalizedDeptKPI.includes(normalizedMainKPI) || 
-            normalizedMainKPI.includes(normalizedDeptKPI)) {
+      // Strategy 6: Substring match for longer KPIs (if normalized main KPI is contained in dept KPI or vice versa)
+      else if (normalizedMainKPI.length > 20 && deptKPINormalizedLower.length > 20) {
+        if (deptKPINormalizedLower.includes(normalizedMainKPI) || 
+            normalizedMainKPI.includes(deptKPINormalizedLower)) {
           // Ensure significant overlap (at least 70% of shorter string)
-          const shorter = Math.min(normalizedMainKPI.length, normalizedDeptKPI.length);
-          const longer = Math.max(normalizedMainKPI.length, normalizedDeptKPI.length);
+          const shorter = Math.min(normalizedMainKPI.length, deptKPINormalizedLower.length);
+          const longer = Math.max(normalizedMainKPI.length, deptKPINormalizedLower.length);
           if (shorter / longer >= 0.7) {
             isMatch = true;
           }
