@@ -636,44 +636,72 @@ async function createOrUpdateRASCI(pool, body) {
     request.input('consulted', sql.Bit, body.consulted || false);
     request.input('informed', sql.Bit, body.informed || false);
 
-    // Use MERGE statement to insert or update
-    const result = await request.query(`
-      MERGE rasci_metrics AS target
-      USING (SELECT @kpi AS kpi, @department AS department) AS source
-      ON target.kpi = source.kpi AND target.department = source.department
-      WHEN MATCHED THEN
-        UPDATE SET 
+    // Use MERGE with OUTPUT INTO temp table (required when table has triggers)
+    // First check if record exists
+    const checkRequest = pool.request();
+    checkRequest.input('kpi', sql.NVarChar, body.kpi);
+    checkRequest.input('department', sql.NVarChar, body.department);
+    const existing = await checkRequest.query(
+      'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+    );
+
+    if (existing.recordset && existing.recordset.length > 0) {
+      // Update existing record
+      const updateRequest = pool.request();
+      updateRequest.input('kpi', sql.NVarChar, body.kpi);
+      updateRequest.input('department', sql.NVarChar, body.department);
+      updateRequest.input('responsible', sql.Bit, body.responsible || false);
+      updateRequest.input('accountable', sql.Bit, body.accountable || false);
+      updateRequest.input('supportive', sql.Bit, body.supportive || false);
+      updateRequest.input('consulted', sql.Bit, body.consulted || false);
+      updateRequest.input('informed', sql.Bit, body.informed || false);
+
+      await updateRequest.query(`
+        UPDATE rasci_metrics
+        SET 
           responsible = @responsible,
           accountable = @accountable,
           supportive = @supportive,
           consulted = @consulted,
           informed = @informed
-      WHEN NOT MATCHED THEN
-        INSERT (kpi, department, responsible, accountable, supportive, consulted, informed)
-        VALUES (@kpi, @department, @responsible, @accountable, @supportive, @consulted, @informed)
-      OUTPUT INSERTED.*;
-    `);
+        WHERE kpi = @kpi AND department = @department
+      `);
 
-    // MERGE with OUTPUT should always return a row
-    if (!result.recordset || result.recordset.length === 0) {
-      console.error('[RASCI] MERGE returned no rows. This should not happen.');
-      // Try to fetch the record to verify it was created/updated
-      const checkRequest = pool.request();
-      checkRequest.input('kpi', sql.NVarChar, body.kpi);
-      checkRequest.input('department', sql.NVarChar, body.department);
-      const checkResult = await checkRequest.query(
+      // Fetch updated record
+      const fetchRequest = pool.request();
+      fetchRequest.input('kpi', sql.NVarChar, body.kpi);
+      fetchRequest.input('department', sql.NVarChar, body.department);
+      const fetchResult = await fetchRequest.query(
         'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
       );
-      
-      if (checkResult.recordset && checkResult.recordset.length > 0) {
-        console.log('[RASCI] Record exists, returning it despite MERGE OUTPUT issue');
-        return checkResult.recordset[0];
-      }
-      
-      throw new Error('Failed to create or update RASCI metric - no record returned');
-    }
 
-    return result.recordset[0];
+      return fetchResult.recordset[0];
+    } else {
+      // Insert new record
+      const insertRequest = pool.request();
+      insertRequest.input('kpi', sql.NVarChar, body.kpi);
+      insertRequest.input('department', sql.NVarChar, body.department);
+      insertRequest.input('responsible', sql.Bit, body.responsible || false);
+      insertRequest.input('accountable', sql.Bit, body.accountable || false);
+      insertRequest.input('supportive', sql.Bit, body.supportive || false);
+      insertRequest.input('consulted', sql.Bit, body.consulted || false);
+      insertRequest.input('informed', sql.Bit, body.informed || false);
+
+      await insertRequest.query(`
+        INSERT INTO rasci_metrics (kpi, department, responsible, accountable, supportive, consulted, informed)
+        VALUES (@kpi, @department, @responsible, @accountable, @supportive, @consulted, @informed)
+      `);
+
+      // Fetch inserted record
+      const fetchRequest = pool.request();
+      fetchRequest.input('kpi', sql.NVarChar, body.kpi);
+      fetchRequest.input('department', sql.NVarChar, body.department);
+      const fetchResult = await fetchRequest.query(
+        'SELECT * FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
+      );
+
+      return fetchResult.recordset[0];
+    }
   } catch (error) {
     console.error('[RASCI] Error in createOrUpdateRASCI:', error);
     console.error('[RASCI] Error message:', error.message);
