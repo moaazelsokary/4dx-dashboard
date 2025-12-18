@@ -162,8 +162,9 @@ exports.handler = async function (event, context) {
     // Check database environment variables
     const serverValue = process.env.SERVER || process.env.VITE_SERVER || '';
     const database = process.env.DATABASE || process.env.VITE_DATABASE;
-    const user = process.env.UID || process.env.VITE_UID || process.env.VIE_UID;
-    const password = process.env.PWD || process.env.VITE_PWD;
+    const user = process.env.DB_USER || process.env.UID || process.env.VITE_UID || process.env.VIE_UID;
+    // Use DB_PASSWORD (PWD is system variable for current directory)
+    const password = process.env.DB_PASSWORD || process.env.VITE_PWD;
 
     if (!serverValue || !database || !user || !password) {
       console.error('[WIG API] Missing database environment variables:', {
@@ -177,7 +178,7 @@ exports.handler = async function (event, context) {
         headers,
         body: JSON.stringify({
           error: 'Database configuration missing',
-          message: 'Required environment variables: SERVER, DATABASE, UID, PWD',
+          message: 'Required environment variables: SERVER, DATABASE, UID (or DB_USER), DB_PASSWORD (or VITE_PWD)',
           details: process.env.NODE_ENV === 'development' ? {
             server: serverValue || 'missing',
             database: database || 'missing',
@@ -211,6 +212,8 @@ exports.handler = async function (event, context) {
             database: database ? 'set' : 'missing',
             user: user ? 'set' : 'missing',
             password: password ? 'set' : 'missing',
+            dbPassword: process.env.DB_PASSWORD ? 'set' : 'missing',
+            vitePwd: process.env.VITE_PWD ? 'set' : 'missing',
           },
         }),
       };
