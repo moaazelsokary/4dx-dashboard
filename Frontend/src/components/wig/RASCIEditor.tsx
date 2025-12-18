@@ -131,13 +131,12 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
 
     try {
       setSaving(true);
-      const promises: Promise<RASCI>[] = [];
+      const promises: Promise<any>[] = [];
       
       rasciData.forEach((rasci) => {
-        // Only save if at least one role is assigned
-        if (rasci.responsible || rasci.accountable || rasci.supportive || rasci.consulted || rasci.informed) {
-          promises.push(createOrUpdateRASCI(rasci));
-        }
+        // Always save - backend will handle deletion if all roles are false
+        // This ensures we can remove assignments by unchecking all roles
+        promises.push(createOrUpdateRASCI(rasci));
       });
 
       await Promise.all(promises);
@@ -150,6 +149,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
       // Reload data
       await loadRASCIForKPI(selectedKPI);
     } catch (err) {
+      console.error('Error saving RASCI:', err);
       toast({
         title: 'Error',
         description: 'Failed to save RASCI assignments',
