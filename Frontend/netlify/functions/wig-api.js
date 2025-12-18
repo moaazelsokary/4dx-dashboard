@@ -532,22 +532,39 @@ async function createDepartmentObjective(pool, body) {
     throw new Error('KPI must have at least one RASCI assignment');
   }
 
-  // Auto-link to main objective if main_objective_id not provided but KPI matches
-  let mainObjectiveId = body.main_objective_id || null;
-  if (!mainObjectiveId && body.kpi) {
-    const linkRequest = pool.request();
-    linkRequest.input('kpi', sql.NVarChar, body.kpi);
-    const linkResult = await linkRequest.query(`
-      SELECT TOP 1 id 
-      FROM main_plan_objectives 
-      WHERE kpi = @kpi
-      ORDER BY id
-    `);
-    if (linkResult.recordset.length > 0) {
-      mainObjectiveId = linkResult.recordset[0].id;
-      console.log(`[createDepartmentObjective] Auto-linked KPI "${body.kpi}" to main_objective_id: ${mainObjectiveId}`);
+    // Auto-link to main objective if main_objective_id not provided but KPI matches
+    // Uses flexible matching (ignores numeric prefixes like "1.3.1 ")
+    let mainObjectiveId = body.main_objective_id || null;
+    if (!mainObjectiveId && body.kpi) {
+      const linkRequest = pool.request();
+      linkRequest.input('kpi', sql.NVarChar, body.kpi);
+      // Try exact match first
+      let linkResult = await linkRequest.query(`
+        SELECT TOP 1 id 
+        FROM main_plan_objectives 
+        WHERE kpi = @kpi
+        ORDER BY id
+      `);
+      
+      // If not found, try normalized match (remove numeric prefix)
+      if (linkResult.recordset.length === 0) {
+        const normalizedKPI = body.kpi.replace(/^\d+(\.\d+)*\s*/, '').trim();
+        linkRequest = pool.request();
+        linkRequest.input('kpi', sql.NVarChar, body.kpi);
+        linkRequest.input('normalizedKPI', sql.NVarChar, normalizedKPI);
+        linkResult = await linkRequest.query(`
+          SELECT TOP 1 id 
+          FROM main_plan_objectives 
+          WHERE kpi = @kpi OR kpi LIKE '%' + @normalizedKPI + '%'
+          ORDER BY id
+        `);
+      }
+      
+      if (linkResult.recordset.length > 0) {
+        mainObjectiveId = linkResult.recordset[0].id;
+        console.log(`[createDepartmentObjective] Auto-linked KPI "${body.kpi}" to main_objective_id: ${mainObjectiveId}`);
+      }
     }
-  }
 
   const request = pool.request();
   request.input('main_objective_id', sql.Int, mainObjectiveId);
@@ -600,17 +617,34 @@ async function updateDepartmentObjective(pool, id, body) {
     // 1. main_objective_id is not explicitly set in body (or set to null)
     // 2. KPI is being updated or main_objective_id is currently null
     // 3. A matching KPI exists in main_plan_objectives
+    // Uses flexible matching (ignores numeric prefixes like "1.3.1 ")
     if (body.main_objective_id === undefined || body.main_objective_id === null) {
       const kpiToCheck = body.kpi !== undefined ? body.kpi : currentKpi;
       if (kpiToCheck && (!currentMainObjectiveId || body.kpi !== undefined)) {
         const linkRequest = pool.request();
         linkRequest.input('kpi', sql.NVarChar, kpiToCheck);
-        const linkResult = await linkRequest.query(`
+        // Try exact match first
+        let linkResult = await linkRequest.query(`
           SELECT TOP 1 id 
           FROM main_plan_objectives 
           WHERE kpi = @kpi
           ORDER BY id
         `);
+        
+        // If not found, try normalized match (remove numeric prefix)
+        if (linkResult.recordset.length === 0) {
+          const normalizedKPI = kpiToCheck.replace(/^\d+(\.\d+)*\s*/, '').trim();
+          const linkRequest2 = pool.request();
+          linkRequest2.input('kpi', sql.NVarChar, kpiToCheck);
+          linkRequest2.input('normalizedKPI', sql.NVarChar, normalizedKPI);
+          linkResult = await linkRequest2.query(`
+            SELECT TOP 1 id 
+            FROM main_plan_objectives 
+            WHERE kpi = @kpi OR kpi LIKE '%' + @normalizedKPI + '%'
+            ORDER BY id
+          `);
+        }
+        
         if (linkResult.recordset.length > 0) {
           body.main_objective_id = linkResult.recordset[0].id;
           console.log(`[updateDepartmentObjective] Auto-linked KPI "${kpiToCheck}" to main_objective_id: ${body.main_objective_id}`);
