@@ -241,6 +241,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                     value={newData.pillar || ''}
                     onChange={(e) => setNewData({ ...newData, pillar: e.target.value })}
                     placeholder="Pillar"
+                    aria-label="Pillar"
                   />
                 </TableCell>
                 <TableCell>
@@ -248,6 +249,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                     value={newData.objective || ''}
                     onChange={(e) => setNewData({ ...newData, objective: e.target.value })}
                     placeholder="Objective"
+                    aria-label="Objective"
                   />
                 </TableCell>
                 <TableCell>
@@ -261,6 +263,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                     }}
                     placeholder="1.1"
                     className="w-16"
+                    aria-label="Target number"
                   />
                 </TableCell>
                 <TableCell>
@@ -271,6 +274,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                       setNewData({ ...newData, target: num ? `${num} ${e.target.value}` : e.target.value });
                     }}
                     placeholder="Target"
+                    aria-label="Target description"
                   />
                 </TableCell>
                 <TableCell>
@@ -284,6 +288,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                     }}
                     placeholder="1.1.1"
                     className="w-20"
+                    aria-label="KPI number"
                   />
                 </TableCell>
                 <TableCell>
@@ -294,6 +299,7 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                       setNewData({ ...newData, kpi: num ? `${num} ${e.target.value}` : e.target.value });
                     }}
                     placeholder="KPI"
+                    aria-label="KPI description"
                   />
                 </TableCell>
                 <TableCell>
@@ -303,14 +309,15 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                     onChange={(e) => setNewData({ ...newData, annual_target: parseFloat(e.target.value) || 0 })}
                     placeholder="Annual Target"
                     className="text-right"
+                    aria-label="Annual target"
                   />
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button size="sm" onClick={handleAdd}>
+                    <Button size="sm" onClick={handleAdd} aria-label="Save new objective">
                       <Save className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setIsAdding(false)}>
+                    <Button size="sm" variant="outline" onClick={() => setIsAdding(false)} aria-label="Cancel adding objective">
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -376,12 +383,16 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                         <Input
                           value={editData.pillar || ''}
                           onChange={(e) => setEditData({ ...editData, pillar: e.target.value })}
+                          placeholder="Pillar"
+                          aria-label="Edit pillar"
                         />
                       </TableCell>
                       <TableCell>
                         <Input
                           value={editData.objective || ''}
                           onChange={(e) => setEditData({ ...editData, objective: e.target.value })}
+                          placeholder="Objective"
+                          aria-label="Edit objective"
                         />
                       </TableCell>
                       <TableCell>
@@ -394,6 +405,8 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
                           }}
                           className="w-16"
+                          placeholder="1.1"
+                          aria-label="Edit target number"
                         />
                       </TableCell>
                       <TableCell>
@@ -403,6 +416,8 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             const num = extractNumber(editData.target || '', /^\d+(\.\d+)?/);
                             setEditData({ ...editData, target: num ? `${num} ${e.target.value}` : e.target.value });
                           }}
+                          placeholder="Target"
+                          aria-label="Edit target description"
                         />
                       </TableCell>
                       <TableCell>
@@ -415,6 +430,8 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
                           }}
                           className="w-20"
+                          placeholder="1.1.1"
+                          aria-label="Edit KPI number"
                         />
                       </TableCell>
                       <TableCell>
@@ -424,6 +441,8 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             const num = extractNumber(editData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/);
                             setEditData({ ...editData, kpi: num ? `${num} ${e.target.value}` : e.target.value });
                           }}
+                          placeholder="KPI"
+                          aria-label="Edit KPI description"
                         />
                       </TableCell>
                       <TableCell>
@@ -432,14 +451,16 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                           value={editData.annual_target || ''}
                           onChange={(e) => setEditData({ ...editData, annual_target: parseFloat(e.target.value) || 0 })}
                           className="text-right"
+                          placeholder="Annual Target"
+                          aria-label="Edit annual target"
                         />
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" onClick={saveEdit}>
+                          <Button size="sm" onClick={saveEdit} aria-label="Save changes">
                             <Save className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={cancelEdit}>
+                          <Button size="sm" variant="outline" onClick={cancelEdit} aria-label="Cancel editing">
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
@@ -477,6 +498,8 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             variant="outline" 
                             onClick={() => startEdit(obj)}
                             className="hover:bg-primary/10 hover:border-primary/50 transition-all"
+                            aria-label={`Edit objective ${kpiNum || obj.id}`}
+                            title="Edit objective"
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
@@ -485,6 +508,8 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                             variant="outline" 
                             onClick={() => setDeletingId(obj.id)}
                             className="hover:bg-destructive/10 hover:border-destructive/50 hover:text-destructive transition-all"
+                            aria-label={`Delete objective ${kpiNum || obj.id}`}
+                            title="Delete objective"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

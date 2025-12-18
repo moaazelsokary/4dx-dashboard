@@ -228,7 +228,14 @@ exports.handler = async function (event, context) {
       result = await createMainObjective(pool, body);
     } else if (path.startsWith('/main-objectives/') && method === 'PUT') {
       const id = parseInt(path.split('/')[2]);
-      result = await updateMainObjective(pool, id, body);
+      try {
+        result = await updateMainObjective(pool, id, body);
+      } catch (error) {
+        console.error('[WIG API] Error updating main objective:', error.message);
+        console.error('[WIG API] Error code:', error.code);
+        console.error('[WIG API] Error number:', error.number);
+        throw error;
+      }
     } else if (path.startsWith('/main-objectives/') && method === 'DELETE') {
       const id = parseInt(path.split('/')[2]);
       result = await deleteMainObjective(pool, id);
@@ -423,26 +430,44 @@ async function createMainObjective(pool, body) {
 }
 
 async function updateMainObjective(pool, id, body) {
-  const request = pool.request();
-  request.input('id', sql.Int, id);
-  request.input('pillar', sql.NVarChar, body.pillar);
-  request.input('objective', sql.NVarChar, body.objective);
-  request.input('target', sql.NVarChar, body.target);
-  request.input('kpi', sql.NVarChar, body.kpi);
-  request.input('annual_target', sql.Decimal(18, 2), body.annual_target);
+  try {
+    const request = pool.request();
+    request.input('id', sql.Int, id);
+    request.input('pillar', sql.NVarChar, body.pillar);
+    request.input('objective', sql.NVarChar, body.objective);
+    request.input('target', sql.NVarChar, body.target);
+    request.input('kpi', sql.NVarChar, body.kpi);
+    request.input('annual_target', sql.Decimal(18, 2), body.annual_target);
 
-  const result = await request.query(`
-    UPDATE main_plan_objectives
-    SET pillar = @pillar, objective = @objective, target = @target, kpi = @kpi, annual_target = @annual_target
-    OUTPUT INSERTED.*
-    WHERE id = @id
-  `);
+    // Update the record (without OUTPUT clause due to triggers)
+    const updateResult = await request.query(`
+      UPDATE main_plan_objectives
+      SET pillar = @pillar, objective = @objective, target = @target, kpi = @kpi, annual_target = @annual_target, updated_at = GETDATE()
+      WHERE id = @id
+    `);
 
-  if (result.recordset.length === 0) {
-    throw new Error('Objective not found');
+    if (updateResult.rowsAffected[0] === 0) {
+      throw new Error('Objective not found');
+    }
+
+    // Select the updated record
+    const selectRequest = pool.request();
+    selectRequest.input('id', sql.Int, id);
+    const selectResult = await selectRequest.query(`
+      SELECT * FROM main_plan_objectives WHERE id = @id
+    `);
+
+    if (selectResult.recordset.length === 0) {
+      throw new Error('Objective not found after update');
+    }
+
+    return selectResult.recordset[0];
+  } catch (error) {
+    console.error('[updateMainObjective] Error:', error.message);
+    console.error('[updateMainObjective] Error code:', error.code);
+    console.error('[updateMainObjective] Error stack:', error.stack);
+    throw error;
   }
-
-  return result.recordset[0];
 }
 
 async function deleteMainObjective(pool, id) {
