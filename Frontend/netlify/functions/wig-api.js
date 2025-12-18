@@ -1059,52 +1059,74 @@ async function getKPIBreakdown(pool, kpi) {
   const mainObjectiveId = mainObjective?.id || null;
   const annualTarget = mainObjective?.annual_target || 0;
 
-  // Normalize the KPI name by removing numeric prefix (e.g., "2.1.3 عدد..." -> "عدد...")
-  // This allows matching department objectives that may not have the prefix
-  const normalizedKPI = normalizeKPI(kpi);
+  // Normalize the strategic plan KPI by removing numeric prefix and trimming
+  // This is what we'll compare against
+  const normalizedMainKPI = normalizeKPI(kpi).trim().toLowerCase();
 
-  // Get department breakdown by matching KPI name with flexible matching
-  // Try exact match first, then normalized match (without numeric prefix)
-  // Only match by KPI name, not by main_objective_id, to ensure we only show
-  // department objectives with the same KPI as the strategic plan KPI
-  const deptRequest = pool.request();
-  deptRequest.input('kpi', sql.NVarChar, kpi);
-  deptRequest.input('normalizedKPI', sql.NVarChar, normalizedKPI);
-
-  // Build query that matches by KPI name (exact or normalized)
-  // Only include Direct type objectives
-  const deptQuery = `
+  // Get ALL Direct department objectives and match them in JavaScript
+  // This gives us full control over the matching logic and ensures accuracy
+  const allDeptObjsRequest = pool.request();
+  const allDeptObjsResult = await allDeptObjsRequest.query(`
     SELECT 
       d.id as department_id,
       d.name as department,
       d.code as department_code,
-      SUM(do.activity_target) as sum,
-      COUNT(do.id) as objective_count
+      do.kpi,
+      do.activity_target
     FROM department_objectives do
     INNER JOIN departments d ON do.department_id = d.id
-    WHERE do.type = 'Direct' 
-      AND (do.kpi = @kpi OR do.kpi = @normalizedKPI)
-    GROUP BY d.id, d.name, d.code
-    ORDER BY d.name
-  `;
+    WHERE do.type = 'Direct'
+    ORDER BY d.name, do.kpi
+  `);
 
-  const deptResult = await deptRequest.query(deptQuery);
+  // Group matching objectives by department
+  const departmentMap = new Map();
+  
+  for (const row of allDeptObjsResult.recordset) {
+    const deptKPI = row.kpi;
+    const normalizedDeptKPI = normalizeKPI(deptKPI).trim().toLowerCase();
+    
+    // Match if normalized KPIs are equal (handles prefix differences)
+    // Also try exact match as fallback
+    const isMatch = normalizedDeptKPI === normalizedMainKPI || 
+                    deptKPI.trim().toLowerCase() === kpi.trim().toLowerCase() ||
+                    normalizedDeptKPI === kpi.trim().toLowerCase() ||
+                    deptKPI.trim().toLowerCase() === normalizedMainKPI;
+    
+    if (isMatch) {
+      const deptKey = row.department_id;
+      if (!departmentMap.has(deptKey)) {
+        departmentMap.set(deptKey, {
+          department_id: row.department_id,
+          department: row.department,
+          department_code: row.department_code,
+          sum: 0,
+          count: 0
+        });
+      }
+      
+      const dept = departmentMap.get(deptKey);
+      dept.sum += parseFloat(row.activity_target) || 0;
+      dept.count += 1;
+    }
+  }
 
-  // Convert to array format - only Direct type
-  const breakdown = deptResult.recordset.map((row) => {
-    const sum = parseFloat(row.sum) || 0;
+  // Convert map to array format
+  const breakdown = Array.from(departmentMap.values()).map((dept) => {
     return {
-      department: row.department,
-      departmentId: row.department_id,
-      departmentCode: row.department_code,
-      sum: sum,
-      directSum: sum,
+      department: dept.department,
+      departmentId: dept.department_id,
+      departmentCode: dept.department_code,
+      sum: dept.sum,
+      directSum: dept.sum,
       indirectSum: 0,
-      directCount: parseInt(row.objective_count) || 0,
+      directCount: dept.count,
       indirectCount: 0,
-      percentage: annualTarget > 0 ? (sum / annualTarget) * 100 : 0,
+      percentage: annualTarget > 0 ? (dept.sum / annualTarget) * 100 : 0,
     };
   });
+
+  // Breakdown is already created above in the JavaScript matching logic
 
   return {
     kpi,
