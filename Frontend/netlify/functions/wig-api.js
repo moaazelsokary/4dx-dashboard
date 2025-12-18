@@ -276,6 +276,10 @@ exports.handler = async function (event, context) {
       const kpi = decodeURIComponent(path.split('/kpi-breakdown/')[1]);
       result = await getKPIBreakdown(pool, kpi);
     }
+    // Auto-link all department objectives
+    else if (path === '/department-objectives/auto-link' && method === 'POST') {
+      result = await autoLinkAllDepartmentObjectives(pool);
+    }
     // Departments
     else if (path === '/departments' && method === 'GET') {
       result = await getDepartments(pool);
@@ -536,32 +540,8 @@ async function createDepartmentObjective(pool, body) {
     // Uses flexible matching (ignores numeric prefixes like "1.3.1 ")
     let mainObjectiveId = body.main_objective_id || null;
     if (!mainObjectiveId && body.kpi) {
-      const linkRequest = pool.request();
-      linkRequest.input('kpi', sql.NVarChar, body.kpi);
-      // Try exact match first
-      let linkResult = await linkRequest.query(`
-        SELECT TOP 1 id 
-        FROM main_plan_objectives 
-        WHERE kpi = @kpi
-        ORDER BY id
-      `);
-      
-      // If not found, try normalized match (remove numeric prefix)
-      if (linkResult.recordset.length === 0) {
-        const normalizedKPI = body.kpi.replace(/^\d+(\.\d+)*\s*/, '').trim();
-        linkRequest = pool.request();
-        linkRequest.input('kpi', sql.NVarChar, body.kpi);
-        linkRequest.input('normalizedKPI', sql.NVarChar, normalizedKPI);
-        linkResult = await linkRequest.query(`
-          SELECT TOP 1 id 
-          FROM main_plan_objectives 
-          WHERE kpi = @kpi OR kpi LIKE '%' + @normalizedKPI + '%'
-          ORDER BY id
-        `);
-      }
-      
-      if (linkResult.recordset.length > 0) {
-        mainObjectiveId = linkResult.recordset[0].id;
+      mainObjectiveId = await findMainObjectiveId(pool, body.kpi);
+      if (mainObjectiveId) {
         console.log(`[createDepartmentObjective] Auto-linked KPI "${body.kpi}" to main_objective_id: ${mainObjectiveId}`);
       }
     }
@@ -621,32 +601,9 @@ async function updateDepartmentObjective(pool, id, body) {
     if (body.main_objective_id === undefined || body.main_objective_id === null) {
       const kpiToCheck = body.kpi !== undefined ? body.kpi : currentKpi;
       if (kpiToCheck && (!currentMainObjectiveId || body.kpi !== undefined)) {
-        const linkRequest = pool.request();
-        linkRequest.input('kpi', sql.NVarChar, kpiToCheck);
-        // Try exact match first
-        let linkResult = await linkRequest.query(`
-          SELECT TOP 1 id 
-          FROM main_plan_objectives 
-          WHERE kpi = @kpi
-          ORDER BY id
-        `);
-        
-        // If not found, try normalized match (remove numeric prefix)
-        if (linkResult.recordset.length === 0) {
-          const normalizedKPI = kpiToCheck.replace(/^\d+(\.\d+)*\s*/, '').trim();
-          const linkRequest2 = pool.request();
-          linkRequest2.input('kpi', sql.NVarChar, kpiToCheck);
-          linkRequest2.input('normalizedKPI', sql.NVarChar, normalizedKPI);
-          linkResult = await linkRequest2.query(`
-            SELECT TOP 1 id 
-            FROM main_plan_objectives 
-            WHERE kpi = @kpi OR kpi LIKE '%' + @normalizedKPI + '%'
-            ORDER BY id
-          `);
-        }
-        
-        if (linkResult.recordset.length > 0) {
-          body.main_objective_id = linkResult.recordset[0].id;
+        const foundMainId = await findMainObjectiveId(pool, kpiToCheck);
+        if (foundMainId) {
+          body.main_objective_id = foundMainId;
           console.log(`[updateDepartmentObjective] Auto-linked KPI "${kpiToCheck}" to main_objective_id: ${body.main_objective_id}`);
         }
       }
@@ -712,6 +669,170 @@ async function deleteDepartmentObjective(pool, id) {
 
   const result = await request.query('DELETE FROM department_objectives WHERE id = @id');
   return { success: true, deletedRows: result.rowsAffected[0] };
+}
+
+// Helper function to normalize KPI name (remove numeric prefixes like "1.3.1 ")
+function normalizeKPI(kpi) {
+  if (!kpi) return '';
+  return kpi.replace(/^\d+(\.\d+)*\s*/, '').trim();
+}
+
+// Helper function to find main objective ID for a KPI using flexible matching
+async function findMainObjectiveId(pool, kpi) {
+  if (!kpi) return null;
+  
+  const linkRequest = pool.request();
+  linkRequest.input('kpi', sql.NVarChar, kpi);
+  
+  // Try exact match first
+  let linkResult = await linkRequest.query(`
+    SELECT TOP 1 id 
+    FROM main_plan_objectives 
+    WHERE kpi = @kpi
+    ORDER BY id
+  `);
+  
+  // If not found, try normalized match (remove numeric prefix)
+  if (linkResult.recordset.length === 0) {
+    const normalizedKPI = normalizeKPI(kpi);
+    if (normalizedKPI && normalizedKPI !== kpi) {
+      const linkRequest2 = pool.request();
+      linkRequest2.input('kpi', sql.NVarChar, kpi);
+      linkRequest2.input('normalizedKPI', sql.NVarChar, normalizedKPI);
+      linkResult = await linkRequest2.query(`
+        SELECT TOP 1 id 
+        FROM main_plan_objectives 
+        WHERE kpi = @kpi OR kpi LIKE '%' + @normalizedKPI + '%'
+        ORDER BY id
+      `);
+    }
+  }
+  
+  return linkResult.recordset.length > 0 ? linkResult.recordset[0].id : null;
+}
+
+// Auto-link all department objectives that don't have main_objective_id
+async function autoLinkAllDepartmentObjectives(pool) {
+  try {
+    console.log('[autoLinkAllDepartmentObjectives] Starting auto-link process...');
+    
+    // Get all department objectives without main_objective_id
+    const deptObjsResult = await pool.request().query(`
+      SELECT 
+        do.id,
+        do.kpi,
+        do.main_objective_id,
+        d.name as department_name
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+      WHERE do.main_objective_id IS NULL OR do.main_objective_id = 0
+      ORDER BY d.name, do.kpi
+    `);
+    
+    const totalToLink = deptObjsResult.recordset.length;
+    console.log(`[autoLinkAllDepartmentObjectives] Found ${totalToLink} objectives to link`);
+    
+    if (totalToLink === 0) {
+      return {
+        success: true,
+        message: 'All department objectives are already linked',
+        linked: 0,
+        notFound: 0,
+        total: 0
+      };
+    }
+
+    // Get all main_plan_objectives KPIs for efficient lookup
+    const mainKPIsResult = await pool.request().query(`
+      SELECT id, kpi FROM main_plan_objectives ORDER BY kpi
+    `);
+    
+    // Create maps for efficient lookup
+    const kpiMap = new Map();
+    const kpiMapNormalized = new Map();
+    
+    mainKPIsResult.recordset.forEach(row => {
+      const originalKPI = row.kpi.trim();
+      const normalizedKPI = normalizeKPI(originalKPI);
+      
+      if (!kpiMap.has(originalKPI)) {
+        kpiMap.set(originalKPI, row.id);
+      }
+      if (!kpiMapNormalized.has(normalizedKPI)) {
+        kpiMapNormalized.set(normalizedKPI, row.id);
+      }
+    });
+    
+    console.log(`[autoLinkAllDepartmentObjectives] Loaded ${mainKPIsResult.recordset.length} main plan KPIs`);
+    
+    let linked = 0;
+    let notFound = 0;
+    const notFoundKPIs = new Set();
+    const departmentStats = new Map();
+    
+    // Link each department objective
+    for (const deptObj of deptObjsResult.recordset) {
+      const deptKPI = deptObj.kpi.trim();
+      const normalizedDeptKPI = normalizeKPI(deptKPI);
+      
+      // Try exact match first
+      let mainId = kpiMap.get(deptKPI);
+      
+      // If not found, try normalized match
+      if (!mainId) {
+        mainId = kpiMapNormalized.get(normalizedDeptKPI);
+      }
+      
+      if (mainId) {
+        try {
+          await pool.request()
+            .input('id', sql.Int, deptObj.id)
+            .input('main_objective_id', sql.Int, mainId)
+            .query(`
+              UPDATE department_objectives
+              SET main_objective_id = @main_objective_id,
+                  updated_at = GETDATE()
+              WHERE id = @id
+            `);
+          linked++;
+          
+          // Track statistics
+          const deptName = deptObj.department_name;
+          if (!departmentStats.has(deptName)) {
+            departmentStats.set(deptName, { linked: 0, notFound: 0 });
+          }
+          departmentStats.get(deptName).linked++;
+        } catch (error) {
+          console.error(`[autoLinkAllDepartmentObjectives] Error linking ID ${deptObj.id}: ${error.message}`);
+        }
+      } else {
+        notFound++;
+        notFoundKPIs.add(deptKPI);
+        
+        // Track statistics
+        const deptName = deptObj.department_name;
+        if (!departmentStats.has(deptName)) {
+          departmentStats.set(deptName, { linked: 0, notFound: 0 });
+        }
+        departmentStats.get(deptName).notFound++;
+      }
+    }
+    
+    console.log(`[autoLinkAllDepartmentObjectives] Completed: ${linked} linked, ${notFound} not found`);
+    
+    return {
+      success: true,
+      message: `Auto-linked ${linked} out of ${totalToLink} department objectives`,
+      linked,
+      notFound,
+      total: totalToLink,
+      departmentStats: Object.fromEntries(departmentStats),
+      notFoundKPIs: Array.from(notFoundKPIs).slice(0, 20) // Return first 20 for reference
+    };
+  } catch (error) {
+    console.error('[autoLinkAllDepartmentObjectives] Error:', error.message);
+    throw error;
+  }
 }
 
 // RASCI Functions
