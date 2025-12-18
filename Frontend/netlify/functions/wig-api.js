@@ -1005,40 +1005,63 @@ async function getMonthlyData(pool, kpi, departmentId) {
 }
 
 async function createOrUpdateMonthlyData(pool, body) {
-  const request = pool.request();
-  request.input('kpi', sql.NVarChar, body.kpi);
-  request.input('department_id', sql.Int, body.department_id);
-  request.input('month', sql.Date, body.month);
-  request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
-  request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+  try {
+    // Validate required fields
+    if (!body.kpi || !body.department_id || !body.month) {
+      throw new Error('Missing required fields: kpi, department_id, or month');
+    }
 
-  // Update without OUTPUT clause due to triggers
-  const updateResult = await request.query(`
-    UPDATE department_monthly_data
-    SET target_value = @target_value,
-        actual_value = @actual_value,
-        updated_at = GETDATE()
-    WHERE kpi = @kpi AND department_id = @department_id AND month = @month
-  `);
+    const request = pool.request();
+    request.input('kpi', sql.NVarChar, body.kpi);
+    request.input('department_id', sql.Int, body.department_id);
+    request.input('month', sql.Date, body.month);
+    request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
+    request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-  if (updateResult.rowsAffected[0] === 0) {
-    // Insert new record
-    await request.query(`
-      INSERT INTO department_monthly_data (kpi, department_id, month, target_value, actual_value)
-      VALUES (@kpi, @department_id, @month, @target_value, @actual_value)
+    // Update without OUTPUT clause due to triggers
+    const updateResult = await request.query(`
+      UPDATE department_monthly_data
+      SET target_value = @target_value,
+          actual_value = @actual_value,
+          updated_at = GETDATE()
+      WHERE kpi = @kpi AND department_id = @department_id AND month = @month
     `);
+
+    if (updateResult.rowsAffected[0] === 0) {
+      // Insert new record - need a new request for INSERT
+      const insertRequest = pool.request();
+      insertRequest.input('kpi', sql.NVarChar, body.kpi);
+      insertRequest.input('department_id', sql.Int, body.department_id);
+      insertRequest.input('month', sql.Date, body.month);
+      insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
+      insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+      
+      await insertRequest.query(`
+        INSERT INTO department_monthly_data (kpi, department_id, month, target_value, actual_value)
+        VALUES (@kpi, @department_id, @month, @target_value, @actual_value)
+      `);
+    }
+
+    // Select the updated/inserted record
+    const selectRequest = pool.request();
+    selectRequest.input('kpi', sql.NVarChar, body.kpi);
+    selectRequest.input('department_id', sql.Int, body.department_id);
+    selectRequest.input('month', sql.Date, body.month);
+    const selectResult = await selectRequest.query(`
+      SELECT * FROM department_monthly_data 
+      WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+    `);
+
+    if (selectResult.recordset.length === 0) {
+      throw new Error('Failed to retrieve saved monthly data');
+    }
+
+    return selectResult.recordset[0];
+  } catch (error) {
+    console.error('[createOrUpdateMonthlyData] Error:', error.message);
+    console.error('[createOrUpdateMonthlyData] Body:', JSON.stringify(body));
+    console.error('[createOrUpdateMonthlyData] Error stack:', error.stack);
+    throw error;
   }
-
-  // Select the updated/inserted record
-  const selectRequest = pool.request();
-  selectRequest.input('kpi', sql.NVarChar, body.kpi);
-  selectRequest.input('department_id', sql.Int, body.department_id);
-  selectRequest.input('month', sql.Date, body.month);
-  const selectResult = await selectRequest.query(`
-    SELECT * FROM department_monthly_data 
-    WHERE kpi = @kpi AND department_id = @department_id AND month = @month
-  `);
-
-  return selectResult.recordset[0];
 }
 
