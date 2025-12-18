@@ -28,8 +28,12 @@ import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import type { DepartmentObjective, MainPlanObjective, Department } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 interface MEEKPI {
   id?: number;
@@ -60,15 +64,21 @@ export default function DepartmentObjectives() {
     main_objective_id: null,
   });
   
-  // Filter states for Excel-like filtering
-  const [filters, setFilters] = useState({
-    kpi: '',
-    activity: '',
-    type: '',
-    target: '',
-    responsible: '',
-    mov: '',
-    mainObjective: '',
+  // Filter states for Excel-like filtering (arrays of selected values)
+  const [filters, setFilters] = useState<{
+    kpi: string[];
+    activity: string[];
+    type: string[];
+    responsible: string[];
+    mov: string[];
+    mainObjective: string[];
+  }>({
+    kpi: [],
+    activity: [],
+    type: [],
+    responsible: [],
+    mov: [],
+    mainObjective: [],
   });
   
   const navigate = useNavigate();
@@ -262,30 +272,173 @@ export default function DepartmentObjectives() {
 
   const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
 
-  // Filter objectives based on filter values
+  // Get unique values for each column
+  const uniqueKPIs = Array.from(new Set(objectives.map(o => o.kpi).filter(Boolean))).sort();
+  const uniqueActivities = Array.from(new Set(objectives.map(o => o.activity).filter(Boolean))).sort();
+  const uniqueTypes = Array.from(new Set(objectives.map(o => o.type).filter(Boolean))).sort();
+  const uniqueResponsible = Array.from(new Set(objectives.map(o => o.responsible_person).filter(Boolean))).sort();
+  const uniqueMOVs = Array.from(new Set(objectives.map(o => o.mov).filter(Boolean))).sort();
+  
+  // Get unique main objectives (with labels)
+  const mainObjectiveMap = new Map<string, string>();
+  objectives.forEach(obj => {
+    if (obj.main_objective_id) {
+      const mainObj = mainObjectives.find(o => o.id === obj.main_objective_id);
+      if (mainObj) {
+        const label = `${mainObj.objective} - ${mainObj.kpi}`;
+        mainObjectiveMap.set(label, label);
+      }
+    } else {
+      mainObjectiveMap.set('Not linked', 'Not linked');
+    }
+  });
+  const uniqueMainObjectives = Array.from(mainObjectiveMap.values()).sort();
+
+  // Filter objectives based on selected filter values
   const filteredObjectives = objectives.filter((obj) => {
-    const matchesKPI = !filters.kpi || obj.kpi.toLowerCase().includes(filters.kpi.toLowerCase());
-    const matchesActivity = !filters.activity || obj.activity.toLowerCase().includes(filters.activity.toLowerCase());
-    const matchesType = !filters.type || obj.type === filters.type || (filters.type === '' && !obj.type);
-    const matchesTarget = !filters.target || obj.activity_target.toString().includes(filters.target);
-    const matchesResponsible = !filters.responsible || obj.responsible_person.toLowerCase().includes(filters.responsible.toLowerCase());
-    const matchesMOV = !filters.mov || obj.mov.toLowerCase().includes(filters.mov.toLowerCase());
-    const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
-    const matchesMainObjective = !filters.mainObjective || 
-      (mainObj && (mainObj.objective.toLowerCase().includes(filters.mainObjective.toLowerCase()) || 
-                   mainObj.kpi.toLowerCase().includes(filters.mainObjective.toLowerCase()))) ||
-      (!obj.main_objective_id && filters.mainObjective.toLowerCase().includes('not linked'));
+    const matchesKPI = filters.kpi.length === 0 || filters.kpi.includes(obj.kpi);
+    const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
+    const matchesType = filters.type.length === 0 || filters.type.includes(obj.type || '');
+    const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(obj.responsible_person);
+    const matchesMOV = filters.mov.length === 0 || filters.mov.includes(obj.mov);
     
-    return matchesKPI && matchesActivity && matchesType && matchesTarget && 
+    // Match main objective
+    let mainObjLabel = 'Not linked';
+    if (obj.main_objective_id) {
+      const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
+      if (mainObj) {
+        mainObjLabel = `${mainObj.objective} - ${mainObj.kpi}`;
+      }
+    }
+    const matchesMainObjective = filters.mainObjective.length === 0 || filters.mainObjective.includes(mainObjLabel);
+    
+    return matchesKPI && matchesActivity && matchesType && 
            matchesResponsible && matchesMOV && matchesMainObjective;
   });
 
-  // Get unique values for filter dropdowns
-  const uniqueTypes = Array.from(new Set(objectives.map(o => o.type).filter(Boolean)));
-  const uniqueMainObjectives = mainObjectives.map(o => o.objective);
+  const toggleFilterValue = (filterKey: keyof typeof filters, value: string) => {
+    const currentValues = filters[filterKey];
+    if (currentValues.includes(value)) {
+      setFilters({ ...filters, [filterKey]: currentValues.filter(v => v !== value) });
+    } else {
+      setFilters({ ...filters, [filterKey]: [...currentValues, value] });
+    }
+  };
 
   const clearFilter = (filterKey: keyof typeof filters) => {
-    setFilters({ ...filters, [filterKey]: '' });
+    setFilters({ ...filters, [filterKey]: [] });
+  };
+
+  // Excel-like filter component
+  const ExcelFilter = ({ 
+    column, 
+    uniqueValues, 
+    selectedValues, 
+    onToggle, 
+    onClear,
+    getLabel 
+  }: { 
+    column: string;
+    uniqueValues: string[];
+    selectedValues: string[];
+    onToggle: (value: string) => void;
+    onClear: () => void;
+    getLabel?: (value: string) => string;
+  }) => {
+    const hasFilter = selectedValues.length > 0;
+    
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-6 w-6 p-0 ${hasFilter ? 'text-primary' : ''}`}
+            aria-label={`Filter ${column}`}
+            title={`Filter ${column}`}
+          >
+            <Filter className="h-3 w-3" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-0" align="start">
+          <div className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">Filter by {column}</span>
+              {hasFilter && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={onClear}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+            <Separator />
+            {uniqueValues.length > 0 && (
+              <div className="px-2 py-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-full text-xs justify-start"
+                  onClick={() => {
+                    if (selectedValues.length === uniqueValues.length) {
+                      onClear();
+                    } else {
+                      uniqueValues.forEach(value => {
+                        if (!selectedValues.includes(value)) {
+                          onToggle(value);
+                        }
+                      });
+                    }
+                  }}
+                >
+                  {selectedValues.length === uniqueValues.length ? 'Deselect All' : 'Select All'}
+                </Button>
+              </div>
+            )}
+            <Separator />
+            <ScrollArea className="h-64">
+              <div className="p-2 space-y-2">
+                {uniqueValues.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-2">No values available</div>
+                ) : (
+                  uniqueValues.map((value) => {
+                    const label = getLabel ? getLabel(value) : value;
+                    const isChecked = selectedValues.includes(value);
+                    return (
+                      <div key={value} className="flex items-center space-x-2 py-1">
+                        <Checkbox
+                          id={`filter-${column}-${value}`}
+                          checked={isChecked}
+                          onCheckedChange={() => onToggle(value)}
+                        />
+                        <label
+                          htmlFor={`filter-${column}-${value}`}
+                          className="text-sm cursor-pointer flex-1 truncate"
+                          title={label}
+                        >
+                          {label}
+                        </label>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+            {hasFilter && (
+              <>
+                <Separator />
+                <div className="text-xs text-muted-foreground px-2 pb-2">
+                  {selectedValues.length} of {uniqueValues.length} selected
+                </div>
+              </>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
   };
 
   const handleAddMEKPI = async () => {
@@ -404,183 +557,80 @@ export default function DepartmentObjectives() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>KPI</TableHead>
-                    <TableHead>Activity</TableHead>
-                    <TableHead>Type</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>KPI</span>
+                        <ExcelFilter
+                          column="KPI"
+                          uniqueValues={uniqueKPIs}
+                          selectedValues={filters.kpi}
+                          onToggle={(value) => toggleFilterValue('kpi', value)}
+                          onClear={() => clearFilter('kpi')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Activity</span>
+                        <ExcelFilter
+                          column="Activity"
+                          uniqueValues={uniqueActivities}
+                          selectedValues={filters.activity}
+                          onToggle={(value) => toggleFilterValue('activity', value)}
+                          onClear={() => clearFilter('activity')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Type</span>
+                        <ExcelFilter
+                          column="Type"
+                          uniqueValues={uniqueTypes}
+                          selectedValues={filters.type}
+                          onToggle={(value) => toggleFilterValue('type', value)}
+                          onClear={() => clearFilter('type')}
+                        />
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right">Target</TableHead>
-                    <TableHead>Responsible</TableHead>
-                    <TableHead>MOV</TableHead>
-                    <TableHead>Main Objective</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Responsible</span>
+                        <ExcelFilter
+                          column="Responsible"
+                          uniqueValues={uniqueResponsible}
+                          selectedValues={filters.responsible}
+                          onToggle={(value) => toggleFilterValue('responsible', value)}
+                          onClear={() => clearFilter('responsible')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>MOV</span>
+                        <ExcelFilter
+                          column="MOV"
+                          uniqueValues={uniqueMOVs}
+                          selectedValues={filters.mov}
+                          onToggle={(value) => toggleFilterValue('mov', value)}
+                          onClear={() => clearFilter('mov')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Main Objective</span>
+                        <ExcelFilter
+                          column="Main Objective"
+                          uniqueValues={uniqueMainObjectives}
+                          selectedValues={filters.mainObjective}
+                          onToggle={(value) => toggleFilterValue('mainObjective', value)}
+                          onClear={() => clearFilter('mainObjective')}
+                        />
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                  {/* Filter Row */}
-                  <TableRow className="bg-muted/50">
-                    <TableHead>
-                      <div className="relative">
-                        <Input
-                          placeholder="Filter KPI..."
-                          value={filters.kpi}
-                          onChange={(e) => setFilters({ ...filters, kpi: e.target.value })}
-                          className="h-8 text-xs"
-                        />
-                        {filters.kpi && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-8 w-8 p-0"
-                            onClick={() => clearFilter('kpi')}
-                            aria-label="Clear KPI filter"
-                            title="Clear KPI filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="relative">
-                        <Input
-                          placeholder="Filter Activity..."
-                          value={filters.activity}
-                          onChange={(e) => setFilters({ ...filters, activity: e.target.value })}
-                          className="h-8 text-xs"
-                        />
-                        {filters.activity && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-8 w-8 p-0"
-                            onClick={() => clearFilter('activity')}
-                            aria-label="Clear Activity filter"
-                            title="Clear Activity filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="flex gap-1">
-                        <Select
-                          value={filters.type || 'all'}
-                          onValueChange={(value) => setFilters({ ...filters, type: value === 'all' ? '' : value })}
-                        >
-                          <SelectTrigger className="h-8 text-xs flex-1">
-                            <SelectValue placeholder="Filter Type..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Types</SelectItem>
-                            {uniqueTypes.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {filters.type && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => clearFilter('type')}
-                            aria-label="Clear Type filter"
-                            title="Clear Type filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="relative">
-                        <Input
-                          placeholder="Filter Target..."
-                          value={filters.target}
-                          onChange={(e) => setFilters({ ...filters, target: e.target.value })}
-                          className="h-8 text-xs text-right"
-                          type="number"
-                        />
-                        {filters.target && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-8 w-8 p-0"
-                            onClick={() => clearFilter('target')}
-                            aria-label="Clear Target filter"
-                            title="Clear Target filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="relative">
-                        <Input
-                          placeholder="Filter Responsible..."
-                          value={filters.responsible}
-                          onChange={(e) => setFilters({ ...filters, responsible: e.target.value })}
-                          className="h-8 text-xs"
-                        />
-                        {filters.responsible && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-8 w-8 p-0"
-                            onClick={() => clearFilter('responsible')}
-                            aria-label="Clear Responsible filter"
-                            title="Clear Responsible filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="relative">
-                        <Input
-                          placeholder="Filter MOV..."
-                          value={filters.mov}
-                          onChange={(e) => setFilters({ ...filters, mov: e.target.value })}
-                          className="h-8 text-xs"
-                        />
-                        {filters.mov && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-8 w-8 p-0"
-                            onClick={() => clearFilter('mov')}
-                            aria-label="Clear MOV filter"
-                            title="Clear MOV filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="relative">
-                        <Input
-                          placeholder="Filter Main Objective..."
-                          value={filters.mainObjective}
-                          onChange={(e) => setFilters({ ...filters, mainObjective: e.target.value })}
-                          className="h-8 text-xs"
-                        />
-                        {filters.mainObjective && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-8 w-8 p-0"
-                            onClick={() => clearFilter('mainObjective')}
-                            aria-label="Clear Main Objective filter"
-                            title="Clear Main Objective filter"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
