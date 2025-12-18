@@ -460,22 +460,36 @@ export default function DepartmentObjectives() {
                       </div>
                     </TableHead>
                     <TableHead>
-                      <Select
-                        value={filters.type}
-                        onValueChange={(value) => setFilters({ ...filters, type: value })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Filter Type..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">All Types</SelectItem>
-                          {uniqueTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-1">
+                        <Select
+                          value={filters.type || 'all'}
+                          onValueChange={(value) => setFilters({ ...filters, type: value === 'all' ? '' : value })}
+                        >
+                          <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue placeholder="Filter Type..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Types</SelectItem>
+                            {uniqueTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {filters.type && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => clearFilter('type')}
+                            aria-label="Clear Type filter"
+                            title="Clear Type filter"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </TableHead>
                     <TableHead>
                       <div className="relative">
