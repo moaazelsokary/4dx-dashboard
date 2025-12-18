@@ -138,10 +138,17 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
         
         if (hasAnyRole) {
           // Save if at least one role is assigned
-          promises.push(createOrUpdateRASCI(rasci));
+          promises.push(createOrUpdateRASCI(rasci).catch(err => {
+            console.error(`Error saving RASCI for ${rasci.department}:`, err);
+            throw err;
+          }));
         } else if (rasci.id && rasci.id > 0) {
           // Delete if no roles assigned AND record exists in database (has id > 0)
-          promises.push(deleteRASCI(rasci.id));
+          console.log(`Deleting RASCI record id=${rasci.id} for department ${rasci.department}`);
+          promises.push(deleteRASCI(rasci.id).catch(err => {
+            console.error(`Error deleting RASCI id=${rasci.id}:`, err);
+            throw err;
+          }));
         }
         // If no roles and no id (id === 0), it was never saved, so do nothing
       });

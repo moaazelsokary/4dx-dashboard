@@ -645,9 +645,10 @@ async function createOrUpdateRASCI(pool, body) {
         const deleteRequest = pool.request();
         deleteRequest.input('kpi', sql.NVarChar, body.kpi);
         deleteRequest.input('department', sql.NVarChar, body.department);
-        await deleteRequest.query(
+        const deleteResult = await deleteRequest.query(
           'DELETE FROM rasci_metrics WHERE kpi = @kpi AND department = @department'
         );
+        console.log(`[RASCI] Deleted record via createOrUpdateRASCI: kpi=${body.kpi}, department=${body.department}, rows affected: ${deleteResult.rowsAffected[0]}`);
         return { deleted: true, id: existing.recordset[0].id };
       } else {
         // Update existing record
@@ -730,11 +731,18 @@ async function createOrUpdateRASCI(pool, body) {
 }
 
 async function deleteRASCI(pool, id) {
-  const request = pool.request();
-  request.input('id', sql.Int, id);
+  try {
+    const request = pool.request();
+    request.input('id', sql.Int, id);
 
-  const result = await request.query('DELETE FROM rasci_metrics WHERE id = @id');
-  return { success: true, deletedRows: result.rowsAffected[0] };
+    const result = await request.query('DELETE FROM rasci_metrics WHERE id = @id');
+    console.log(`[RASCI] Deleted record id=${id}, rows affected: ${result.rowsAffected[0]}`);
+    return { success: true, deletedRows: result.rowsAffected[0], id: id };
+  } catch (error) {
+    console.error('[RASCI] Error in deleteRASCI:', error);
+    console.error('[RASCI] Error message:', error.message);
+    throw error;
+  }
 }
 
 // KPI Functions
