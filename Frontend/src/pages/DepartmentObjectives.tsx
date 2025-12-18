@@ -546,10 +546,16 @@ export default function DepartmentObjectives() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Department Objectives</CardTitle>
-              <Button onClick={() => setIsAdding(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Objective
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsAddingME(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add M&E KPI
+                </Button>
+                <Button onClick={() => setIsAdding(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Objective
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -634,6 +640,43 @@ export default function DepartmentObjectives() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* Add M&E KPI Row */}
+                  {isAddingME && (
+                    <TableRow className="bg-muted/30">
+                      <TableCell colSpan={2} className="font-medium">
+                        <Input
+                          value={newMEKPI.me_kpi}
+                          onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
+                          placeholder="M&E KPI"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">M&E</Badge>
+                      </TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                      <TableCell>
+                        <Input
+                          value={newMEKPI.mov}
+                          onChange={(e) => setNewMEKPI({ ...newMEKPI, mov: e.target.value })}
+                          placeholder="MOV"
+                        />
+                      </TableCell>
+                      <TableCell></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" size="sm" onClick={handleAddMEKPI}>
+                            Save
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setIsAddingME(false)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+
+                  {/* Add Regular Objective Row */}
                   {isAdding && (
                     <TableRow>
                       <TableCell>
@@ -719,7 +762,42 @@ export default function DepartmentObjectives() {
                     </TableRow>
                   )}
 
-                  {filteredObjectives.map((obj) => (
+                  {/* Display M&E KPIs in the table */}
+                  {filteredObjectives
+                    .filter(obj => obj.type === 'M&E' || obj.activity?.startsWith('[M&E]'))
+                    .map((obj) => (
+                      <TableRow key={obj.id} className="bg-muted/20">
+                        <TableCell colSpan={2} className="font-medium">
+                          {obj.type === 'M&E' || obj.activity?.startsWith('[M&E]') ? obj.kpi : obj.activity?.replace('[M&E] ', '')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">M&E</Badge>
+                        </TableCell>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>{obj.mov}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => setDeletingId(obj.id)}
+                              aria-label={`Delete M&E KPI ${obj.id}`}
+                              title="Delete M&E KPI"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                  {/* Display regular objectives */}
+                  {filteredObjectives
+                    .filter(obj => obj.type !== 'M&E' && !obj.activity?.startsWith('[M&E]'))
+                    .map((obj) => (
                     <TableRow key={obj.id}>
                       {editingId === obj.id ? (
                         <>
@@ -838,96 +916,6 @@ export default function DepartmentObjectives() {
                       )}
                     </TableRow>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* M&E KPIs Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>M&E KPIs</CardTitle>
-              <Button onClick={() => setIsAddingME(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add M&E KPI
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="border rounded-md overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>M&E KPI</TableHead>
-                    <TableHead>MOV</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isAddingME && (
-                    <TableRow>
-                      <TableCell>
-                        <Input
-                          value={newMEKPI.me_kpi}
-                          onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
-                          placeholder="M&E KPI"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={newMEKPI.mov}
-                          onChange={(e) => setNewMEKPI({ ...newMEKPI, mov: e.target.value })}
-                          placeholder="MOV"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button type="button" size="sm" onClick={handleAddMEKPI}>
-                            Save
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => setIsAddingME(false)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  
-                  {/* Display M&E KPIs (objectives with type='M&E' or activity starting with '[M&E]') */}
-                  {filteredObjectives
-                    .filter(obj => obj.type === 'M&E' || obj.activity?.startsWith('[M&E]'))
-                    .map((obj) => (
-                      <TableRow key={obj.id}>
-                        <TableCell className="font-medium">
-                          {obj.type === 'M&E' || obj.activity?.startsWith('[M&E]') ? obj.kpi : obj.activity?.replace('[M&E] ', '')}
-                        </TableCell>
-                        <TableCell>{obj.mov}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              type="button" 
-                              size="sm" 
-                              variant="outline" 
-                              onClick={() => setDeletingId(obj.id)}
-                              aria-label={`Delete M&E KPI ${obj.id}`}
-                              title="Delete M&E KPI"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  
-                  {filteredObjectives.filter(obj => obj.type === 'M&E' || obj.activity?.startsWith('[M&E]')).length === 0 && !isAddingME && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                        No M&E KPIs found. Click "Add M&E KPI" to add one.
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </TableBody>
               </Table>
             </div>
