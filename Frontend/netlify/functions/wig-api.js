@@ -584,9 +584,18 @@ async function getRASCI(pool, queryParams) {
   try {
     const request = pool.request();
     const result = await request.query('SELECT * FROM rasci_metrics ORDER BY kpi, department');
-    return result.recordset;
+    return result.recordset || [];
   } catch (error) {
     console.error('[RASCI] Error in getRASCI:', error);
+    console.error('[RASCI] Error message:', error.message);
+    console.error('[RASCI] Error code:', error.code);
+    
+    // If table doesn't exist, return empty array instead of error
+    if (error.message && error.message.includes('Invalid object name')) {
+      console.warn('[RASCI] Table rasci_metrics does not exist. Returning empty array.');
+      return [];
+    }
+    
     throw error;
   }
 }
