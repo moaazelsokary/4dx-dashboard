@@ -73,6 +73,7 @@ export default function DepartmentObjectives() {
     kpi: string[];
     activity: string[];
     type: string[];
+    target: string[];
     responsible: string[];
     mov: string[];
     mainObjective: string[];
@@ -80,10 +81,14 @@ export default function DepartmentObjectives() {
     kpi: [],
     activity: [],
     type: [],
+    target: [],
     responsible: [],
     mov: [],
     mainObjective: [],
   });
+
+  // Track which filter popover is currently open
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
 
   // Filter states for RASCI Metrics table
   const [rasciFilters, setRasciFilters] = useState<{
@@ -316,6 +321,7 @@ export default function DepartmentObjectives() {
     const matchesKPI = filters.kpi.length === 0 || filters.kpi.includes(obj.kpi);
     const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
     const matchesType = filters.type.length === 0 || filters.type.includes(obj.type || '');
+    const matchesTarget = filters.target.length === 0 || filters.target.includes(obj.activity_target.toString());
     const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(obj.responsible_person);
     const matchesMOV = filters.mov.length === 0 || filters.mov.includes(obj.mov);
     
@@ -329,7 +335,7 @@ export default function DepartmentObjectives() {
     }
     const matchesMainObjective = filters.mainObjective.length === 0 || filters.mainObjective.includes(mainObjLabel);
     
-    return matchesKPI && matchesActivity && matchesType && 
+    return matchesKPI && matchesActivity && matchesType && matchesTarget &&
            matchesResponsible && matchesMOV && matchesMainObjective;
   });
 
@@ -467,7 +473,7 @@ export default function DepartmentObjectives() {
     const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelections.includes(v));
     
     return (
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
@@ -731,6 +737,7 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.activity}
                           onToggle={(value) => toggleFilterValue('activity', value)}
                           onClear={() => clearFilter('activity')}
+                          filterId="activity"
                         />
                       </div>
                     </TableHead>
@@ -743,6 +750,7 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.type}
                           onToggle={(value) => toggleFilterValue('type', value)}
                           onClear={() => clearFilter('type')}
+                          filterId="type"
                         />
                       </div>
                     </TableHead>
@@ -756,6 +764,7 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.responsible}
                           onToggle={(value) => toggleFilterValue('responsible', value)}
                           onClear={() => clearFilter('responsible')}
+                          filterId="responsible"
                         />
                       </div>
                     </TableHead>
@@ -768,6 +777,7 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.mov}
                           onToggle={(value) => toggleFilterValue('mov', value)}
                           onClear={() => clearFilter('mov')}
+                          filterId="mov"
                         />
                       </div>
                     </TableHead>
@@ -780,6 +790,7 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.mainObjective}
                           onToggle={(value) => toggleFilterValue('mainObjective', value)}
                           onClear={() => clearFilter('mainObjective')}
+                          filterId="mainObjective"
                         />
                       </div>
                     </TableHead>
@@ -1126,6 +1137,7 @@ export default function DepartmentObjectives() {
                           selectedValues={rasciFilters.role}
                           onToggle={(value) => toggleRasciFilterValue('role', value)}
                           onClear={() => clearRasciFilter('role')}
+                          filterId="rasci-role"
                         />
                       </div>
                     </TableHead>
@@ -1138,6 +1150,7 @@ export default function DepartmentObjectives() {
                           selectedValues={rasciFilters.exists}
                           onToggle={(value) => toggleRasciFilterValue('exists', value)}
                           onClear={() => clearRasciFilter('exists')}
+                          filterId="rasci-exists"
                         />
                       </div>
                     </TableHead>
