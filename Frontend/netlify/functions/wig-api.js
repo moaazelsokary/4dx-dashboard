@@ -530,19 +530,22 @@ async function getDepartmentObjectivesByKPI(pool, kpi) {
 }
 
 async function createDepartmentObjective(pool, body) {
-  // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
-  const kpiDelimiter = '||';
-  const kpiList = body.kpi.includes(kpiDelimiter) 
-    ? body.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
-    : [body.kpi];
-  
-  for (const kpi of kpiList) {
-    const rasciCheck = pool.request();
-    rasciCheck.input('kpi', sql.NVarChar, kpi);
-    const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
+  // Skip RASCI validation for M&E type objectives
+  if (body.type !== 'M&E') {
+    // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
+    const kpiDelimiter = '||';
+    const kpiList = body.kpi.includes(kpiDelimiter) 
+      ? body.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
+      : [body.kpi];
     
-    if (rasciResult.recordset[0].count === 0) {
-      throw new Error(`KPI "${kpi}" must have at least one RASCI assignment`);
+    for (const kpi of kpiList) {
+      const rasciCheck = pool.request();
+      rasciCheck.input('kpi', sql.NVarChar, kpi);
+      const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
+      
+      if (rasciResult.recordset[0].count === 0) {
+        throw new Error(`KPI "${kpi}" must have at least one RASCI assignment`);
+      }
     }
   }
 
