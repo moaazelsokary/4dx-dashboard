@@ -124,6 +124,8 @@ export default function KPISelector({
           aria-expanded={open}
           className="w-full justify-between"
           disabled={disabled || kpis.length === 0}
+          aria-label={selectedKPIs.length === 0 ? placeholder : `Selected ${selectedKPIs.length} KPI${selectedKPIs.length > 1 ? 's' : ''}`}
+          title={selectedKPIs.length === 0 ? placeholder : selectedKPIs.join(', ')}
         >
           <span className={cn("truncate", selectedKPIs.length === 0 && "text-muted-foreground")}>
             {displayText}
