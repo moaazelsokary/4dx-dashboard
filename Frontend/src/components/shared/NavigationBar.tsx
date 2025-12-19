@@ -26,7 +26,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
 
   // Determine which pages user can access
   const canAccessWIGPlan = isCEO || isDepartment;
-  const canAccessMainPlan = isCEO;
+  const canAccessMainPlan = isCEO || isDepartment; // Department users can view (read-only)
   const canAccessDepartmentObjectives = isCEO || isDepartment;
   const canAccessSummary = isCEO || isOperations;
   const canAccessProjectDetails = isCEO || isOperations;
@@ -41,8 +41,8 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
 
   return (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
-      {/* Strategic Plan 2026 - CEO/admin always, others only on main-plan page */}
-      {canAccessMainPlan && (isCEO || showWIGTabs) && (
+      {/* Strategic Plan 2026 - CEO/admin and department users */}
+      {canAccessMainPlan && (isCEO || isDepartment || showWIGTabs) && (
         <Button
           variant={location.pathname === '/main-plan' && (activeTab === 'hierarchy' || !showWIGTabs) ? 'default' : 'outline'}
           size="sm"
@@ -60,8 +60,8 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* Table - CEO/admin always, others only on main-plan page */}
-      {canAccessMainPlan && (isCEO || showWIGTabs) && (
+      {/* Table - CEO/admin and department users */}
+      {canAccessMainPlan && (isCEO || isDepartment || showWIGTabs) && (
         <Button
           variant={location.pathname === '/main-plan' && activeTab === 'table' ? 'default' : 'outline'}
           size="sm"
@@ -79,8 +79,8 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* RASCI - CEO/admin always, others only on main-plan page */}
-      {canAccessMainPlan && (isCEO || showWIGTabs) && (
+      {/* RASCI - CEO/admin and department users */}
+      {canAccessMainPlan && (isCEO || isDepartment || showWIGTabs) && (
         <Button
           variant={location.pathname === '/main-plan' && activeTab === 'rasci' ? 'default' : 'outline'}
           size="sm"
