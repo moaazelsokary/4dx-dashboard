@@ -24,6 +24,12 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
     }
   };
 
+  // Debug: Log the first M&E KPI to see what fields are available
+  if (meKPIs.length > 0) {
+    console.log('First M&E KPI object:', meKPIs[0]);
+    console.log('Available keys:', Object.keys(meKPIs[0]));
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
@@ -60,51 +66,76 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {meKPIs.map((meObj) => (
+                {meKPIs.map((meObj) => {
+                  // Handle potential case sensitivity issues - try both lowercase and original case
+                  const getValue = (key: string) => {
+                    // Try lowercase first (most common)
+                    if (meObj[key as keyof typeof meObj] !== undefined) {
+                      return meObj[key as keyof typeof meObj];
+                    }
+                    // Try with different casing
+                    const keys = Object.keys(meObj);
+                    const foundKey = keys.find(k => k.toLowerCase() === key.toLowerCase());
+                    if (foundKey) {
+                      return (meObj as any)[foundKey];
+                    }
+                    return undefined;
+                  };
+
+                  return (
                   <TableRow key={meObj.id}>
                     <TableCell className="font-medium">{meObj.kpi}</TableCell>
                     <TableCell className="text-right">
-                      {meObj.me_target !== null && meObj.me_target !== undefined
-                        ? meObj.me_target.toLocaleString()
-                        : '—'}
+                      {(() => {
+                        const value = getValue('me_target');
+                        return value !== null && value !== undefined
+                          ? Number(value).toLocaleString()
+                          : '—';
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
-                      {meObj.me_actual !== null && meObj.me_actual !== undefined
-                        ? meObj.me_actual.toLocaleString()
-                        : '—'}
+                      {(() => {
+                        const value = getValue('me_actual');
+                        return value !== null && value !== undefined
+                          ? Number(value).toLocaleString()
+                          : '—';
+                      })()}
                     </TableCell>
                     <TableCell>
-                      {meObj.me_frequency || '—'}
+                      {getValue('me_frequency') || '—'}
                     </TableCell>
                     <TableCell>
-                      {formatDate(meObj.me_start_date)}
+                      {formatDate(getValue('me_start_date') as string)}
                     </TableCell>
                     <TableCell>
-                      {formatDate(meObj.me_end_date)}
+                      {formatDate(getValue('me_end_date') as string)}
                     </TableCell>
                     <TableCell>
-                      {meObj.me_tool || '—'}
+                      {getValue('me_tool') || '—'}
                     </TableCell>
                     <TableCell>
-                      {meObj.me_responsible || '—'}
+                      {getValue('me_responsible') || '—'}
                     </TableCell>
                     <TableCell>
                       {meObj.mov || '—'}
                     </TableCell>
                     <TableCell>
-                      {meObj.me_folder_link ? (
-                        <a
-                          href={meObj.me_folder_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1"
-                        >
-                          <Folder className="h-4 w-4" />
-                          folder
-                        </a>
-                      ) : (
-                        '—'
-                      )}
+                      {(() => {
+                        const folderLink = getValue('me_folder_link');
+                        return folderLink ? (
+                          <a
+                            href={folderLink as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Folder className="h-4 w-4" />
+                            folder
+                          </a>
+                        ) : (
+                          '—'
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -119,7 +150,8 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
