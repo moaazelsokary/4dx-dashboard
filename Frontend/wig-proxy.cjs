@@ -226,19 +226,22 @@ app.post('/api/wig/department-objectives', async (req, res) => {
   try {
     const pool = await getPool();
     
-    // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
-    const kpiDelimiter = '||';
-    const kpiList = req.body.kpi.includes(kpiDelimiter) 
-      ? req.body.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
-      : [req.body.kpi];
-    
-    for (const kpi of kpiList) {
-      const rasciCheck = pool.request();
-      rasciCheck.input('kpi', sql.NVarChar, kpi);
-      const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
+    // Skip RASCI validation for M&E type objectives
+    if (req.body.type !== 'M&E') {
+      // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
+      const kpiDelimiter = '||';
+      const kpiList = req.body.kpi.includes(kpiDelimiter) 
+        ? req.body.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
+        : [req.body.kpi];
       
-      if (rasciResult.recordset[0].count === 0) {
-        return res.status(400).json({ error: `KPI "${kpi}" must have at least one RASCI assignment` });
+      for (const kpi of kpiList) {
+        const rasciCheck = pool.request();
+        rasciCheck.input('kpi', sql.NVarChar, kpi);
+        const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
+        
+        if (rasciResult.recordset[0].count === 0) {
+          return res.status(400).json({ error: `KPI "${kpi}" must have at least one RASCI assignment` });
+        }
       }
     }
 
