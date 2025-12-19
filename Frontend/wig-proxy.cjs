@@ -408,12 +408,22 @@ app.get('/api/wig/rasci/department/:departmentCode', async (req, res) => {
     }
     
     // Create a set of KPIs that exist in department objectives (normalized for matching)
+    // Handle multiple KPIs per objective (delimited by ||)
+    const kpiDelimiter = '||';
     const existingKPIs = new Set();
     for (const row of deptObjResult.recordset) {
-      const normalized = normalizeKPI(row.kpi).trim().toLowerCase();
-      existingKPIs.add(normalized);
-      // Also add original for exact matches
-      existingKPIs.add(row.kpi.trim().toLowerCase());
+      // Split multiple KPIs if they exist
+      const kpiList = row.kpi.includes(kpiDelimiter) 
+        ? row.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
+        : [row.kpi];
+      
+      // Add each KPI (both normalized and original) to the set
+      for (const kpi of kpiList) {
+        const normalized = normalizeKPI(kpi).trim().toLowerCase();
+        existingKPIs.add(normalized);
+        // Also add original for exact matches
+        existingKPIs.add(kpi.trim().toLowerCase());
+      }
     }
     
     // Format the results with role string and existence check
@@ -441,17 +451,28 @@ app.get('/api/wig/rasci/department/:departmentCode', async (req, res) => {
         exists_in_activities = true;
       }
       // Check if any department objective KPI matches (fuzzy match)
+      // Handle multiple KPIs per objective (delimited by ||)
       else {
         for (const deptKPI of deptObjResult.recordset) {
-          const normalizedDeptKPI = normalizeKPI(deptKPI.kpi).trim().toLowerCase();
-          const originalDeptKPI = deptKPI.kpi.trim().toLowerCase();
+          // Split multiple KPIs if they exist
+          const kpiList = deptKPI.kpi.includes(kpiDelimiter) 
+            ? deptKPI.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
+            : [deptKPI.kpi];
           
-          // Exact normalized match
-          if (normalizedRASCIKPI === normalizedDeptKPI || originalRASCIKPI === normalizedDeptKPI ||
-              normalizedRASCIKPI === originalDeptKPI || originalRASCIKPI === originalDeptKPI) {
-            exists_in_activities = true;
-            break;
+          // Check each KPI in the list
+          for (const kpi of kpiList) {
+            const normalizedDeptKPI = normalizeKPI(kpi).trim().toLowerCase();
+            const originalDeptKPI = kpi.trim().toLowerCase();
+            
+            // Exact normalized match
+            if (normalizedRASCIKPI === normalizedDeptKPI || originalRASCIKPI === normalizedDeptKPI ||
+                normalizedRASCIKPI === originalDeptKPI || originalRASCIKPI === originalDeptKPI) {
+              exists_in_activities = true;
+              break;
+            }
           }
+          
+          if (exists_in_activities) break;
         }
       }
       
