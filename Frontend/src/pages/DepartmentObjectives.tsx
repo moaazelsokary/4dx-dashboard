@@ -844,20 +844,6 @@ export default function DepartmentObjectives() {
                         />
                       </div>
                     </TableHead>
-                    <TableHead>
-                      <div className="flex items-center gap-2">
-                        <span>Main Objective</span>
-                        <ExcelFilter
-                          filterId="mainObjective"
-                          column="Main Objective"
-                          uniqueValues={uniqueMainObjectives}
-                          selectedValues={filters.mainObjective}
-                          onToggle={(value) => toggleFilterValue('mainObjective', value)}
-                          onClear={() => clearFilter('mainObjective')}
-                          filterId="mainObjective"
-                        />
-                      </div>
-                    </TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1009,24 +995,6 @@ export default function DepartmentObjectives() {
                               onChange={(e) => setEditData({ ...editData, mov: e.target.value })}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Select
-                              value={editData.main_objective_id?.toString() || obj.main_objective_id?.toString() || 'none'}
-                              onValueChange={(value) => setEditData({ ...editData, main_objective_id: value === 'none' ? null : parseInt(value) })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Link to Main Objective" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                {mainObjectives.map((mainObj) => (
-                                  <SelectItem key={mainObj.id} value={mainObj.id.toString()}>
-                                    {mainObj.objective} - {mainObj.kpi}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               <Button type="button" size="sm" onClick={saveEdit}>
@@ -1058,11 +1026,6 @@ export default function DepartmentObjectives() {
                           <TableCell className="text-right">{obj.activity_target.toLocaleString()}</TableCell>
                           <TableCell>{obj.responsible_person}</TableCell>
                           <TableCell>{obj.mov}</TableCell>
-                          <TableCell>
-                            {obj.main_objective_id
-                              ? mainObjectives.find((o) => o.id === obj.main_objective_id)?.objective || 'N/A'
-                              : 'Not linked'}
-                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               <Button 
