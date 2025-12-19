@@ -84,6 +84,17 @@ export default function DepartmentObjectives() {
     mov: [],
     mainObjective: [],
   });
+
+  // Filter states for RASCI Metrics table
+  const [rasciFilters, setRasciFilters] = useState<{
+    kpi: string[];
+    role: string[];
+    exists: string[];
+  }>({
+    kpi: [],
+    role: [],
+    exists: [],
+  });
   
   const navigate = useNavigate();
 
@@ -969,27 +980,53 @@ export default function DepartmentObjectives() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>KPI</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Exists in your activities</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>KPI</span>
+                        <ExcelFilter
+                          column="KPI"
+                          uniqueValues={uniqueRasciKPIs}
+                          selectedValues={rasciFilters.kpi}
+                          onToggle={(value) => toggleRasciFilterValue('kpi', value)}
+                          onClear={() => clearRasciFilter('kpi')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Role</span>
+                        <ExcelFilter
+                          column="Role"
+                          uniqueValues={uniqueRasciRoles}
+                          selectedValues={rasciFilters.role}
+                          onToggle={(value) => toggleRasciFilterValue('role', value)}
+                          onClear={() => clearRasciFilter('role')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        <span>Exists in your activities</span>
+                        <ExcelFilter
+                          column="Exists in your activities"
+                          uniqueValues={uniqueRasciExists}
+                          selectedValues={rasciFilters.exists}
+                          onToggle={(value) => toggleRasciFilterValue('exists', value)}
+                          onClear={() => clearRasciFilter('exists')}
+                        />
+                      </div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(() => {
-                    // Filter to show only rows with roles (not blank)
-                    const rasciWithRoles = rasciMetrics.filter(rasci => rasci.role && rasci.role !== '—' && rasci.role.trim() !== '');
-                    
-                    if (rasciWithRoles.length === 0) {
-                      return (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                            No RASCI metrics with assigned roles found for this department.
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
-                    
-                    return rasciWithRoles.map((rasci) => (
+                  {filteredRasciMetrics.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                        No RASCI metrics with assigned roles found for this department.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredRasciMetrics.map((rasci) => (
                       <TableRow key={rasci.id}>
                         <TableCell className="font-medium">{rasci.kpi}</TableCell>
                         <TableCell>
@@ -1003,8 +1040,8 @@ export default function DepartmentObjectives() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ));
-                  })()}
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
