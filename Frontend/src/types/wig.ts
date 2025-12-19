@@ -42,7 +42,7 @@ export interface DepartmentObjective {
   department_code?: string;
   kpi: string;
   activity: string;
-  type: 'Direct' | 'In direct' | 'M&E' | '';
+  type: 'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '';
   activity_target: number;
   responsible_person: string;
   mov: string;

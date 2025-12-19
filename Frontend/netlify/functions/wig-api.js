@@ -516,7 +516,7 @@ async function getDepartmentObjectives(pool, queryParams) {
     const result = await request.query(query);
     // Log first record to debug - especially for M&E type objectives
     if (result.recordset.length > 0) {
-      const meObjectives = result.recordset.filter(r => r.type === 'M&E');
+      const meObjectives = result.recordset.filter(r => r.type === 'M&E' || r.type === 'M&E MOV');
       if (meObjectives.length > 0) {
         console.log('[getDepartmentObjectives] Found M&E objectives:', meObjectives.length);
         console.log('[getDepartmentObjectives] First M&E objective keys:', Object.keys(meObjectives[0]));
@@ -558,8 +558,8 @@ async function getDepartmentObjectivesByKPI(pool, kpi) {
 }
 
 async function createDepartmentObjective(pool, body) {
-  // Skip RASCI validation for M&E type objectives
-  if (body.type !== 'M&E') {
+  // Skip RASCI validation for M&E type objectives (including M&E MOV)
+  if (body.type !== 'M&E' && body.type !== 'M&E MOV') {
     // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
     const kpiDelimiter = '||';
     const kpiList = body.kpi.includes(kpiDelimiter) 
@@ -597,8 +597,8 @@ async function createDepartmentObjective(pool, body) {
   request.input('responsible_person', sql.NVarChar, body.responsible_person);
   request.input('mov', sql.NVarChar, body.mov);
 
-  // Only include M&E fields if type is M&E and columns exist
-  const isME = body.type === 'M&E';
+  // Only include M&E fields if type is M&E or M&E MOV and columns exist
+  const isME = body.type === 'M&E' || body.type === 'M&E MOV';
   let meFields = '';
   let meValues = '';
   let meInputs = '';
