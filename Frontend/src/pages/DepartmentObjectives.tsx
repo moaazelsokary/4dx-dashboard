@@ -298,6 +298,7 @@ export default function DepartmentObjectives() {
   const uniqueKPIs = Array.from(new Set(objectives.map(o => o.kpi).filter(Boolean))).sort();
   const uniqueActivities = Array.from(new Set(objectives.map(o => o.activity).filter(Boolean))).sort();
   const uniqueTypes = Array.from(new Set(objectives.map(o => o.type).filter(Boolean))).sort();
+  const uniqueTargets = Array.from(new Set(objectives.map(o => o.activity_target.toString()).filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b));
   const uniqueResponsible = Array.from(new Set(objectives.map(o => o.responsible_person).filter(Boolean))).sort();
   const uniqueMOVs = Array.from(new Set(objectives.map(o => o.mov).filter(Boolean))).sort();
   
