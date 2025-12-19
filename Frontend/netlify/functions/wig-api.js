@@ -261,6 +261,9 @@ exports.handler = async function (event, context) {
     } else if (path.startsWith('/rasci/kpi/') && method === 'GET') {
       const kpi = decodeURIComponent(path.split('/kpi/')[1]);
       result = await getRASCIByKPI(pool, kpi);
+    } else if (path.startsWith('/rasci/department/') && method === 'GET') {
+      const departmentCode = decodeURIComponent(path.split('/department/')[1]);
+      result = await getRASCIByDepartment(pool, departmentCode);
     } else if (path === '/rasci' && method === 'POST') {
       result = await createOrUpdateRASCI(pool, body);
     } else if (path.startsWith('/rasci/') && method === 'DELETE') {
@@ -1014,6 +1017,117 @@ async function deleteRASCI(pool, id) {
   } catch (error) {
     console.error('[RASCI] Error in deleteRASCI:', error);
     console.error('[RASCI] Error message:', error.message);
+    throw error;
+  }
+}
+
+async function getRASCIByDepartment(pool, departmentCode) {
+  try {
+    // First, get the department name from the code
+    const deptRequest = pool.request();
+    deptRequest.input('code', sql.NVarChar, departmentCode);
+    const deptResult = await deptRequest.query('SELECT id, name FROM departments WHERE code = @code');
+    
+    if (!deptResult.recordset || deptResult.recordset.length === 0) {
+      return [];
+    }
+    
+    const department = deptResult.recordset[0];
+    const departmentName = department.name;
+    const departmentId = department.id;
+    
+    // Normalize department name for RASCI lookup (handle DFR case)
+    let normalizedDeptName = departmentName;
+    if (departmentCode === 'DFR' || departmentName.toLowerCase().includes('direct fundraising') ||
+        departmentName.toLowerCase().includes('resource mobilization')) {
+      normalizedDeptName = 'Direct Fundraising / Resource Mobilization';
+    }
+    
+    // Get all RASCI metrics for this department
+    const rasciRequest = pool.request();
+    rasciRequest.input('department', sql.NVarChar, normalizedDeptName);
+    rasciRequest.input('oldDepartment', sql.NVarChar, 'DFR');
+    const rasciResult = await rasciRequest.query(`
+      SELECT * FROM rasci_metrics 
+      WHERE department = @department 
+         OR (department = @oldDepartment AND @department = 'Direct Fundraising / Resource Mobilization')
+      ORDER BY kpi
+    `);
+    
+    // Get all department objectives for this department to check existence
+    const deptObjRequest = pool.request();
+    deptObjRequest.input('department_id', sql.Int, departmentId);
+    const deptObjResult = await deptObjRequest.query(`
+      SELECT DISTINCT kpi FROM department_objectives 
+      WHERE department_id = @department_id
+    `);
+    
+    // Create a set of KPIs that exist in department objectives (normalized for matching)
+    const existingKPIs = new Set();
+    for (const row of deptObjResult.recordset) {
+      const normalized = normalizeKPI(row.kpi).trim().toLowerCase();
+      existingKPIs.add(normalized);
+      // Also add original for exact matches
+      existingKPIs.add(row.kpi.trim().toLowerCase());
+    }
+    
+    // Format the results with role string and existence check
+    const formattedResults = rasciResult.recordset.map(rasci => {
+      // Build role string
+      const roles = [];
+      if (rasci.responsible) roles.push('R');
+      if (rasci.accountable) roles.push('A');
+      if (rasci.supportive) roles.push('S');
+      if (rasci.consulted) roles.push('C');
+      if (rasci.informed) roles.push('I');
+      const role = roles.join(', ');
+      
+      // Check if KPI exists in department objectives
+      const normalizedRASCIKPI = normalizeKPI(rasci.kpi).trim().toLowerCase();
+      const originalRASCIKPI = rasci.kpi.trim().toLowerCase();
+      
+      let exists_in_activities = false;
+      // Check normalized match
+      if (existingKPIs.has(normalizedRASCIKPI)) {
+        exists_in_activities = true;
+      }
+      // Check original match
+      else if (existingKPIs.has(originalRASCIKPI)) {
+        exists_in_activities = true;
+      }
+      // Check if any department objective KPI matches (fuzzy match)
+      else {
+        for (const deptKPI of deptObjResult.recordset) {
+          const normalizedDeptKPI = normalizeKPI(deptKPI.kpi).trim().toLowerCase();
+          const originalDeptKPI = deptKPI.kpi.trim().toLowerCase();
+          
+          // Exact normalized match
+          if (normalizedRASCIKPI === normalizedDeptKPI || originalRASCIKPI === normalizedDeptKPI ||
+              normalizedRASCIKPI === originalDeptKPI || originalRASCIKPI === originalDeptKPI) {
+            exists_in_activities = true;
+            break;
+          }
+        }
+      }
+      
+      return {
+        ...rasci,
+        role: role || '—',
+        exists_in_activities: exists_in_activities
+      };
+    });
+    
+    return formattedResults;
+  } catch (error) {
+    console.error('[RASCI] Error in getRASCIByDepartment:', error);
+    console.error('[RASCI] Error message:', error.message);
+    
+    // If table doesn't exist, return empty array instead of error
+    if (error.message && error.message.includes('Invalid object name')) {
+      console.warn('[RASCI] Table rasci_metrics does not exist. Returning empty array.');
+      return [];
+    }
+    
     throw error;
   }
 }

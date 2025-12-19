@@ -22,6 +22,11 @@ export interface RASCI {
   updated_at?: string;
 }
 
+export interface RASCIWithExistence extends RASCI {
+  role: string; // Comma-separated roles like "R, A, S"
+  exists_in_activities: boolean;
+}
+
 export interface Department {
   id: number;
   name: string;

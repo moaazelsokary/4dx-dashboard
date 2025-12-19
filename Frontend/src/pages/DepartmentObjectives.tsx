@@ -23,11 +23,12 @@ import {
   deleteDepartmentObjective,
   getMainObjectives,
   getDepartments,
+  getRASCIByDepartment,
 } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
-import type { DepartmentObjective, MainPlanObjective, Department } from '@/types/wig';
+import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
 import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -46,6 +47,7 @@ export default function DepartmentObjectives() {
   const [objectives, setObjectives] = useState<DepartmentObjective[]>([]);
   const [mainObjectives, setMainObjectives] = useState<MainPlanObjective[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [rasciMetrics, setRasciMetrics] = useState<RASCIWithExistence[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -111,15 +113,17 @@ export default function DepartmentObjectives() {
       const userObj = JSON.parse(userData);
       const departmentCode = userObj.departments?.[0];
       
-      const [deptObjectives, mainObjs, depts] = await Promise.all([
+      const [deptObjectives, mainObjs, depts, rasciData] = await Promise.all([
         getDepartmentObjectives({ department_code: departmentCode }),
         getMainObjectives(),
         getDepartments(),
+        getRASCIByDepartment(departmentCode),
       ]);
       
       setObjectives(deptObjectives);
       setMainObjectives(mainObjs);
       setDepartments(depts);
+      setRasciMetrics(rasciData);
     } catch (err) {
       toast({
         title: 'Error',
@@ -853,6 +857,51 @@ export default function DepartmentObjectives() {
                       )}
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* RASCI Metrics Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>RASCI Metrics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-md overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>KPI</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Exists in your activities</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rasciMetrics.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                        No RASCI metrics found for this department.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rasciMetrics.map((rasci) => (
+                      <TableRow key={rasci.id}>
+                        <TableCell className="font-medium">{rasci.kpi}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{rasci.role}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {rasci.exists_in_activities ? (
+                            <Badge variant="default" className="bg-green-600">Exists</Badge>
+                          ) : (
+                            <Badge variant="destructive">Not exists</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
