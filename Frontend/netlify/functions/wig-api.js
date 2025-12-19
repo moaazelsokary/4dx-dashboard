@@ -584,7 +584,7 @@ async function updateDepartmentObjective(pool, id, body) {
     const currentRequest = pool.request();
     currentRequest.input('id', sql.Int, id);
     const currentResult = await currentRequest.query(`
-      SELECT kpi, main_objective_id FROM department_objectives WHERE id = @id
+      SELECT kpi, main_objective_id, type FROM department_objectives WHERE id = @id
     `);
 
     if (currentResult.recordset.length === 0) {
@@ -593,10 +593,13 @@ async function updateDepartmentObjective(pool, id, body) {
 
     const currentKpi = currentResult.recordset[0].kpi;
     const currentMainObjectiveId = currentResult.recordset[0].main_objective_id;
+    const currentType = currentResult.recordset[0].type;
     const newKpi = body.kpi;
+    const newType = body.type !== undefined ? body.type : currentType;
 
     // Only validate RASCI if KPI is actually being changed - handle multiple KPIs separated by ||
-    if (newKpi !== undefined && newKpi !== currentKpi) {
+    // Skip RASCI validation for M&E type objectives
+    if (newKpi !== undefined && newKpi !== currentKpi && newType !== 'M&E') {
       const kpiDelimiter = '||';
       const kpiList = newKpi.includes(kpiDelimiter) 
         ? newKpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
