@@ -975,14 +975,21 @@ export default function DepartmentObjectives() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rasciMetrics.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                        No RASCI metrics found for this department.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rasciMetrics.map((rasci) => (
+                  {(() => {
+                    // Filter to show only rows with roles (not blank)
+                    const rasciWithRoles = rasciMetrics.filter(rasci => rasci.role && rasci.role !== '—' && rasci.role.trim() !== '');
+                    
+                    if (rasciWithRoles.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                            No RASCI metrics with assigned roles found for this department.
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                    
+                    return rasciWithRoles.map((rasci) => (
                       <TableRow key={rasci.id}>
                         <TableCell className="font-medium">{rasci.kpi}</TableCell>
                         <TableCell>
@@ -996,8 +1003,8 @@ export default function DepartmentObjectives() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
+                    ));
+                  })()}
                 </TableBody>
               </Table>
             </div>
