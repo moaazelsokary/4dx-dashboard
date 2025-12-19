@@ -80,7 +80,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
           <Layers className="w-3 h-3 mr-1" />
-          Main Plan
+          {location.pathname === '/department-objectives' ? 'Strategic Plan 2026' : 'Main Plan'}
         </Button>
       )}
 
@@ -93,7 +93,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
           <Users className="w-3 h-3 mr-1" />
-          My Objectives
+          {isCEO ? 'Department Objectives' : 'My Objectives'}
         </Button>
       )}
 
