@@ -14,9 +14,10 @@ import { Loader2, Save, Trash2, Users, CheckCircle2, XCircle, AlertCircle, Info,
 interface RASCIEditorProps {
   kpi?: string;
   onKPIChange?: (kpi: string) => void;
+  readOnly?: boolean;
 }
 
-export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEditorProps) {
+export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = false }: RASCIEditorProps) {
   const [selectedKPI, setSelectedKPI] = useState<string>(initialKPI || '');
   const [kpis, setKpis] = useState<string[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -296,23 +297,25 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
                 </SelectContent>
               </Select>
             </div>
-            <Button 
-              onClick={saveRASCI} 
-              disabled={saving || !selectedKPI}
-              className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save
-                </>
-              )}
-            </Button>
+            {!readOnly && (
+              <Button 
+                onClick={saveRASCI} 
+                disabled={saving || !selectedKPI}
+                className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -418,6 +421,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
                           <div className={`p-2 rounded-lg border-2 transition-all duration-200 ${getRASCIColor('R', rasci.responsible)}`}>
                             <Checkbox
                               checked={rasci.responsible}
+                              disabled={readOnly}
                               onCheckedChange={(checked) => updateRASCI(dept.name, 'responsible', checked === true)}
                               className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                             />
@@ -429,6 +433,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
                           <div className={`p-2 rounded-lg border-2 transition-all duration-200 ${getRASCIColor('A', rasci.accountable)}`}>
                             <Checkbox
                               checked={rasci.accountable}
+                              disabled={readOnly}
                               onCheckedChange={(checked) => updateRASCI(dept.name, 'accountable', checked === true)}
                               className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
                             />
@@ -440,6 +445,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
                           <div className={`p-2 rounded-lg border-2 transition-all duration-200 ${getRASCIColor('S', rasci.supportive)}`}>
                             <Checkbox
                               checked={rasci.supportive}
+                              disabled={readOnly}
                               onCheckedChange={(checked) => updateRASCI(dept.name, 'supportive', checked === true)}
                               className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
                             />
@@ -451,6 +457,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
                           <div className={`p-2 rounded-lg border-2 transition-all duration-200 ${getRASCIColor('C', rasci.consulted)}`}>
                             <Checkbox
                               checked={rasci.consulted}
+                              disabled={readOnly}
                               onCheckedChange={(checked) => updateRASCI(dept.name, 'consulted', checked === true)}
                               className="data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600"
                             />
@@ -462,6 +469,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange }: RASCIEdito
                           <div className={`p-2 rounded-lg border-2 transition-all duration-200 ${getRASCIColor('I', rasci.informed)}`}>
                             <Checkbox
                               checked={rasci.informed}
+                              disabled={readOnly}
                               onCheckedChange={(checked) => updateRASCI(dept.name, 'informed', checked === true)}
                               className="data-[state=checked]:bg-teal-600 data-[state=checked]:border-teal-600"
                             />

@@ -26,6 +26,7 @@ import {
 interface MainPlanTableProps {
   objectives: MainPlanObjective[];
   onUpdate: () => void;
+  readOnly?: boolean;
 }
 
 // Helper function to extract or generate numbers from hierarchy
@@ -93,7 +94,7 @@ function generateNumbers(objectives: MainPlanObjective[]): Map<number, { objNum:
   return numbers;
 }
 
-export default function MainPlanTable({ objectives, onUpdate }: MainPlanTableProps) {
+export default function MainPlanTable({ objectives, onUpdate, readOnly = false }: MainPlanTableProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -493,16 +494,18 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
 
   return (
     <>
-      <div className="mb-6">
-        <Button 
-          type="button"
-          onClick={() => setIsAdding(true)}
-          className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Objective
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="mb-6">
+          <Button 
+            type="button"
+            onClick={() => setIsAdding(true)}
+            className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Objective
+          </Button>
+        </div>
+      )}
 
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -576,7 +579,9 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                     />
                   </div>
                 </TableHead>
-                <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
+                {!readOnly && (
+                  <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
           <TableBody>
@@ -838,30 +843,32 @@ export default function MainPlanTable({ objectives, onUpdate }: MainPlanTablePro
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            type="button"
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => startEdit(obj)}
-                            className="hover:bg-primary/10 hover:border-primary/50 transition-all"
-                            aria-label={`Edit objective ${kpiNum || obj.id}`}
-                            title="Edit objective"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            type="button"
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => setDeletingId(obj.id)}
-                            className="hover:bg-destructive/10 hover:border-destructive/50 hover:text-destructive transition-all"
-                            aria-label={`Delete objective ${kpiNum || obj.id}`}
-                            title="Delete objective"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        {!readOnly && (
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              type="button"
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => startEdit(obj)}
+                              className="hover:bg-primary/10 hover:border-primary/50 transition-all"
+                              aria-label={`Edit objective ${kpiNum || obj.id}`}
+                              title="Edit objective"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              type="button"
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => setDeletingId(obj.id)}
+                              className="hover:bg-destructive/10 hover:border-destructive/50 hover:text-destructive transition-all"
+                              aria-label={`Delete objective ${kpiNum || obj.id}`}
+                              title="Delete objective"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </>
                   )}
