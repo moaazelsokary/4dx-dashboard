@@ -26,8 +26,20 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
 
   // Debug: Log the first M&E KPI to see what fields are available
   if (meKPIs.length > 0) {
+    console.log('=== M&E KPIs Modal Debug ===');
+    console.log('Number of M&E KPIs:', meKPIs.length);
     console.log('First M&E KPI object:', meKPIs[0]);
     console.log('Available keys:', Object.keys(meKPIs[0]));
+    console.log('me_target:', meKPIs[0].me_target, typeof meKPIs[0].me_target);
+    console.log('me_actual:', meKPIs[0].me_actual, typeof meKPIs[0].me_actual);
+    console.log('me_frequency:', meKPIs[0].me_frequency, typeof meKPIs[0].me_frequency);
+    console.log('me_start_date:', meKPIs[0].me_start_date, typeof meKPIs[0].me_start_date);
+    console.log('me_end_date:', meKPIs[0].me_end_date, typeof meKPIs[0].me_end_date);
+    console.log('me_tool:', meKPIs[0].me_tool, typeof meKPIs[0].me_tool);
+    console.log('me_responsible:', meKPIs[0].me_responsible, typeof meKPIs[0].me_responsible);
+    console.log('me_folder_link:', meKPIs[0].me_folder_link, typeof meKPIs[0].me_folder_link);
+    console.log('mov:', meKPIs[0].mov, typeof meKPIs[0].mov);
+    console.log('===========================');
   }
 
   return (
@@ -67,75 +79,51 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
               </TableHeader>
               <TableBody>
                 {meKPIs.map((meObj) => {
-                  // Handle potential case sensitivity issues - try both lowercase and original case
-                  const getValue = (key: string) => {
-                    // Try lowercase first (most common)
-                    if (meObj[key as keyof typeof meObj] !== undefined) {
-                      return meObj[key as keyof typeof meObj];
-                    }
-                    // Try with different casing
-                    const keys = Object.keys(meObj);
-                    const foundKey = keys.find(k => k.toLowerCase() === key.toLowerCase());
-                    if (foundKey) {
-                      return (meObj as any)[foundKey];
-                    }
-                    return undefined;
-                  };
-
                   return (
                   <TableRow key={meObj.id}>
                     <TableCell className="font-medium">{meObj.kpi}</TableCell>
                     <TableCell className="text-right">
-                      {(() => {
-                        const value = getValue('me_target');
-                        return value !== null && value !== undefined
-                          ? Number(value).toLocaleString()
-                          : '—';
-                      })()}
+                      {meObj.me_target !== null && meObj.me_target !== undefined
+                        ? Number(meObj.me_target).toLocaleString()
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {(() => {
-                        const value = getValue('me_actual');
-                        return value !== null && value !== undefined
-                          ? Number(value).toLocaleString()
-                          : '—';
-                      })()}
+                      {meObj.me_actual !== null && meObj.me_actual !== undefined
+                        ? Number(meObj.me_actual).toLocaleString()
+                        : '—'}
                     </TableCell>
                     <TableCell>
-                      {getValue('me_frequency') || '—'}
+                      {meObj.me_frequency || '—'}
                     </TableCell>
                     <TableCell>
-                      {formatDate(getValue('me_start_date') as string)}
+                      {formatDate(meObj.me_start_date)}
                     </TableCell>
                     <TableCell>
-                      {formatDate(getValue('me_end_date') as string)}
+                      {formatDate(meObj.me_end_date)}
                     </TableCell>
                     <TableCell>
-                      {getValue('me_tool') || '—'}
+                      {meObj.me_tool || '—'}
                     </TableCell>
                     <TableCell>
-                      {getValue('me_responsible') || '—'}
+                      {meObj.me_responsible || '—'}
                     </TableCell>
                     <TableCell>
                       {meObj.mov || '—'}
                     </TableCell>
                     <TableCell>
-                      {(() => {
-                        const folderLink = getValue('me_folder_link');
-                        return folderLink ? (
-                          <a
-                            href={folderLink as string}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Folder className="h-4 w-4" />
-                            folder
-                          </a>
-                        ) : (
-                          '—'
-                        );
-                      })()}
+                      {meObj.me_folder_link ? (
+                        <a
+                          href={meObj.me_folder_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Folder className="h-4 w-4" />
+                          folder
+                        </a>
+                      ) : (
+                        '—'
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
