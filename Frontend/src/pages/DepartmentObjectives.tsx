@@ -1037,8 +1037,8 @@ export default function DepartmentObjectives() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={newData.type || 'blank'}
-                          onValueChange={(value: 'Direct' | 'In direct' | 'M&E' | 'blank') => setNewData({ ...newData, type: value === 'blank' ? '' : value })}
+                          value={newData.type || 'Direct'}
+                          onValueChange={(value: 'Direct' | 'In direct') => setNewData({ ...newData, type: value })}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -1046,8 +1046,6 @@ export default function DepartmentObjectives() {
                           <SelectContent>
                             <SelectItem value="Direct">Direct</SelectItem>
                             <SelectItem value="In direct">In direct</SelectItem>
-                            <SelectItem value="M&E">M&E</SelectItem>
-                            <SelectItem value="blank">Blank</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
