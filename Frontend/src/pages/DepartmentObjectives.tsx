@@ -1254,33 +1254,25 @@ export default function DepartmentObjectives() {
                     {/* Display M&E KPIs for this objective */}
                     {expandedMEObjectives.has(obj.id) && meKPIsForObjective.map((meObj) => (
                       <TableRow key={meObj.id} className="bg-muted/20">
-                        <TableCell colSpan={2} className="font-medium pl-8">
-                          <div className="space-y-1">
-                            <div>{meObj.kpi}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {meObj.me_frequency && <span>Frequency: {meObj.me_frequency}</span>}
-                              {meObj.me_start_date && meObj.me_end_date && (
-                                <span className="ml-2">
-                                  {new Date(meObj.me_start_date).toLocaleDateString()} - {new Date(meObj.me_end_date).toLocaleDateString()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {meObj.me_tool && <span>Tool: {meObj.me_tool}</span>}
-                              {meObj.me_responsible && <span className="ml-2">Responsible: {meObj.me_responsible}</span>}
-                            </div>
+                        <TableCell className="font-medium pl-8">
+                          {meObj.kpi}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 text-xs">
+                            {meObj.me_frequency && <div><strong>Frequency:</strong> {meObj.me_frequency}</div>}
+                            {meObj.me_start_date && <div><strong>Start:</strong> {new Date(meObj.me_start_date).toLocaleDateString()}</div>}
+                            {meObj.me_end_date && <div><strong>End:</strong> {new Date(meObj.me_end_date).toLocaleDateString()}</div>}
+                            {meObj.me_tool && <div><strong>Tool:</strong> {meObj.me_tool}</div>}
+                            {meObj.me_actual !== null && meObj.me_actual !== undefined && (
+                              <div><strong>Actual:</strong> {meObj.me_actual.toLocaleString()}</div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">M&E</Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="space-y-1">
-                            <div className="text-xs text-muted-foreground">Target</div>
-                            <div>{meObj.me_target?.toLocaleString() || '—'}</div>
-                            <div className="text-xs text-muted-foreground mt-1">Actual</div>
-                            <div>{meObj.me_actual?.toLocaleString() || '—'}</div>
-                          </div>
+                          {meObj.me_target !== null && meObj.me_target !== undefined ? meObj.me_target.toLocaleString() : '—'}
                         </TableCell>
                         <TableCell>
                           {meObj.me_responsible || '—'}
@@ -1293,7 +1285,7 @@ export default function DepartmentObjectives() {
                                 href={meObj.me_folder_link} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="text-primary hover:underline flex items-center gap-1 text-xs"
+                                className="text-primary hover:underline flex items-center gap-1 text-xs mt-1"
                               >
                                 <Folder className="h-3 w-3" />
                                 folder
