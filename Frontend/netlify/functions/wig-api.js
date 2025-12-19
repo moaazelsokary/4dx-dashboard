@@ -611,11 +611,26 @@ async function createDepartmentObjective(pool, body) {
   // Try to insert with M&E fields, fallback to basic insert if columns don't exist
   let result;
   try {
-    result = await request.query(`
+    const insertQuery = `
       INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov${meFields})
       OUTPUT INSERTED.*
       VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${meValues})
-    `);
+    `;
+    console.log('[createDepartmentObjective] Insert query:', insertQuery);
+    console.log('[createDepartmentObjective] M&E fields:', meFields);
+    console.log('[createDepartmentObjective] M&E values:', meValues);
+    console.log('[createDepartmentObjective] Body M&E fields:', {
+      me_target: body.me_target,
+      me_actual: body.me_actual,
+      me_frequency: body.me_frequency,
+      me_start_date: body.me_start_date,
+      me_end_date: body.me_end_date,
+      me_tool: body.me_tool,
+      me_responsible: body.me_responsible,
+      me_folder_link: body.me_folder_link,
+    });
+    result = await request.query(insertQuery);
+    console.log('[createDepartmentObjective] Insert result:', result.recordset[0]);
   } catch (error) {
     // If M&E columns don't exist, try without them
     if (isME && error.message && error.message.includes('Invalid column name')) {
