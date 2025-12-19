@@ -30,7 +30,7 @@ import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -391,10 +391,83 @@ export default function DepartmentObjectives() {
     onClear: () => void;
     getLabel?: (value: string) => string;
   }) => {
+    const [open, setOpen] = useState(false);
+    const [tempSelections, setTempSelections] = useState<string[]>(selectedValues);
+    const [searchTerm, setSearchTerm] = useState('');
+    
     const hasFilter = selectedValues.length > 0;
     
+    // Update temp selections when popover opens or selectedValues change
+    useEffect(() => {
+      if (open) {
+        setTempSelections(selectedValues);
+      }
+    }, [open, selectedValues]);
+    
+    // Filter values based on search term
+    const filteredValues = uniqueValues.filter(value => {
+      const label = getLabel ? getLabel(value) : value;
+      return label.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+    
+    const handleToggle = (value: string) => {
+      if (tempSelections.includes(value)) {
+        setTempSelections(tempSelections.filter(v => v !== value));
+      } else {
+        setTempSelections([...tempSelections, value]);
+      }
+    };
+    
+    const handleSelectAll = () => {
+      if (tempSelections.length === filteredValues.length) {
+        // Deselect all filtered values
+        setTempSelections(tempSelections.filter(v => !filteredValues.includes(v)));
+      } else {
+        // Select all filtered values
+        const newSelections = [...tempSelections];
+        filteredValues.forEach(value => {
+          if (!newSelections.includes(value)) {
+            newSelections.push(value);
+          }
+        });
+        setTempSelections(newSelections);
+      }
+    };
+    
+    const handleApply = () => {
+      // Apply temporary selections
+      const currentSet = new Set(selectedValues);
+      const tempSet = new Set(tempSelections);
+      
+      // Remove values that are no longer selected
+      currentSet.forEach(value => {
+        if (!tempSet.has(value)) {
+          onToggle(value); // Toggle to remove
+        }
+      });
+      
+      // Add new values
+      tempSet.forEach(value => {
+        if (!currentSet.has(value)) {
+          onToggle(value); // Toggle to add
+        }
+      });
+      
+      setOpen(false);
+      setSearchTerm('');
+    };
+    
+    const handleClear = () => {
+      setTempSelections([]);
+      onClear();
+      setOpen(false);
+      setSearchTerm('');
+    };
+    
+    const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelections.includes(v));
+    
     return (
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
@@ -406,7 +479,7 @@ export default function DepartmentObjectives() {
             <Filter className="h-3 w-3" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start">
+        <PopoverContent className="w-64 p-0" align="start" onInteractOutside={(e) => e.preventDefault()}>
           <div className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">Filter by {column}</span>
@@ -415,50 +488,54 @@ export default function DepartmentObjectives() {
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs"
-                  onClick={onClear}
+                  onClick={handleClear}
                 >
                   Clear
                 </Button>
               )}
             </div>
             <Separator />
-            {uniqueValues.length > 0 && (
+            {/* Search Input */}
+            <div className="px-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
+                <Input
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-7 pl-7 text-xs"
+                />
+              </div>
+            </div>
+            {filteredValues.length > 0 && (
               <div className="px-2 py-1">
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 w-full text-xs justify-start"
-                  onClick={() => {
-                    if (selectedValues.length === uniqueValues.length) {
-                      onClear();
-                    } else {
-                      uniqueValues.forEach(value => {
-                        if (!selectedValues.includes(value)) {
-                          onToggle(value);
-                        }
-                      });
-                    }
-                  }}
+                  onClick={handleSelectAll}
                 >
-                  {selectedValues.length === uniqueValues.length ? 'Deselect All' : 'Select All'}
+                  {allFilteredSelected ? 'Deselect All' : 'Select All'}
                 </Button>
               </div>
             )}
             <Separator />
             <ScrollArea className="h-64">
               <div className="p-2 space-y-2">
-                {uniqueValues.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-2">No values available</div>
+                {filteredValues.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-2">
+                    {searchTerm ? 'No values match your search' : 'No values available'}
+                  </div>
                 ) : (
-                  uniqueValues.map((value) => {
+                  filteredValues.map((value) => {
                     const label = getLabel ? getLabel(value) : value;
-                    const isChecked = selectedValues.includes(value);
+                    const isChecked = tempSelections.includes(value);
                     return (
                       <div key={value} className="flex items-center space-x-2 py-1">
                         <Checkbox
                           id={`filter-${column}-${value}`}
                           checked={isChecked}
-                          onCheckedChange={() => onToggle(value)}
+                          onCheckedChange={() => handleToggle(value)}
                         />
                         <label
                           htmlFor={`filter-${column}-${value}`}
@@ -473,14 +550,33 @@ export default function DepartmentObjectives() {
                 )}
               </div>
             </ScrollArea>
-            {hasFilter && (
-              <>
-                <Separator />
-                <div className="text-xs text-muted-foreground px-2 pb-2">
-                  {selectedValues.length} of {uniqueValues.length} selected
-                </div>
-              </>
-            )}
+            <Separator />
+            <div className="flex items-center justify-between px-2 pb-2">
+              <div className="text-xs text-muted-foreground">
+                {tempSelections.length} of {uniqueValues.length} selected
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => {
+                    setOpen(false);
+                    setTempSelections(selectedValues);
+                    setSearchTerm('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={handleApply}
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>
