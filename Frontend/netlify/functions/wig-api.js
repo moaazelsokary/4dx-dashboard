@@ -492,7 +492,28 @@ async function deleteMainObjective(pool, id) {
 async function getDepartmentObjectives(pool, queryParams) {
   const request = pool.request();
   let query = `
-    SELECT do.*, d.name as department_name, d.code as department_code
+    SELECT 
+      do.id,
+      do.main_objective_id,
+      do.department_id,
+      do.kpi,
+      do.activity,
+      do.type,
+      do.activity_target,
+      do.responsible_person,
+      do.mov,
+      do.created_at,
+      do.updated_at,
+      do.me_target,
+      do.me_actual,
+      do.me_frequency,
+      do.me_start_date,
+      do.me_end_date,
+      do.me_tool,
+      do.me_responsible,
+      do.me_folder_link,
+      d.name as department_name, 
+      d.code as department_code
     FROM department_objectives do
     INNER JOIN departments d ON do.department_id = d.id
     WHERE 1=1
