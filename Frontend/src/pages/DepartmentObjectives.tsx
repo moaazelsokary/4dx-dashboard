@@ -737,20 +737,43 @@ export default function DepartmentObjectives() {
       const userData = localStorage.getItem('user');
       if (!userData) return;
       
-      const userObj = JSON.parse(userData);
-      const department = departments.find((d) => d.code === userObj.departments?.[0]);
+      // Get the parent objective to link the M&E KPI
+      const parentObjective = objectives.find((o) => o.id === parentObjectiveId);
       
-      if (!department) {
+      if (!parentObjective) {
         toast({
           title: 'Error',
-          description: 'Department not found',
+          description: 'Parent objective not found',
           variant: 'destructive',
         });
         return;
       }
 
-      // Get the parent objective to link the M&E KPI
-      const parentObjective = objectives.find((o) => o.id === parentObjectiveId);
+      // M&E KPIs should belong to the same department as their parent objective
+      // Use parent objective's department_code, or fall back to selectedDepartment for CEO/admin
+      const userObj = JSON.parse(userData);
+      let departmentCode: string | undefined = parentObjective.department_code;
+      
+      // If parent objective doesn't have department_code (shouldn't happen, but just in case)
+      // For CEO/admin, use selectedDepartment; for regular users, use their own department
+      if (!departmentCode) {
+        if (userObj.role === 'CEO') {
+          departmentCode = selectedDepartment || undefined;
+        } else {
+          departmentCode = userObj.departments?.[0];
+        }
+      }
+      
+      const department = departments.find((d) => d.code === departmentCode);
+      
+      if (!department) {
+        toast({
+          title: 'Error',
+          description: 'Department not found. Please select a department filter if you are CEO/admin.',
+          variant: 'destructive',
+        });
+        return;
+      }
       
       // Store M&E KPI as a department objective with parent reference in activity
       const meDataToSave = {
