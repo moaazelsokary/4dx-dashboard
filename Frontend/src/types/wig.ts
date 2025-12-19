@@ -48,6 +48,15 @@ export interface DepartmentObjective {
   mov: string;
   created_at?: string;
   updated_at?: string;
+  // M&E specific fields
+  me_target?: number | null;
+  me_actual?: number | null;
+  me_frequency?: string | null;
+  me_start_date?: string | null;
+  me_end_date?: string | null;
+  me_tool?: string | null;
+  me_responsible?: string | null;
+  me_folder_link?: string | null;
 }
 
 export interface MonthlyData {

@@ -30,7 +30,7 @@ import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -41,6 +41,14 @@ interface MEEKPI {
   id?: number;
   me_kpi: string;
   mov: string;
+  target?: number | null;
+  actual?: number | null;
+  frequency?: string;
+  start_date?: string;
+  end_date?: string;
+  tool?: string;
+  responsible?: string;
+  folder_link?: string;
 }
 
 const KPI_DELIMITER = '||'; // Delimiter for storing multiple KPIs
@@ -76,7 +84,19 @@ export default function DepartmentObjectives() {
   const [isAdding, setIsAdding] = useState(false);
   const [addingMEForObjective, setAddingMEForObjective] = useState<number | null>(null);
   const [meKPIs, setMeKPIs] = useState<MEEKPI[]>([]);
-  const [newMEKPI, setNewMEKPI] = useState<MEEKPI>({ me_kpi: '', mov: '' });
+  const [expandedMEObjectives, setExpandedMEObjectives] = useState<Set<number>>(new Set());
+  const [newMEKPI, setNewMEKPI] = useState<MEEKPI>({ 
+    me_kpi: '', 
+    mov: '',
+    target: null,
+    actual: null,
+    frequency: '',
+    start_date: '',
+    end_date: '',
+    tool: '',
+    responsible: '',
+    folder_link: ''
+  });
   const [editData, setEditData] = useState<Partial<DepartmentObjective>>({});
   const [newData, setNewData] = useState<Partial<DepartmentObjective & { kpi: string | string[] }>>({
     kpi: [],
@@ -629,6 +649,18 @@ export default function DepartmentObjectives() {
     );
   };
 
+  const toggleMEExpansion = (objectiveId: number) => {
+    setExpandedMEObjectives(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(objectiveId)) {
+        newSet.delete(objectiveId);
+      } else {
+        newSet.add(objectiveId);
+      }
+      return newSet;
+    });
+  };
+
   const handleAddMEKPI = async (parentObjectiveId: number) => {
     if (!newMEKPI.me_kpi || !newMEKPI.mov) {
       toast({
@@ -665,9 +697,17 @@ export default function DepartmentObjectives() {
         activity: `[M&E-PARENT:${parentObjectiveId}] ${newMEKPI.me_kpi}`, // Mark as M&E with parent reference
         type: 'M&E' as any, // Use M&E type
         activity_target: 0,
-        responsible_person: '',
+        responsible_person: newMEKPI.responsible || '',
         mov: newMEKPI.mov,
         main_objective_id: parentObjective?.main_objective_id || null, // Link to same main objective as parent
+        me_target: newMEKPI.target || null,
+        me_actual: newMEKPI.actual || null,
+        me_frequency: newMEKPI.frequency || null,
+        me_start_date: newMEKPI.start_date || null,
+        me_end_date: newMEKPI.end_date || null,
+        me_tool: newMEKPI.tool || null,
+        me_responsible: newMEKPI.responsible || null,
+        me_folder_link: newMEKPI.folder_link || null,
       });
       
       toast({
@@ -676,7 +716,18 @@ export default function DepartmentObjectives() {
       });
       
       setAddingMEForObjective(null);
-      setNewMEKPI({ me_kpi: '', mov: '' });
+      setNewMEKPI({ 
+        me_kpi: '', 
+        mov: '',
+        target: null,
+        actual: null,
+        frequency: '',
+        start_date: '',
+        end_date: '',
+        tool: '',
+        responsible: '',
+        folder_link: ''
+      });
       loadData(false);
     } catch (err) {
       toast({
@@ -1010,13 +1061,43 @@ export default function DepartmentObjectives() {
                           <TableCell>{obj.mov}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              {meKPIsForObjective.length > 0 && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleMEExpansion(obj.id)}
+                                  aria-label={expandedMEObjectives.has(obj.id) ? 'Collapse M&E KPIs' : 'Expand M&E KPIs'}
+                                  title={expandedMEObjectives.has(obj.id) ? 'Collapse M&E KPIs' : 'Expand M&E KPIs'}
+                                >
+                                  {expandedMEObjectives.has(obj.id) ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                  <Badge variant="secondary" className="ml-1">
+                                    {meKPIsForObjective.length}
+                                  </Badge>
+                                </Button>
+                              )}
                               <Button 
                                 type="button" 
                                 size="sm" 
                                 variant="ghost" 
                                 onClick={() => {
                                   setAddingMEForObjective(obj.id);
-                                  setNewMEKPI({ me_kpi: '', mov: '' });
+                                  setNewMEKPI({ 
+                                    me_kpi: '', 
+                                    mov: '',
+                                    target: null,
+                                    actual: null,
+                                    frequency: '',
+                                    start_date: '',
+                                    end_date: '',
+                                    tool: '',
+                                    responsible: '',
+                                    folder_link: ''
+                                  });
                                 }}
                                 aria-label={`Add M&E KPI for objective ${obj.id}`}
                                 title="Add M&E KPI"
@@ -1047,56 +1128,179 @@ export default function DepartmentObjectives() {
                     
                     {/* Add M&E KPI row for this objective */}
                     {addingMEForObjective === obj.id && (
-                      <TableRow className="bg-muted/30">
-                        <TableCell colSpan={2}>
-                          <Input
-                            value={newMEKPI.me_kpi}
-                            onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
-                            placeholder="M&E KPI"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">M&E</Badge>
-                        </TableCell>
-                        <TableCell></TableCell>
-                        <TableCell></TableCell>
-                        <TableCell>
-                          <Input
-                            value={newMEKPI.mov}
-                            onChange={(e) => setNewMEKPI({ ...newMEKPI, mov: e.target.value })}
-                            placeholder="MOV"
-                          />
-                        </TableCell>
-                        <TableCell></TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button type="button" size="sm" onClick={() => handleAddMEKPI(obj.id)}>
-                              Save
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => {
-                              setAddingMEForObjective(null);
-                              setNewMEKPI({ me_kpi: '', mov: '' });
-                            }}>
-                              Cancel
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <>
+                        <TableRow className="bg-muted/30">
+                          <TableCell colSpan={2}>
+                            <Input
+                              value={newMEKPI.me_kpi}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
+                              placeholder="M&E KPI"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">M&E</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={newMEKPI.target || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, target: parseFloat(e.target.value) || null })}
+                              placeholder="Target"
+                              className="w-24"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={newMEKPI.actual || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, actual: parseFloat(e.target.value) || null })}
+                              placeholder="Actual"
+                              className="w-24"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={newMEKPI.mov}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, mov: e.target.value })}
+                              placeholder="MOV"
+                            />
+                          </TableCell>
+                          <TableCell></TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button type="button" size="sm" onClick={() => handleAddMEKPI(obj.id)}>
+                                Save
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => {
+                                setAddingMEForObjective(null);
+                                setNewMEKPI({ 
+                                  me_kpi: '', 
+                                  mov: '',
+                                  target: null,
+                                  actual: null,
+                                  frequency: '',
+                                  start_date: '',
+                                  end_date: '',
+                                  tool: '',
+                                  responsible: '',
+                                  folder_link: ''
+                                });
+                              }}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-muted/30">
+                          <TableCell colSpan={2}>
+                            <Select
+                              value={newMEKPI.frequency || ''}
+                              onValueChange={(value) => setNewMEKPI({ ...newMEKPI, frequency: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Frequency" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Daily">Daily</SelectItem>
+                                <SelectItem value="Weekly">Weekly</SelectItem>
+                                <SelectItem value="Monthly">Monthly</SelectItem>
+                                <SelectItem value="Quarterly">Quarterly</SelectItem>
+                                <SelectItem value="Annually">Annually</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="date"
+                              value={newMEKPI.start_date || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, start_date: e.target.value })}
+                              placeholder="Start Date"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="date"
+                              value={newMEKPI.end_date || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, end_date: e.target.value })}
+                              placeholder="End Date"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={newMEKPI.tool || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, tool: e.target.value })}
+                              placeholder="Tool"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={newMEKPI.responsible || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, responsible: e.target.value })}
+                              placeholder="Responsible"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={newMEKPI.folder_link || ''}
+                              onChange={(e) => setNewMEKPI({ ...newMEKPI, folder_link: e.target.value })}
+                              placeholder="Folder Link"
+                            />
+                          </TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                      </>
                     )}
                     
                     {/* Display M&E KPIs for this objective */}
-                    {meKPIsForObjective.map((meObj) => (
+                    {expandedMEObjectives.has(obj.id) && meKPIsForObjective.map((meObj) => (
                       <TableRow key={meObj.id} className="bg-muted/20">
                         <TableCell colSpan={2} className="font-medium pl-8">
-                          {meObj.kpi}
+                          <div className="space-y-1">
+                            <div>{meObj.kpi}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {meObj.me_frequency && <span>Frequency: {meObj.me_frequency}</span>}
+                              {meObj.me_start_date && meObj.me_end_date && (
+                                <span className="ml-2">
+                                  {new Date(meObj.me_start_date).toLocaleDateString()} - {new Date(meObj.me_end_date).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {meObj.me_tool && <span>Tool: {meObj.me_tool}</span>}
+                              {meObj.me_responsible && <span className="ml-2">Responsible: {meObj.me_responsible}</span>}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">M&E</Badge>
                         </TableCell>
-                        <TableCell></TableCell>
-                        <TableCell></TableCell>
-                        <TableCell>{meObj.mov}</TableCell>
-                        <TableCell></TableCell>
+                        <TableCell className="text-right">
+                          <div className="space-y-1">
+                            <div className="text-xs text-muted-foreground">Target</div>
+                            <div>{meObj.me_target?.toLocaleString() || '—'}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Actual</div>
+                            <div>{meObj.me_actual?.toLocaleString() || '—'}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {meObj.me_responsible || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div>{meObj.mov}</div>
+                            {meObj.me_folder_link && (
+                              <a 
+                                href={meObj.me_folder_link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline flex items-center gap-1 text-xs"
+                              >
+                                <Folder className="h-3 w-3" />
+                                folder
+                              </a>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button 
