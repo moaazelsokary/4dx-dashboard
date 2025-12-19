@@ -1,6 +1,7 @@
 import type {
   MainPlanObjective,
   RASCI,
+  RASCIWithExistence,
   Department,
   DepartmentObjective,
   MonthlyData,
@@ -102,6 +103,10 @@ export async function getRASCI(): Promise<RASCI[]> {
 
 export async function getRASCIByKPI(kpi: string): Promise<RASCI[]> {
   return fetchAPI<RASCI[]>(`/rasci/kpi/${encodeURIComponent(kpi)}`);
+}
+
+export async function getRASCIByDepartment(departmentCode: string): Promise<RASCIWithExistence[]> {
+  return fetchAPI<RASCIWithExistence[]>(`/rasci/department/${encodeURIComponent(departmentCode)}`);
 }
 
 export async function createOrUpdateRASCI(data: Omit<RASCI, 'id' | 'created_at' | 'updated_at'>): Promise<RASCI> {
