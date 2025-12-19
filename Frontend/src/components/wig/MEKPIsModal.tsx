@@ -24,6 +24,15 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
     }
   };
 
+  // Extract text in parentheses from KPI
+  const extractParenthesesText = (kpi: string): string => {
+    if (!kpi) return kpi;
+    const match = kpi.match(/\(([^)]+)\)/);
+    return match ? match[1] : kpi;
+  };
+
+  const displayKPI = extractParenthesesText(objectiveKPI);
+
   // Debug: Log the first M&E KPI to see what fields are available
   if (meKPIs.length > 0) {
     console.log('=== M&E KPIs Modal Debug ===');
@@ -47,12 +56,7 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
       <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            M&E KPIs for: {objectiveKPI}
-            {objectiveActivity && (
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({objectiveActivity})
-              </span>
-            )}
+            M&E KPIs for: {displayKPI}
           </DialogTitle>
         </DialogHeader>
         <div className="mt-4">
