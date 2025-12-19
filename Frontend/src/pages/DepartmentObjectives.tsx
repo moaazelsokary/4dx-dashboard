@@ -725,6 +725,7 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.kpi}
                           onToggle={(value) => toggleFilterValue('kpi', value)}
                           onClear={() => clearFilter('kpi')}
+                          filterId="kpi"
                         />
                       </div>
                     </TableHead>
@@ -1137,6 +1138,7 @@ export default function DepartmentObjectives() {
                           selectedValues={rasciFilters.kpi}
                           onToggle={(value) => toggleRasciFilterValue('kpi', value)}
                           onClear={() => clearRasciFilter('kpi')}
+                          filterId="rasci-kpi"
                         />
                       </div>
                     </TableHead>
