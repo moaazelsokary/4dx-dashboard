@@ -568,11 +568,19 @@ async function createDepartmentObjective(pool, body) {
   request.input('activity_target', sql.Decimal(18, 2), body.activity_target);
   request.input('responsible_person', sql.NVarChar, body.responsible_person);
   request.input('mov', sql.NVarChar, body.mov);
+  request.input('me_target', sql.Decimal(18, 2), body.me_target || null);
+  request.input('me_actual', sql.Decimal(18, 2), body.me_actual || null);
+  request.input('me_frequency', sql.NVarChar, body.me_frequency || null);
+  request.input('me_start_date', sql.Date, body.me_start_date || null);
+  request.input('me_end_date', sql.Date, body.me_end_date || null);
+  request.input('me_tool', sql.NVarChar, body.me_tool || null);
+  request.input('me_responsible', sql.NVarChar, body.me_responsible || null);
+  request.input('me_folder_link', sql.NVarChar, body.me_folder_link || null);
 
   const result = await request.query(`
-    INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov)
+    INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov, me_target, me_actual, me_frequency, me_start_date, me_end_date, me_tool, me_responsible, me_folder_link)
     OUTPUT INSERTED.*
-    VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov)
+    VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov, @me_target, @me_actual, @me_frequency, @me_start_date, @me_end_date, @me_tool, @me_responsible, @me_folder_link)
   `);
 
   return result.recordset[0];
@@ -636,6 +644,7 @@ async function updateDepartmentObjective(pool, id, body) {
     request.input('id', sql.Int, id);
     const updates = [];
     const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov'];
+    const meFields = ['me_target', 'me_actual', 'me_frequency', 'me_start_date', 'me_end_date', 'me_tool', 'me_responsible', 'me_folder_link'];
     
     fields.forEach((field) => {
       if (body[field] !== undefined) {
@@ -645,6 +654,20 @@ async function updateDepartmentObjective(pool, id, body) {
           request.input(field, field === 'department_id' ? sql.Int : sql.Decimal(18, 2), body[field]);
         } else {
           request.input(field, sql.NVarChar, body[field]);
+        }
+        updates.push(`${field} = @${field}`);
+      }
+    });
+
+    // Handle M&E fields
+    meFields.forEach((field) => {
+      if (body[field] !== undefined) {
+        if (field === 'me_target' || field === 'me_actual') {
+          request.input(field, sql.Decimal(18, 2), body[field] || null);
+        } else if (field === 'me_start_date' || field === 'me_end_date') {
+          request.input(field, sql.Date, body[field] || null);
+        } else {
+          request.input(field, sql.NVarChar, body[field] || null);
         }
         updates.push(`${field} = @${field}`);
       }
