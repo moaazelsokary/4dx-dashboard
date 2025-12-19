@@ -346,6 +346,35 @@ export default function DepartmentObjectives() {
     setFilters({ ...filters, [filterKey]: [] });
   };
 
+  // Get unique values for RASCI Metrics filters
+  const rasciWithRoles = rasciMetrics.filter(rasci => rasci.role && rasci.role !== '—' && rasci.role.trim() !== '');
+  const uniqueRasciKPIs = Array.from(new Set(rasciWithRoles.map(r => r.kpi).filter(Boolean))).sort();
+  const uniqueRasciRoles = Array.from(new Set(rasciWithRoles.map(r => r.role).filter(Boolean))).sort();
+  const uniqueRasciExists = ['Exists', 'Not exists'];
+
+  // Filter RASCI metrics based on selected filter values
+  const filteredRasciMetrics = rasciWithRoles.filter((rasci) => {
+    const matchesKPI = rasciFilters.kpi.length === 0 || rasciFilters.kpi.includes(rasci.kpi);
+    const matchesRole = rasciFilters.role.length === 0 || rasciFilters.role.includes(rasci.role);
+    const existsLabel = rasci.exists_in_activities ? 'Exists' : 'Not exists';
+    const matchesExists = rasciFilters.exists.length === 0 || rasciFilters.exists.includes(existsLabel);
+    
+    return matchesKPI && matchesRole && matchesExists;
+  });
+
+  const toggleRasciFilterValue = (filterKey: keyof typeof rasciFilters, value: string) => {
+    const currentValues = rasciFilters[filterKey];
+    if (currentValues.includes(value)) {
+      setRasciFilters({ ...rasciFilters, [filterKey]: currentValues.filter(v => v !== value) });
+    } else {
+      setRasciFilters({ ...rasciFilters, [filterKey]: [...currentValues, value] });
+    }
+  };
+
+  const clearRasciFilter = (filterKey: keyof typeof rasciFilters) => {
+    setRasciFilters({ ...rasciFilters, [filterKey]: [] });
+  };
+
   // Excel-like filter component
   const ExcelFilter = ({ 
     column, 
