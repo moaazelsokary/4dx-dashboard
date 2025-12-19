@@ -246,7 +246,7 @@ export default function DepartmentObjectives() {
         department_id: department.id,
         kpi: newData.kpi!,
         activity: newData.activity!,
-        type: newData.type!,
+        type: newData.type === 'blank' ? '' : newData.type!,
         activity_target: parseFloat(newData.activity_target!.toString()),
         responsible_person: newData.responsible_person!,
         mov: newData.mov!,
@@ -496,7 +496,7 @@ export default function DepartmentObjectives() {
             <Filter className="h-3 w-3" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start" onInteractOutside={(e) => e.preventDefault()}>
+        <PopoverContent className="w-64 p-0" align="start">
           <div className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">Filter by {column}</span>
@@ -716,7 +716,11 @@ export default function DepartmentObjectives() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Department Objectives</CardTitle>
-              <Button onClick={() => setIsAdding(true)}>
+              <Button onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsAdding(true);
+              }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Objective
               </Button>
@@ -847,8 +851,8 @@ export default function DepartmentObjectives() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={newData.type}
-                          onValueChange={(value: 'Direct' | 'In direct') => setNewData({ ...newData, type: value })}
+                          value={newData.type || 'blank'}
+                          onValueChange={(value: 'Direct' | 'In direct' | 'M&E' | 'blank') => setNewData({ ...newData, type: value === 'blank' ? '' : value })}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -857,7 +861,7 @@ export default function DepartmentObjectives() {
                             <SelectItem value="Direct">Direct</SelectItem>
                             <SelectItem value="In direct">In direct</SelectItem>
                             <SelectItem value="M&E">M&E</SelectItem>
-                            <SelectItem value="">Blank</SelectItem>
+                            <SelectItem value="blank">Blank</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
