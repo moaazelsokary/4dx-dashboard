@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -145,6 +146,9 @@ export default function DepartmentObjectives() {
   
   const navigate = useNavigate();
 
+  // State for department filter (CEO/admin only)
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) {
@@ -153,7 +157,7 @@ export default function DepartmentObjectives() {
     }
 
     const userObj = JSON.parse(userData);
-    if (userObj.role !== 'department') {
+    if (userObj.role !== 'department' && userObj.role !== 'CEO') {
       navigate('/access-denied');
       return;
     }
@@ -161,6 +165,14 @@ export default function DepartmentObjectives() {
     setUser(userObj);
     loadData();
   }, [navigate]);
+
+  // Reload data when selected department changes (for CEO/admin)
+  useEffect(() => {
+    if (user?.role === 'CEO') {
+      loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDepartment]);
 
   const loadData = async (showLoading = true) => {
     try {
@@ -171,13 +183,20 @@ export default function DepartmentObjectives() {
       if (!userData) return;
       
       const userObj = JSON.parse(userData);
-      const departmentCode = userObj.departments?.[0];
+      // For CEO/admin, use selectedDepartment if set, otherwise use first department or null for all
+      // For regular department users, use their own department
+      let departmentCode: string | undefined;
+      if (userObj.role === 'CEO') {
+        departmentCode = selectedDepartment || undefined; // undefined means all departments
+      } else {
+        departmentCode = userObj.departments?.[0];
+      }
       
       const [deptObjectives, mainObjs, depts, rasciData] = await Promise.all([
         getDepartmentObjectives({ department_code: departmentCode }),
         getMainObjectives(),
         getDepartments(),
-        getRASCIByDepartment(departmentCode),
+        departmentCode ? getRASCIByDepartment(departmentCode) : Promise.resolve([]),
       ]);
       
       setObjectives(deptObjectives);
@@ -341,6 +360,9 @@ export default function DepartmentObjectives() {
   }
 
   const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
+  
+  // Permission check: Only CEO/admin can modify M&E KPIs
+  const canModifyMEKPIs = user?.role === 'CEO';
 
   // Get unique values for each column (handle multiple KPIs)
   const uniqueKPIs = Array.from(new Set(
@@ -662,6 +684,15 @@ export default function DepartmentObjectives() {
   };
 
   const handleDeleteMEKPI = async (id: number) => {
+    if (!canModifyMEKPIs) {
+      toast({
+        title: 'Access Denied',
+        description: 'Only CEO and admin users can delete M&E KPIs',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     try {
       await deleteDepartmentObjective(id);
       toast({
@@ -684,6 +715,15 @@ export default function DepartmentObjectives() {
   };
 
   const handleAddMEKPI = async (parentObjectiveId: number) => {
+    if (!canModifyMEKPIs) {
+      toast({
+        title: 'Access Denied',
+        description: 'Only CEO and admin users can add M&E KPIs',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     if (!newMEKPI.me_kpi || !newMEKPI.mov) {
       toast({
         title: 'Error',
@@ -809,6 +849,37 @@ export default function DepartmentObjectives() {
       </header>
 
       <div className="container mx-auto px-4 py-4 space-y-4">
+        {/* Department Filter for CEO/Admin */}
+        {user?.role === 'CEO' && departments.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <Label htmlFor="department-filter" className="text-sm font-medium">
+                  Filter by Department:
+                </Label>
+                <Select
+                  value={selectedDepartment || 'all'}
+                  onValueChange={(value) => {
+                    setSelectedDepartment(value === 'all' ? null : value);
+                  }}
+                >
+                  <SelectTrigger id="department-filter" className="w-[250px]">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.code}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Tabs Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-2">
@@ -1102,19 +1173,20 @@ export default function DepartmentObjectives() {
                                   M&E
                                 </Button>
                               )}
-                              <Button 
-                                type="button" 
-                                size="sm" 
-                                variant="ghost" 
-                                onClick={() => {
-                                  setAddingMEForObjective(obj.id);
-                                  setNewMEKPI({ 
-                                    me_kpi: '', 
-                                    mov: '',
-                                    target: null,
-                                    actual: null,
-                                    frequency: '',
-                                    start_date: '',
+                              {canModifyMEKPIs && (
+                                <Button 
+                                  type="button" 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={() => {
+                                    setAddingMEForObjective(obj.id);
+                                    setNewMEKPI({ 
+                                      me_kpi: '', 
+                                      mov: '',
+                                      target: null,
+                                      actual: null,
+                                      frequency: '',
+                                      start_date: '',
                                     end_date: '',
                                     tool: '',
                                     responsible: '',
@@ -1127,6 +1199,7 @@ export default function DepartmentObjectives() {
                                 <Plus className="h-4 w-4 mr-1" />
                                 M&E
                               </Button>
+                              )}
                               <MonthlyDataEditor 
                                 kpi={obj.kpi} 
                                 departmentId={obj.department_id}
@@ -1149,7 +1222,7 @@ export default function DepartmentObjectives() {
                     </TableRow>
                     
                     {/* Add M&E KPI row for this objective */}
-                    {addingMEForObjective === obj.id && (
+                    {addingMEForObjective === obj.id && canModifyMEKPIs && (
                       <>
                         <TableRow className="bg-muted/30">
                           <TableCell colSpan={2}>
@@ -1421,6 +1494,7 @@ export default function DepartmentObjectives() {
               return filtered;
             })()}
             onDelete={handleDeleteMEKPI}
+            canModify={canModifyMEKPIs}
           />
         )}
       </div>

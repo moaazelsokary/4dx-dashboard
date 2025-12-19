@@ -27,7 +27,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
   // Determine which pages user can access
   const canAccessWIGPlan = isCEO || isDepartment;
   const canAccessMainPlan = isCEO;
-  const canAccessDepartmentObjectives = isDepartment;
+  const canAccessDepartmentObjectives = isCEO || isDepartment;
   const canAccessSummary = isCEO || isOperations;
   const canAccessProjectDetails = isCEO || isOperations;
   const canAccessPowerBI = hasPowerBI;

@@ -12,9 +12,10 @@ interface MEKPIsModalProps {
   objectiveActivity?: string;
   meKPIs: DepartmentObjective[];
   onDelete: (id: number) => void;
+  canModify?: boolean;
 }
 
-const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs, onDelete }: MEKPIsModalProps) => {
+const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs, onDelete, canModify = false }: MEKPIsModalProps) => {
   const formatDate = (dateString: string | null | undefined): string => {
     if (!dateString) return '—';
     try {
@@ -130,16 +131,18 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => meObj.id && onDelete(meObj.id)}
-                        aria-label={`Delete M&E KPI ${meObj.id}`}
-                        title="Delete M&E KPI"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canModify && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => meObj.id && onDelete(meObj.id)}
+                          aria-label={`Delete M&E KPI ${meObj.id}`}
+                          title="Delete M&E KPI"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                   );
