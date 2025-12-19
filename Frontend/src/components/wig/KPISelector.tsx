@@ -180,6 +180,8 @@ export default function KPISelector({
                       type="button"
                       className="ml-1 rounded-full hover:bg-destructive/20"
                       onClick={(e) => handleRemoveKPI(kpi, e)}
+                      aria-label={`Remove ${kpi}`}
+                      title={`Remove ${kpi}`}
                     >
                       <X className="h-3 w-3" />
                     </button>
