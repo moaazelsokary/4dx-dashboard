@@ -26,7 +26,7 @@ const SignIn = () => {
     "case": { role: "department", departments: ["case"], password: "Life@0000" },
     "bdm": { role: "department", departments: ["bdm"], password: "Life@0000" },
     "security": { role: "department", departments: ["security"], password: "Life@0000" },
-    "admin": { role: "department", departments: ["admin"], password: "Life@0000" },
+    "admin": { role: "CEO", departments: ["all"], password: "Life@2025" },
     "procurement": { role: "department", departments: ["procurement"], password: "Life@0000" },
     "offices": { role: "department", departments: ["offices"], password: "Life@0000" },
     "community": { role: "department", departments: ["community"], password: "Life@0000" },
