@@ -29,8 +29,9 @@ import {
 import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
+import MEKPIsModal from '@/components/wig/MEKPIsModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, ChevronDown, ChevronRight, Folder } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -84,7 +85,8 @@ export default function DepartmentObjectives() {
   const [isAdding, setIsAdding] = useState(false);
   const [addingMEForObjective, setAddingMEForObjective] = useState<number | null>(null);
   const [meKPIs, setMeKPIs] = useState<MEEKPI[]>([]);
-  const [expandedMEObjectives, setExpandedMEObjectives] = useState<Set<number>>(new Set());
+  const [selectedMEObjective, setSelectedMEObjective] = useState<DepartmentObjective | null>(null);
+  const [isMEModalOpen, setIsMEModalOpen] = useState(false);
   const [newMEKPI, setNewMEKPI] = useState<MEEKPI>({ 
     me_kpi: '', 
     mov: '',
@@ -649,16 +651,36 @@ export default function DepartmentObjectives() {
     );
   };
 
-  const toggleMEExpansion = (objectiveId: number) => {
-    setExpandedMEObjectives(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(objectiveId)) {
-        newSet.delete(objectiveId);
-      } else {
-        newSet.add(objectiveId);
+  const handleOpenMEModal = (objective: DepartmentObjective) => {
+    setSelectedMEObjective(objective);
+    setIsMEModalOpen(true);
+  };
+
+  const handleCloseMEModal = () => {
+    setIsMEModalOpen(false);
+    setSelectedMEObjective(null);
+  };
+
+  const handleDeleteMEKPI = async (id: number) => {
+    try {
+      await deleteDepartmentObjective(id);
+      toast({
+        title: 'Success',
+        description: 'M&E KPI deleted successfully',
+      });
+      // Reload data to refresh the objectives list
+      await loadData(false);
+      // If modal is still open, update the selected objective's M&E KPIs
+      if (selectedMEObjective && isMEModalOpen) {
+        // The modal will automatically show updated data since objectives state is updated
       }
-      return newSet;
-    });
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err?.response?.data?.error || 'Failed to delete M&E KPI',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleAddMEKPI = async (parentObjectiveId: number) => {
@@ -1066,18 +1088,14 @@ export default function DepartmentObjectives() {
                                   type="button"
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => toggleMEExpansion(obj.id)}
-                                  aria-label={expandedMEObjectives.has(obj.id) ? 'Collapse M&E KPIs' : 'Expand M&E KPIs'}
-                                  title={expandedMEObjectives.has(obj.id) ? 'Collapse M&E KPIs' : 'Expand M&E KPIs'}
+                                  onClick={() => handleOpenMEModal(obj)}
+                                  aria-label={`View ${meKPIsForObjective.length} M&E KPIs`}
+                                  title={`View ${meKPIsForObjective.length} M&E KPIs`}
                                 >
-                                  {expandedMEObjectives.has(obj.id) ? (
-                                    <ChevronDown className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4" />
-                                  )}
-                                  <Badge variant="secondary" className="ml-1">
+                                  <Badge variant="secondary" className="mr-1">
                                     {meKPIsForObjective.length}
                                   </Badge>
+                                  M&E
                                 </Button>
                               )}
                               <Button 
@@ -1250,65 +1268,6 @@ export default function DepartmentObjectives() {
                         </TableRow>
                       </>
                     )}
-                    
-                    {/* Display M&E KPIs for this objective */}
-                    {expandedMEObjectives.has(obj.id) && meKPIsForObjective.map((meObj) => (
-                      <TableRow key={meObj.id} className="bg-muted/20">
-                        <TableCell className="font-medium pl-8">
-                          {meObj.kpi}
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1 text-xs">
-                            {meObj.me_frequency && <div><strong>Frequency:</strong> {meObj.me_frequency}</div>}
-                            {meObj.me_start_date && <div><strong>Start:</strong> {new Date(meObj.me_start_date).toLocaleDateString()}</div>}
-                            {meObj.me_end_date && <div><strong>End:</strong> {new Date(meObj.me_end_date).toLocaleDateString()}</div>}
-                            {meObj.me_tool && <div><strong>Tool:</strong> {meObj.me_tool}</div>}
-                            {meObj.me_actual !== null && meObj.me_actual !== undefined && (
-                              <div><strong>Actual:</strong> {meObj.me_actual.toLocaleString()}</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">M&E</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {meObj.me_target !== null && meObj.me_target !== undefined ? meObj.me_target.toLocaleString() : '—'}
-                        </TableCell>
-                        <TableCell>
-                          {meObj.me_responsible || '—'}
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div>{meObj.mov}</div>
-                            {meObj.me_folder_link && (
-                              <a 
-                                href={meObj.me_folder_link} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline flex items-center gap-1 text-xs mt-1"
-                              >
-                                <Folder className="h-3 w-3" />
-                                folder
-                              </a>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              type="button" 
-                              size="sm" 
-                              variant="outline" 
-                              onClick={() => setDeletingId(meObj.id)}
-                              aria-label={`Delete M&E KPI ${meObj.id}`}
-                              title="Delete M&E KPI"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
                         </>
                       );
                     })}
@@ -1422,6 +1381,22 @@ export default function DepartmentObjectives() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* M&E KPIs Modal */}
+        {selectedMEObjective && (
+          <MEKPIsModal
+            isOpen={isMEModalOpen}
+            onClose={handleCloseMEModal}
+            objectiveKPI={selectedMEObjective.kpi}
+            objectiveActivity={selectedMEObjective.activity}
+            meKPIs={objectives.filter(
+              (o) =>
+                o.type === 'M&E' &&
+                o.activity.includes(`[M&E-PARENT:${selectedMEObjective.id}]`)
+            )}
+            onDelete={handleDeleteMEKPI}
+          />
+        )}
       </div>
     </div>
   );
