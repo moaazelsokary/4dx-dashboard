@@ -514,16 +514,25 @@ async function getDepartmentObjectives(pool, queryParams) {
 
   try {
     const result = await request.query(query);
-    // Log first record to debug
+    // Log first record to debug - especially for M&E type objectives
     if (result.recordset.length > 0) {
+      const meObjectives = result.recordset.filter(r => r.type === 'M&E');
+      if (meObjectives.length > 0) {
+        console.log('[getDepartmentObjectives] Found M&E objectives:', meObjectives.length);
+        console.log('[getDepartmentObjectives] First M&E objective keys:', Object.keys(meObjectives[0]));
+        console.log('[getDepartmentObjectives] First M&E objective full data:', JSON.stringify(meObjectives[0], null, 2));
+        console.log('[getDepartmentObjectives] First M&E objective M&E fields:', {
+          me_target: meObjectives[0].me_target,
+          me_actual: meObjectives[0].me_actual,
+          me_frequency: meObjectives[0].me_frequency,
+          me_start_date: meObjectives[0].me_start_date,
+          me_end_date: meObjectives[0].me_end_date,
+          me_tool: meObjectives[0].me_tool,
+          me_responsible: meObjectives[0].me_responsible,
+          me_folder_link: meObjectives[0].me_folder_link,
+        });
+      }
       console.log('[getDepartmentObjectives] First record keys:', Object.keys(result.recordset[0]));
-      console.log('[getDepartmentObjectives] Sample M&E fields:', {
-        me_target: result.recordset[0].me_target,
-        me_actual: result.recordset[0].me_actual,
-        me_frequency: result.recordset[0].me_frequency,
-        me_tool: result.recordset[0].me_tool,
-        me_responsible: result.recordset[0].me_responsible,
-      });
     }
     return result.recordset;
   } catch (err) {
@@ -634,7 +643,10 @@ async function createDepartmentObjective(pool, body) {
   } catch (error) {
     // If M&E columns don't exist, try without them
     if (isME && error.message && error.message.includes('Invalid column name')) {
-      console.warn('[createDepartmentObjective] M&E columns not found, inserting without M&E fields');
+      console.error('[createDepartmentObjective] ERROR: M&E columns do not exist in database!');
+      console.error('[createDepartmentObjective] Please run the migration: Frontend/database/migrate-add-me-fields.sql');
+      console.error('[createDepartmentObjective] Error details:', error.message);
+      console.warn('[createDepartmentObjective] Falling back to insert without M&E fields - DATA WILL BE LOST!');
       const basicRequest = pool.request();
       basicRequest.input('main_objective_id', sql.Int, mainObjectiveId);
       basicRequest.input('department_id', sql.Int, body.department_id);
@@ -650,6 +662,13 @@ async function createDepartmentObjective(pool, body) {
         OUTPUT INSERTED.*
         VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov)
       `);
+      console.warn('[createDepartmentObjective] Saved without M&E fields. M&E data was lost:', {
+        me_target: body.me_target,
+        me_actual: body.me_actual,
+        me_frequency: body.me_frequency,
+        me_tool: body.me_tool,
+        me_responsible: body.me_responsible,
+      });
     } else {
       throw error;
     }
