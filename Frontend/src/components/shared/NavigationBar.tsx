@@ -32,60 +32,74 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
   const canAccessProjectDetails = isCEO || isOperations;
   const canAccessPowerBI = hasPowerBI;
 
+  // For CEO/admin, show all buttons on all pages
+  // For other users, show buttons conditionally based on current page
+  const shouldShowButton = (path: string) => {
+    if (isCEO) return true; // CEO/admin sees all buttons on all pages
+    return location.pathname !== path; // Other users: hide button if on that page
+  };
+
   return (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
-      {/* WIG Plan Views - Only show on MainPlanObjectives page */}
-      {showWIGTabs && canAccessMainPlan && (
-        <>
-          <Button
-            variant={activeTab === 'hierarchy' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onTabChange?.('hierarchy')}
-            className="h-7 px-2 text-xs whitespace-nowrap"
-          >
-            <Layers className="w-3 h-3 mr-1" />
-            Strategic Plan 2026
-          </Button>
-
-          <Button
-            variant={activeTab === 'table' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onTabChange?.('table')}
-            className="h-7 px-2 text-xs whitespace-nowrap"
-          >
-            <Table2 className="w-3 h-3 mr-1" />
-            Table
-          </Button>
-
-          <Button
-            variant={activeTab === 'rasci' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onTabChange?.('rasci')}
-            className="h-7 px-2 text-xs whitespace-nowrap"
-          >
-            <Users className="w-3 h-3 mr-1" />
-            RASCI
-          </Button>
-
-          <div className="w-px h-5 bg-border mx-1" />
-        </>
-      )}
-
-      {/* Main Plan Objectives - CEO only */}
-      {canAccessMainPlan && location.pathname !== '/main-plan' && (
+      {/* Strategic Plan 2026 - CEO/admin always, others only on main-plan page */}
+      {canAccessMainPlan && (isCEO || showWIGTabs) && (
         <Button
-          variant={location.pathname === '/main-plan' ? 'default' : 'outline'}
+          variant={location.pathname === '/main-plan' && (activeTab === 'hierarchy' || !showWIGTabs) ? 'default' : 'outline'}
           size="sm"
-          onClick={() => navigate('/main-plan')}
+          onClick={() => {
+            if (showWIGTabs) {
+              onTabChange?.('hierarchy');
+            } else {
+              navigate('/main-plan');
+            }
+          }}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
           <Layers className="w-3 h-3 mr-1" />
-          {location.pathname === '/department-objectives' ? 'Strategic Plan 2026' : 'Main Plan'}
+          Strategic Plan 2026
         </Button>
       )}
 
-      {/* Department Objectives - Department users only */}
-      {canAccessDepartmentObjectives && location.pathname !== '/department-objectives' && (
+      {/* Table - CEO/admin always, others only on main-plan page */}
+      {canAccessMainPlan && (isCEO || showWIGTabs) && (
+        <Button
+          variant={location.pathname === '/main-plan' && activeTab === 'table' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            if (showWIGTabs) {
+              onTabChange?.('table');
+            } else {
+              navigate('/main-plan');
+            }
+          }}
+          className="h-7 px-2 text-xs whitespace-nowrap"
+        >
+          <Table2 className="w-3 h-3 mr-1" />
+          Table
+        </Button>
+      )}
+
+      {/* RASCI - CEO/admin always, others only on main-plan page */}
+      {canAccessMainPlan && (isCEO || showWIGTabs) && (
+        <Button
+          variant={location.pathname === '/main-plan' && activeTab === 'rasci' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            if (showWIGTabs) {
+              onTabChange?.('rasci');
+            } else {
+              navigate('/main-plan');
+            }
+          }}
+          className="h-7 px-2 text-xs whitespace-nowrap"
+        >
+          <Users className="w-3 h-3 mr-1" />
+          RASCI
+        </Button>
+      )}
+
+      {/* Department Objectives */}
+      {canAccessDepartmentObjectives && shouldShowButton('/department-objectives') && (
         <Button
           variant={location.pathname === '/department-objectives' ? 'default' : 'outline'}
           size="sm"
@@ -97,8 +111,21 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* 2025 WIG Plan - All users with WIG access */}
-      {canAccessWIGPlan && location.pathname !== '/wig-plan-2025' && (
+      {/* Power BI Dashboards */}
+      {canAccessPowerBI && shouldShowButton('/powerbi') && (
+        <Button
+          variant={location.pathname === '/powerbi' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => navigate('/powerbi')}
+          className="h-7 px-2 text-xs whitespace-nowrap"
+        >
+          <Power className="w-3 h-3 mr-1" />
+          Power BI Dashboards
+        </Button>
+      )}
+
+      {/* 2025 Plan */}
+      {canAccessWIGPlan && shouldShowButton('/wig-plan-2025') && (
         <Button
           variant={location.pathname === '/wig-plan-2025' ? 'default' : 'outline'}
           size="sm"
@@ -110,13 +137,8 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* Separator before other pages */}
-      {(canAccessSummary || canAccessProjectDetails || canAccessPowerBI) && (
-        <div className="w-px h-5 bg-border mx-1" />
-      )}
-
-      {/* Summary Overview - CEO and Operations */}
-      {canAccessSummary && location.pathname !== '/summary' && (
+      {/* Projects Summary */}
+      {canAccessSummary && shouldShowButton('/summary') && (
         <Button
           variant={location.pathname === '/summary' ? 'default' : 'outline'}
           size="sm"
@@ -128,8 +150,8 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* Project Details - CEO and Operations */}
-      {canAccessProjectDetails && location.pathname !== '/project-details' && (
+      {/* Projects Details */}
+      {canAccessProjectDetails && shouldShowButton('/project-details') && (
         <Button
           variant={location.pathname === '/project-details' ? 'default' : 'outline'}
           size="sm"
@@ -137,24 +159,11 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
           <FolderOpen className="w-3 h-3 mr-1" />
-          Projects
+          Projects Details
         </Button>
       )}
 
-      {/* Power BI Dashboards - Based on access config */}
-      {canAccessPowerBI && location.pathname !== '/powerbi' && (
-        <Button
-          variant={location.pathname === '/powerbi' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => navigate('/powerbi')}
-          className="h-7 px-2 text-xs whitespace-nowrap"
-        >
-          <Power className="w-3 h-3 mr-1" />
-          Power BI
-        </Button>
-      )}
-
-      {/* Life Makers Project Brief - CEO and Operations */}
+      {/* Projects Website */}
       {canAccessSummary && (
         <Button
           variant="outline"
