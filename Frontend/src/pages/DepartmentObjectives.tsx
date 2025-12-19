@@ -754,7 +754,19 @@ export default function DepartmentObjectives() {
                         />
                       </div>
                     </TableHead>
-                    <TableHead className="text-right">Target</TableHead>
+                    <TableHead className="text-right">
+                      <div className="flex items-center gap-2 justify-end">
+                        <span>Target</span>
+                        <ExcelFilter
+                          column="Target"
+                          uniqueValues={uniqueTargets}
+                          selectedValues={filters.target}
+                          onToggle={(value) => toggleFilterValue('target', value)}
+                          onClear={() => clearFilter('target')}
+                          filterId="target"
+                        />
+                      </div>
+                    </TableHead>
                     <TableHead>
                       <div className="flex items-center gap-2">
                         <span>Responsible</span>
