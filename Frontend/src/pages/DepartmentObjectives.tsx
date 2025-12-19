@@ -389,7 +389,8 @@ export default function DepartmentObjectives() {
     selectedValues, 
     onToggle, 
     onClear,
-    getLabel 
+    getLabel,
+    filterId
   }: { 
     column: string;
     uniqueValues: string[];
@@ -397,8 +398,9 @@ export default function DepartmentObjectives() {
     onToggle: (value: string) => void;
     onClear: () => void;
     getLabel?: (value: string) => string;
+    filterId: string;
   }) => {
-    const [open, setOpen] = useState(false);
+    const open = openFilter === filterId;
     const [tempSelections, setTempSelections] = useState<string[]>(selectedValues);
     const [searchTerm, setSearchTerm] = useState('');
     
@@ -410,6 +412,14 @@ export default function DepartmentObjectives() {
         setTempSelections(selectedValues);
       }
     }, [open, selectedValues]);
+    
+    const handleOpenChange = (newOpen: boolean) => {
+      if (newOpen) {
+        setOpenFilter(filterId);
+      } else {
+        setOpenFilter(null);
+      }
+    };
     
     // Filter values based on search term
     const filteredValues = uniqueValues.filter(value => {
@@ -460,14 +470,14 @@ export default function DepartmentObjectives() {
         }
       });
       
-      setOpen(false);
+      handleOpenChange(false);
       setSearchTerm('');
     };
     
     const handleClear = () => {
       setTempSelections([]);
       onClear();
-      setOpen(false);
+      handleOpenChange(false);
       setSearchTerm('');
     };
     
@@ -721,6 +731,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
                         <ExcelFilter
+                          filterId="kpi"
                           column="KPI"
                           uniqueValues={uniqueKPIs}
                           selectedValues={filters.kpi}
@@ -734,6 +745,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>Activity</span>
                         <ExcelFilter
+                          filterId="activity"
                           column="Activity"
                           uniqueValues={uniqueActivities}
                           selectedValues={filters.activity}
@@ -747,6 +759,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>Type</span>
                         <ExcelFilter
+                          filterId="type"
                           column="Type"
                           uniqueValues={uniqueTypes}
                           selectedValues={filters.type}
@@ -760,6 +773,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2 justify-end">
                         <span>Target</span>
                         <ExcelFilter
+                          filterId="target"
                           column="Target"
                           uniqueValues={uniqueTargets}
                           selectedValues={filters.target}
@@ -773,6 +787,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>Responsible</span>
                         <ExcelFilter
+                          filterId="responsible"
                           column="Responsible"
                           uniqueValues={uniqueResponsible}
                           selectedValues={filters.responsible}
@@ -786,6 +801,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>MOV</span>
                         <ExcelFilter
+                          filterId="mov"
                           column="MOV"
                           uniqueValues={uniqueMOVs}
                           selectedValues={filters.mov}
@@ -799,6 +815,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>Main Objective</span>
                         <ExcelFilter
+                          filterId="mainObjective"
                           column="Main Objective"
                           uniqueValues={uniqueMainObjectives}
                           selectedValues={filters.mainObjective}
@@ -1134,6 +1151,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
                         <ExcelFilter
+                          filterId="rasci-kpi"
                           column="KPI"
                           uniqueValues={uniqueRasciKPIs}
                           selectedValues={rasciFilters.kpi}
@@ -1147,6 +1165,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>Role</span>
                         <ExcelFilter
+                          filterId="rasci-role"
                           column="Role"
                           uniqueValues={uniqueRasciRoles}
                           selectedValues={rasciFilters.role}
@@ -1160,6 +1179,7 @@ export default function DepartmentObjectives() {
                       <div className="flex items-center gap-2">
                         <span>Exists in your activities</span>
                         <ExcelFilter
+                          filterId="rasci-exists"
                           column="Exists in your activities"
                           uniqueValues={uniqueRasciExists}
                           selectedValues={rasciFilters.exists}
