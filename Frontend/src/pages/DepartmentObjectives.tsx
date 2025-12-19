@@ -713,7 +713,7 @@ export default function DepartmentObjectives() {
       const parentObjective = objectives.find((o) => o.id === parentObjectiveId);
       
       // Store M&E KPI as a department objective with parent reference in activity
-      await createDepartmentObjective({
+      const meDataToSave = {
         department_id: department.id,
         kpi: newMEKPI.me_kpi,
         activity: `[M&E-PARENT:${parentObjectiveId}] ${newMEKPI.me_kpi}`, // Mark as M&E with parent reference
@@ -730,7 +730,11 @@ export default function DepartmentObjectives() {
         me_tool: newMEKPI.tool || null,
         me_responsible: newMEKPI.responsible || null,
         me_folder_link: newMEKPI.folder_link || null,
-      });
+      };
+      
+      console.log('[handleAddMEKPI] Saving M&E KPI with data:', meDataToSave);
+      const savedObjective = await createDepartmentObjective(meDataToSave);
+      console.log('[handleAddMEKPI] Saved objective returned:', savedObjective);
       
       toast({
         title: 'Success',
@@ -1389,11 +1393,33 @@ export default function DepartmentObjectives() {
             onClose={handleCloseMEModal}
             objectiveKPI={selectedMEObjective.kpi}
             objectiveActivity={selectedMEObjective.activity}
-            meKPIs={objectives.filter(
-              (o) =>
-                o.type === 'M&E' &&
-                o.activity.includes(`[M&E-PARENT:${selectedMEObjective.id}]`)
-            )}
+            meKPIs={(() => {
+              const filtered = objectives.filter(
+                (o) =>
+                  o.type === 'M&E' &&
+                  o.activity.includes(`[M&E-PARENT:${selectedMEObjective.id}]`)
+              );
+              console.log('[DepartmentObjectives] Filtering M&E KPIs for objective:', selectedMEObjective.id);
+              console.log('[DepartmentObjectives] All objectives count:', objectives.length);
+              console.log('[DepartmentObjectives] M&E objectives found:', filtered.length);
+              console.log('[DepartmentObjectives] Filtered M&E KPIs:', filtered);
+              filtered.forEach((me, idx) => {
+                console.log(`[DepartmentObjectives] M&E KPI ${idx + 1}:`, {
+                  id: me.id,
+                  kpi: me.kpi,
+                  me_target: me.me_target,
+                  me_actual: me.me_actual,
+                  me_frequency: me.me_frequency,
+                  me_tool: me.me_tool,
+                  me_responsible: me.me_responsible,
+                  me_folder_link: me.me_folder_link,
+                  me_start_date: me.me_start_date,
+                  me_end_date: me.me_end_date,
+                  allKeys: Object.keys(me),
+                });
+              });
+              return filtered;
+            })()}
             onDelete={handleDeleteMEKPI}
           />
         )}
