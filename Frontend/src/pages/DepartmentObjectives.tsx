@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +50,7 @@ export default function DepartmentObjectives() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [rasciMetrics, setRasciMetrics] = useState<RASCIWithExistence[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('objectives');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -548,7 +550,15 @@ export default function DepartmentObjectives() {
       </header>
 
       <div className="container mx-auto px-4 py-4 space-y-4">
+        {/* Tabs Navigation */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="objectives">Objectives</TabsTrigger>
+            <TabsTrigger value="rasci">RASCI Metrics</TabsTrigger>
+          </TabsList>
 
+          {/* Objectives Tab */}
+          <TabsContent value="objectives" className="mt-4">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -946,8 +956,10 @@ export default function DepartmentObjectives() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
 
-        {/* RASCI Metrics Table */}
+          {/* RASCI Metrics Tab */}
+          <TabsContent value="rasci" className="mt-4">
         <Card>
           <CardHeader>
             <CardTitle>RASCI Metrics</CardTitle>
@@ -991,6 +1003,8 @@ export default function DepartmentObjectives() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
 
         <AlertDialog open={deletingId !== null} onOpenChange={() => setDeletingId(null)}>
           <AlertDialogContent>
