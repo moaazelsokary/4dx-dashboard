@@ -227,8 +227,8 @@ app.post('/api/wig/department-objectives', async (req, res) => {
   try {
     const pool = await getPool();
     
-    // Skip RASCI validation for M&E type objectives
-    if (req.body.type !== 'M&E') {
+    // Skip RASCI validation for M&E type objectives (including M&E MOV)
+    if (req.body.type !== 'M&E' && req.body.type !== 'M&E MOV') {
       // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
       const kpiDelimiter = '||';
       const kpiList = req.body.kpi.includes(kpiDelimiter) 
@@ -256,8 +256,8 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     request.input('responsible_person', sql.NVarChar, req.body.responsible_person);
     request.input('mov', sql.NVarChar, req.body.mov);
 
-    // Only include M&E fields if type is M&E
-    const isME = req.body.type === 'M&E';
+    // Only include M&E fields if type is M&E or M&E MOV
+    const isME = req.body.type === 'M&E' || req.body.type === 'M&E MOV';
     let meFields = '';
     let meValues = '';
 

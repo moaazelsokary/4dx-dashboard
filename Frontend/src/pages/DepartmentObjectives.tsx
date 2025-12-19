@@ -995,11 +995,11 @@ export default function DepartmentObjectives() {
 
                   {/* Display regular objectives with their M&E KPIs */}
                   {filteredObjectives
-                    .filter(obj => obj.type !== 'M&E' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
+                    .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
                     .map((obj) => {
                       // Get M&E KPIs for this objective
                       const meKPIsForObjective = filteredObjectives.filter(
-                        meObj => meObj.type === 'M&E' && meObj.activity?.startsWith(`[M&E-PARENT:${obj.id}]`)
+                        meObj => (meObj.type === 'M&E' || meObj.type === 'M&E MOV') && meObj.activity?.startsWith(`[M&E-PARENT:${obj.id}]`)
                       );
                       
                       return (
@@ -1396,7 +1396,7 @@ export default function DepartmentObjectives() {
             meKPIs={(() => {
               const filtered = objectives.filter(
                 (o) =>
-                  o.type === 'M&E' &&
+                  (o.type === 'M&E' || o.type === 'M&E MOV') &&
                   o.activity.includes(`[M&E-PARENT:${selectedMEObjective.id}]`)
               );
               console.log('[DepartmentObjectives] Filtering M&E KPIs for objective:', selectedMEObjective.id);
