@@ -254,20 +254,57 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     request.input('activity_target', sql.Decimal(18, 2), req.body.activity_target);
     request.input('responsible_person', sql.NVarChar, req.body.responsible_person);
     request.input('mov', sql.NVarChar, req.body.mov);
-    request.input('me_target', sql.Decimal(18, 2), req.body.me_target || null);
-    request.input('me_actual', sql.Decimal(18, 2), req.body.me_actual || null);
-    request.input('me_frequency', sql.NVarChar, req.body.me_frequency || null);
-    request.input('me_start_date', sql.Date, req.body.me_start_date || null);
-    request.input('me_end_date', sql.Date, req.body.me_end_date || null);
-    request.input('me_tool', sql.NVarChar, req.body.me_tool || null);
-    request.input('me_responsible', sql.NVarChar, req.body.me_responsible || null);
-    request.input('me_folder_link', sql.NVarChar, req.body.me_folder_link || null);
 
-    const result = await request.query(`
-      INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov, me_target, me_actual, me_frequency, me_start_date, me_end_date, me_tool, me_responsible, me_folder_link)
-      OUTPUT INSERTED.*
-      VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov, @me_target, @me_actual, @me_frequency, @me_start_date, @me_end_date, @me_tool, @me_responsible, @me_folder_link)
-    `);
+    // Only include M&E fields if type is M&E
+    const isME = req.body.type === 'M&E';
+    let meFields = '';
+    let meValues = '';
+
+    if (isME) {
+      request.input('me_target', sql.Decimal(18, 2), req.body.me_target || null);
+      request.input('me_actual', sql.Decimal(18, 2), req.body.me_actual || null);
+      request.input('me_frequency', sql.NVarChar, req.body.me_frequency || null);
+      request.input('me_start_date', sql.Date, req.body.me_start_date || null);
+      request.input('me_end_date', sql.Date, req.body.me_end_date || null);
+      request.input('me_tool', sql.NVarChar, req.body.me_tool || null);
+      request.input('me_responsible', sql.NVarChar, req.body.me_responsible || null);
+      request.input('me_folder_link', sql.NVarChar, req.body.me_folder_link || null);
+      
+      meFields = ', me_target, me_actual, me_frequency, me_start_date, me_end_date, me_tool, me_responsible, me_folder_link';
+      meValues = ', @me_target, @me_actual, @me_frequency, @me_start_date, @me_end_date, @me_tool, @me_responsible, @me_folder_link';
+    }
+
+    // Try to insert with M&E fields, fallback to basic insert if columns don't exist
+    let result;
+    try {
+      result = await request.query(`
+        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov${meFields})
+        OUTPUT INSERTED.*
+        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${meValues})
+      `);
+    } catch (error) {
+      // If M&E columns don't exist, try without them
+      if (isME && error.message && error.message.includes('Invalid column name')) {
+        console.warn('[proxy] M&E columns not found, inserting without M&E fields');
+        const basicRequest = pool.request();
+        basicRequest.input('main_objective_id', sql.Int, req.body.main_objective_id || null);
+        basicRequest.input('department_id', sql.Int, req.body.department_id);
+        basicRequest.input('kpi', sql.NVarChar, req.body.kpi);
+        basicRequest.input('activity', sql.NVarChar, req.body.activity);
+        basicRequest.input('type', sql.NVarChar, req.body.type);
+        basicRequest.input('activity_target', sql.Decimal(18, 2), req.body.activity_target);
+        basicRequest.input('responsible_person', sql.NVarChar, req.body.responsible_person);
+        basicRequest.input('mov', sql.NVarChar, req.body.mov);
+        
+        result = await basicRequest.query(`
+          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov)
+          OUTPUT INSERTED.*
+          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov)
+        `);
+      } else {
+        throw error;
+      }
+    }
 
     res.json(result.recordset[0]);
   } catch (error) {
