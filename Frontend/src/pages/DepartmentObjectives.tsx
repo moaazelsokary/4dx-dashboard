@@ -43,6 +43,26 @@ interface MEEKPI {
   mov: string;
 }
 
+const KPI_DELIMITER = '||'; // Delimiter for storing multiple KPIs
+
+// Helper function to parse KPIs from string (handles both single and multiple)
+const parseKPIs = (kpiString: string | undefined | null): string[] => {
+  if (!kpiString) return [];
+  if (kpiString.includes(KPI_DELIMITER)) {
+    return kpiString.split(KPI_DELIMITER).filter(k => k.trim());
+  }
+  return [kpiString];
+};
+
+// Helper function to join KPIs into a string
+const joinKPIs = (kpis: string | string[] | undefined): string => {
+  if (!kpis) return '';
+  if (Array.isArray(kpis)) {
+    return kpis.filter(k => k.trim()).join(KPI_DELIMITER);
+  }
+  return kpis;
+};
+
 export default function DepartmentObjectives() {
   const [user, setUser] = useState<any>(null);
   const [objectives, setObjectives] = useState<DepartmentObjective[]>([]);
@@ -58,8 +78,8 @@ export default function DepartmentObjectives() {
   const [meKPIs, setMeKPIs] = useState<MEEKPI[]>([]);
   const [newMEKPI, setNewMEKPI] = useState<MEEKPI>({ me_kpi: '', mov: '' });
   const [editData, setEditData] = useState<Partial<DepartmentObjective>>({});
-  const [newData, setNewData] = useState<Partial<DepartmentObjective>>({
-    kpi: '',
+  const [newData, setNewData] = useState<Partial<DepartmentObjective & { kpi: string | string[] }>>({
+    kpi: [],
     activity: '',
     type: 'Direct',
     activity_target: 0,
@@ -173,7 +193,12 @@ export default function DepartmentObjectives() {
     if (!editingId) return;
 
     try {
-      await updateDepartmentObjective(editingId, editData);
+      // Convert KPI array to delimited string if needed
+      const updateData: any = { ...editData };
+      if (updateData.kpi && Array.isArray(updateData.kpi)) {
+        updateData.kpi = joinKPIs(updateData.kpi);
+      }
+      await updateDepartmentObjective(editingId, updateData);
       toast({
         title: 'Success',
         description: 'Objective updated successfully',
@@ -217,7 +242,8 @@ export default function DepartmentObjectives() {
       e.preventDefault();
       e.stopPropagation();
     }
-    if (!newData.kpi || !newData.activity || !newData.activity_target || !newData.responsible_person || !newData.mov) {
+    const kpiArray = Array.isArray(newData.kpi) ? newData.kpi : (newData.kpi ? [newData.kpi] : []);
+    if (kpiArray.length === 0 || !newData.activity || !newData.activity_target || !newData.responsible_person || !newData.mov) {
       toast({
         title: 'Error',
         description: 'Please fill all required fields',
@@ -244,7 +270,7 @@ export default function DepartmentObjectives() {
 
       await createDepartmentObjective({
         department_id: department.id,
-        kpi: newData.kpi!,
+        kpi: joinKPIs(kpiArray),
         activity: newData.activity!,
         type: newData.type === 'blank' ? '' : newData.type!,
         activity_target: parseFloat(newData.activity_target!.toString()),
@@ -260,7 +286,7 @@ export default function DepartmentObjectives() {
       
       setIsAdding(false);
       setNewData({
-        kpi: '',
+        kpi: [],
         activity: '',
         type: 'Direct',
         activity_target: 0,
@@ -294,8 +320,10 @@ export default function DepartmentObjectives() {
 
   const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
 
-  // Get unique values for each column
-  const uniqueKPIs = Array.from(new Set(objectives.map(o => o.kpi).filter(Boolean))).sort();
+  // Get unique values for each column (handle multiple KPIs)
+  const uniqueKPIs = Array.from(new Set(
+    objectives.flatMap(o => parseKPIs(o.kpi))
+  )).sort();
   const uniqueActivities = Array.from(new Set(objectives.map(o => o.activity).filter(Boolean))).sort();
   const uniqueTypes = Array.from(new Set(objectives.map(o => o.type).filter(Boolean))).sort();
   const uniqueTargets = Array.from(new Set(objectives.map(o => o.activity_target.toString()).filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b));
@@ -319,7 +347,8 @@ export default function DepartmentObjectives() {
 
   // Filter objectives based on selected filter values
   const filteredObjectives = objectives.filter((obj) => {
-    const matchesKPI = filters.kpi.length === 0 || filters.kpi.includes(obj.kpi);
+    const objKPIs = parseKPIs(obj.kpi);
+    const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
     const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
     const matchesType = filters.type.length === 0 || filters.type.includes(obj.type || '');
     const matchesTarget = filters.target.length === 0 || filters.target.includes(obj.activity_target.toString());
@@ -935,8 +964,9 @@ export default function DepartmentObjectives() {
                         <>
                           <TableCell>
                             <KPISelector
-                              value={editData.kpi || obj.kpi}
+                              value={editData.kpi ? (Array.isArray(editData.kpi) ? editData.kpi : parseKPIs(editData.kpi as string)) : parseKPIs(obj.kpi)}
                               onValueChange={(value) => setEditData({ ...editData, kpi: value })}
+                              multiple={true}
                             />
                           </TableCell>
                           <TableCell>
@@ -1010,7 +1040,15 @@ export default function DepartmentObjectives() {
                         </>
                       ) : (
                         <>
-                          <TableCell className="font-medium">{obj.kpi}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex flex-wrap gap-1">
+                              {parseKPIs(obj.kpi).map((kpi, idx) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {kpi}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
                           <TableCell>{obj.activity}</TableCell>
                           <TableCell>
                             <Badge variant={obj.type === 'Direct' ? 'default' : 'secondary'}>

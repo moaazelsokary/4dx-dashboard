@@ -1,19 +1,52 @@
 import { useEffect, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import { getKPIsWithRASCI } from '@/services/wigService';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Search, X, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface KPISelectorProps {
-  value?: string;
-  onValueChange: (value: string) => void;
+  value?: string | string[]; // Can be single string, array, or delimited string
+  onValueChange: (value: string | string[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  multiple?: boolean; // Enable multi-select
 }
 
-export default function KPISelector({ value, onValueChange, placeholder = 'Select KPI', disabled = false }: KPISelectorProps) {
+const KPI_DELIMITER = '||'; // Delimiter for storing multiple KPIs
+
+export default function KPISelector({ 
+  value, 
+  onValueChange, 
+  placeholder = 'Select KPI', 
+  disabled = false,
+  multiple = true 
+}: KPISelectorProps) {
   const [kpis, setKpis] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Parse value to array of KPIs
+  const parseValue = (val: string | string[] | undefined): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      // Check if it's a delimited string
+      if (val.includes(KPI_DELIMITER)) {
+        return val.split(KPI_DELIMITER).filter(k => k.trim());
+      }
+      return [val];
+    }
+    return [];
+  };
+
+  const selectedKPIs = parseValue(value);
 
   useEffect(() => {
     const fetchKPIs = async () => {
@@ -32,6 +65,33 @@ export default function KPISelector({ value, onValueChange, placeholder = 'Selec
     fetchKPIs();
   }, []);
 
+  // Filter KPIs based on search term
+  const filteredKPIs = kpis.filter(kpi =>
+    kpi.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleToggleKPI = (kpi: string) => {
+    if (multiple) {
+      const newSelected = selectedKPIs.includes(kpi)
+        ? selectedKPIs.filter(k => k !== kpi)
+        : [...selectedKPIs, kpi];
+      onValueChange(newSelected);
+    } else {
+      onValueChange(selectedKPIs.includes(kpi) ? '' : kpi);
+      setOpen(false);
+    }
+  };
+
+  const handleRemoveKPI = (kpi: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (multiple) {
+      const newSelected = selectedKPIs.filter(k => k !== kpi);
+      onValueChange(newSelected);
+    } else {
+      onValueChange('');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2">
@@ -49,19 +109,86 @@ export default function KPISelector({ value, onValueChange, placeholder = 'Selec
     );
   }
 
+  const displayText = selectedKPIs.length === 0 
+    ? placeholder 
+    : selectedKPIs.length === 1 
+      ? selectedKPIs[0]
+      : `${selectedKPIs.length} KPIs selected`;
+
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled || kpis.length === 0}>
-      <SelectTrigger>
-        <SelectValue placeholder={kpis.length === 0 ? 'No KPIs available' : placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {kpis.map((kpi) => (
-          <SelectItem key={kpi} value={kpi}>
-            {kpi}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between"
+          disabled={disabled || kpis.length === 0}
+        >
+          <span className={cn("truncate", selectedKPIs.length === 0 && "text-muted-foreground")}>
+            {displayText}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[400px] p-0" align="start">
+        <div className="p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search KPIs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-8"
+            />
+          </div>
+          <ScrollArea className="h-[300px]">
+            <div className="space-y-1 p-2">
+              {filteredKPIs.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No KPIs found
+                </div>
+              ) : (
+                filteredKPIs.map((kpi) => {
+                  const isSelected = selectedKPIs.includes(kpi);
+                  return (
+                    <div
+                      key={kpi}
+                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                      onClick={() => handleToggleKPI(kpi)}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => handleToggleKPI(kpi)}
+                      />
+                      <span className="text-sm flex-1">{kpi}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
+          {selectedKPIs.length > 0 && (
+            <div className="p-2 border-t">
+              <div className="flex flex-wrap gap-1">
+                {selectedKPIs.map((kpi) => (
+                  <Badge key={kpi} variant="secondary" className="text-xs">
+                    {kpi}
+                    <button
+                      type="button"
+                      className="ml-1 rounded-full hover:bg-destructive/20"
+                      onClick={(e) => handleRemoveKPI(kpi, e)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
