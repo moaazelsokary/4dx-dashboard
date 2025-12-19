@@ -93,7 +93,7 @@ const SignIn = () => {
             className="w-40 h-40 md:w-64 md:h-64 object-contain mb-4 md:mb-0"
             />
           <div className="hidden md:block mt-6">
-            <h1 className="text-4xl font-bold text-foreground mb-2">4DX Dashboard</h1>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Strategic Plan 2026</h1>
           </div>
         </div>
         {/* Sign In Card */}
