@@ -30,6 +30,7 @@ const SignIn = () => {
     "procurement": { role: "department", departments: ["procurement"], password: "Life@0000" },
     "offices": { role: "department", departments: ["offices"], password: "Life@0000" },
     "community": { role: "department", departments: ["community"], password: "Life@0000" },
+    "volunteers": { role: "department", departments: ["volunteers"], password: "Life@0000" },
     "project": { role: "project", departments: ["project"], password: "Life@0000" }
   };
 
