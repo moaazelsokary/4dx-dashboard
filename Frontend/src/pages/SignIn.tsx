@@ -31,6 +31,8 @@ const SignIn = () => {
     "offices": { role: "department", departments: ["offices"], password: "Life@0000" },
     "community": { role: "department", departments: ["community"], password: "Life@0000" },
     "volunteers": { role: "department", departments: ["volunteers"], password: "Life@0000" },
+    "finance": { role: "department", departments: ["finance"], password: "Life@0000" },
+    "administrative": { role: "department", departments: ["administrative"], password: "Life@0000" },
     "project": { role: "project", departments: ["project"], password: "Life@0000" }
   };
 
