@@ -168,7 +168,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
+          onClick={() => window.open('http://pms.lifemakers.org/', '_blank')}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
           <BarChart3 className="w-3 h-3 mr-1" />

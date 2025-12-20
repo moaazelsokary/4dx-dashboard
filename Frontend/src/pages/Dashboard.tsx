@@ -751,7 +751,7 @@ const Dashboard = () => {
                       <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open('https://dashboard.lifemakers.org/', '_blank')}
+                      onClick={() => window.open('http://pms.lifemakers.org/', '_blank')}
                       className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
                     >
                       <div className="text-left flex items-center gap-3">
