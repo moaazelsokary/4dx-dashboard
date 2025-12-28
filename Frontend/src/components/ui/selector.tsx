@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, ChevronDown } from 'lucide-react';
+import { Search, ChevronDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SelectorProps {
@@ -85,28 +85,54 @@ export function Selector({
               {filteredOptions.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
                   {allowCustom && searchTerm ? (
-                    <>No match found. Press Enter to use "{searchTerm}"</>
+                    <div className="space-y-2">
+                      <p>No match found for "{searchTerm}"</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => handleSelect(searchTerm.trim())}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add "{searchTerm.trim()}"
+                      </Button>
+                    </div>
                   ) : (
                     <>No options found</>
                   )}
                 </div>
               ) : (
-                filteredOptions.map((option) => {
-                  const isSelected = value === option;
-                  return (
-                    <div
-                      key={option}
-                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
-                      onClick={() => handleSelect(option)}
-                    >
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => handleSelect(option)}
-                      />
-                      <span className="text-sm flex-1">{option}</span>
+                <>
+                  {filteredOptions.map((option) => {
+                    const isSelected = value === option;
+                    return (
+                      <div
+                        key={option}
+                        className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                        onClick={() => handleSelect(option)}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => handleSelect(option)}
+                        />
+                        <span className="text-sm flex-1">{option}</span>
+                      </div>
+                    );
+                  })}
+                  {allowCustom && searchTerm.trim() && !filteredOptions.includes(searchTerm.trim()) && (
+                    <div className="border-t pt-2 mt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => handleSelect(searchTerm.trim())}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add "{searchTerm.trim()}"
+                      </Button>
                     </div>
-                  );
-                })
+                  )}
+                </>
               )}
             </div>
           </ScrollArea>
