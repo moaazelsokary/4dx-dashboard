@@ -85,17 +85,14 @@ export function Selector({
               {filteredOptions.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
                   {allowCustom && searchTerm ? (
-                    <div className="space-y-2">
-                      <p>No match found for "{searchTerm}"</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => handleSelect(searchTerm.trim())}
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
+                    <div
+                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                      onClick={() => handleSelect(searchTerm.trim())}
+                    >
+                      <Plus className="h-4 w-4 text-primary" />
+                      <span className="text-sm flex-1 text-primary font-medium">
                         Add "{searchTerm.trim()}"
-                      </Button>
+                      </span>
                     </div>
                   ) : (
                     <>No options found</>
@@ -120,16 +117,14 @@ export function Selector({
                     );
                   })}
                   {allowCustom && searchTerm.trim() && !filteredOptions.includes(searchTerm.trim()) && (
-                    <div className="border-t pt-2 mt-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full justify-start"
-                        onClick={() => handleSelect(searchTerm.trim())}
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
+                    <div
+                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer border-t mt-1 pt-2"
+                      onClick={() => handleSelect(searchTerm.trim())}
+                    >
+                      <Plus className="h-4 w-4 text-primary" />
+                      <span className="text-sm flex-1 text-primary font-medium">
                         Add "{searchTerm.trim()}"
-                      </Button>
+                      </span>
                     </div>
                   )}
                 </>

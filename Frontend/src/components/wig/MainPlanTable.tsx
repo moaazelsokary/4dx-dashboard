@@ -622,20 +622,34 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                   <Input
                     value={extractNumber(newData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                     onChange={(e) => {
-                      // Allow dots in the number (e.g., 7.1.7)
+                      // Allow dots in the number (e.g., 1.2)
                       const num = e.target.value.replace(/[^\d.]/g, '');
                       const currentTarget = newData.target || '';
                       const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                       setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
                     }}
                     onKeyDown={(e) => {
-                      // Prevent tab navigation when typing dots
+                      // Prevent any navigation when typing dots
                       if (e.key === '.') {
+                        e.preventDefault();
                         e.stopPropagation();
-                        // Don't prevent default, just stop propagation so the dot is typed
+                        // Manually insert the dot
+                        const input = e.currentTarget;
+                        const start = input.selectionStart || 0;
+                        const end = input.selectionEnd || 0;
+                        const currentValue = input.value;
+                        const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
+                        const num = newValue.replace(/[^\d.]/g, '');
+                        const currentTarget = newData.target || '';
+                        const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
+                        setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
+                        // Restore cursor position
+                        setTimeout(() => {
+                          input.setSelectionRange(start + 1, start + 1);
+                        }, 0);
                       }
                     }}
-                    placeholder="7.1.7"
+                    placeholder="1.2"
                     className="w-20"
                     aria-label="Target number"
                   />
@@ -656,7 +670,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                   <Input
                     value={extractNumber(newData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                     onChange={(e) => {
-                      // Allow dots in the number (e.g., 7.1.7)
+                      // Allow dots in the number (e.g., 1.1.3)
                       const num = e.target.value.replace(/[^\d.]/g, '');
                       const currentKpi = newData.kpi || '';
                       const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
@@ -683,7 +697,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         }, 0);
                       }
                     }}
-                    placeholder="7.1.7"
+                    placeholder="1.1.3"
                     className="w-20"
                     aria-label="KPI number"
                   />
@@ -805,20 +819,35 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         <Input
                           value={extractNumber(editData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                           onChange={(e) => {
-                            // Allow dots in the number (e.g., 7.1.7)
+                            // Allow dots in the number (e.g., 1.2)
                             const num = e.target.value.replace(/[^\d.]/g, '');
                             const currentTarget = editData.target || '';
                             const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                             setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
                           }}
                           onKeyDown={(e) => {
-                            // Prevent tab navigation when typing dots
-                            if (e.key === '.' || e.key === 'Tab') {
+                            // Prevent any navigation when typing dots
+                            if (e.key === '.') {
+                              e.preventDefault();
                               e.stopPropagation();
+                              // Manually insert the dot
+                              const input = e.currentTarget;
+                              const start = input.selectionStart || 0;
+                              const end = input.selectionEnd || 0;
+                              const currentValue = input.value;
+                              const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
+                              const num = newValue.replace(/[^\d.]/g, '');
+                              const currentTarget = editData.target || '';
+                              const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
+                              setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
+                              // Restore cursor position
+                              setTimeout(() => {
+                                input.setSelectionRange(start + 1, start + 1);
+                              }, 0);
                             }
                           }}
                           className="w-20"
-                          placeholder="7.1.7"
+                          placeholder="1.2"
                           aria-label="Edit target number"
                         />
                       </TableCell>
@@ -838,7 +867,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         <Input
                           value={extractNumber(editData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                           onChange={(e) => {
-                            // Allow dots in the number (e.g., 7.1.7)
+                            // Allow dots in the number (e.g., 1.1.3)
                             const num = e.target.value.replace(/[^\d.]/g, '');
                             const currentKpi = editData.kpi || '';
                             const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
@@ -866,7 +895,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             }
                           }}
                           className="w-20"
-                          placeholder="7.1.7"
+                          placeholder="1.1.3"
                           aria-label="Edit KPI number"
                         />
                       </TableCell>
