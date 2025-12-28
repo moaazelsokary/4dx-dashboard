@@ -8,6 +8,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import { createMainObjective, updateMainObjective, deleteMainObjective } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import type { MainPlanObjective } from '@/types/wig';
@@ -30,6 +32,7 @@ interface MainPlanTableProps {
 }
 
 // Helper function to extract or generate numbers from hierarchy
+// Updated to allow patterns like 7.1.7 (three-level numbering)
 function extractNumber(text: string, pattern: RegExp): string {
   const match = text.match(pattern);
   return match ? match[0] : '';
@@ -184,7 +187,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
   };
 
   const handleAdd = async () => {
-    if (!newData.pillar || !newData.objective || !newData.target || !newData.kpi || !newData.annual_target) {
+    if (!newData.pillar || !newData.objective || !newData.target || !newData.kpi || newData.annual_target === undefined || newData.annual_target === null) {
       toast({
         title: 'Error',
         description: 'Please fill all fields',
@@ -199,7 +202,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
         objective: newData.objective!,
         target: newData.target!,
         kpi: newData.kpi!,
-        annual_target: parseFloat(newData.annual_target!.toString()),
+        annual_target: parseFloat(newData.annual_target!.toString()) || 0,
       });
       toast({
         title: 'Success',
@@ -215,11 +218,13 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
       });
       onUpdate();
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create objective';
       toast({
         title: 'Error',
-        description: 'Failed to create objective',
+        description: errorMessage,
         variant: 'destructive',
       });
+      console.error('Error creating objective:', err);
     }
   };
 
@@ -234,11 +239,12 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
     }
   };
 
-  // Calculate unique values for filters
+  // Calculate unique values for filters and combobox options
   const uniquePillars = Array.from(new Set(objectives.map(obj => obj.pillar))).sort();
   const uniqueObjectives = Array.from(new Set(objectives.map(obj => obj.objective))).sort();
+  // Updated regex to allow three-level numbering like 7.1.7
   const uniqueTargets = Array.from(new Set(
-    objectives.map(obj => obj.target.replace(/^\d+(\.\d+)?\s*/, '').trim())
+    objectives.map(obj => obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim())
   )).filter(Boolean).sort();
   const uniqueKPIs = Array.from(new Set(
     objectives.map(obj => obj.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim())
@@ -249,7 +255,8 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
 
   // Filter objectives based on selected filters
   const filteredObjectives = objectives.filter((obj) => {
-    const targetText = obj.target.replace(/^\d+(\.\d+)?\s*/, '').trim();
+    // Updated regex to allow three-level numbering like 7.1.7
+    const targetText = obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
     const kpiText = obj.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
     
     const matchesPillar = filters.pillar.length === 0 || filters.pillar.includes(obj.pillar);
@@ -588,56 +595,67 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
             {isAdding && (
               <TableRow>
                 <TableCell>
-                  <Input
+                  <Select
                     value={newData.pillar || ''}
-                    onChange={(e) => setNewData({ ...newData, pillar: e.target.value })}
-                    placeholder="Pillar"
-                    aria-label="Pillar"
-                  />
+                    onValueChange={(value) => setNewData({ ...newData, pillar: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Pillar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Strategic Themes">Strategic Themes</SelectItem>
+                      <SelectItem value="Contributors">Contributors</SelectItem>
+                      <SelectItem value="Strategic Enablers">Strategic Enablers</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
                 <TableCell>
-                  <Input
+                  <Combobox
+                    options={uniqueObjectives}
                     value={newData.objective || ''}
-                    onChange={(e) => setNewData({ ...newData, objective: e.target.value })}
-                    placeholder="Objective"
-                    aria-label="Objective"
+                    onValueChange={(value) => setNewData({ ...newData, objective: value })}
+                    placeholder="Select or type objective..."
+                    allowCustom={true}
                   />
                 </TableCell>
                 <TableCell>
                   <Input
-                    value={extractNumber(newData.target || '', /^\d+(\.\d+)?/) || ''}
+                    value={extractNumber(newData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                     onChange={(e) => {
-                      const num = e.target.value;
+                      // Allow dots in the number (e.g., 7.1.7)
+                      const num = e.target.value.replace(/[^\d.]/g, '');
                       const currentTarget = newData.target || '';
-                      const targetText = currentTarget.replace(/^\d+(\.\d+)?\s*/, '');
+                      const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                       setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
                     }}
-                    placeholder="1.1"
-                    className="w-16"
+                    placeholder="7.1.7"
+                    className="w-20"
                     aria-label="Target number"
                   />
                 </TableCell>
                 <TableCell>
-                  <Input
-                    value={newData.target?.replace(/^\d+(\.\d+)?\s*/, '') || ''}
-                    onChange={(e) => {
-                      const num = extractNumber(newData.target || '', /^\d+(\.\d+)?/);
-                      setNewData({ ...newData, target: num ? `${num} ${e.target.value}` : e.target.value });
+                  <Combobox
+                    options={uniqueTargets}
+                    value={newData.target?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
+                    onValueChange={(value) => {
+                      const num = extractNumber(newData.target || '', /^\d+(\.\d+)*(\.\d+)?/);
+                      setNewData({ ...newData, target: num ? `${num} ${value}` : value });
                     }}
-                    placeholder="Target"
-                    aria-label="Target description"
+                    placeholder="Select or type target..."
+                    allowCustom={true}
                   />
                 </TableCell>
                 <TableCell>
                   <Input
                     value={extractNumber(newData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                     onChange={(e) => {
-                      const num = e.target.value;
+                      // Allow dots in the number (e.g., 7.1.7)
+                      const num = e.target.value.replace(/[^\d.]/g, '');
                       const currentKpi = newData.kpi || '';
                       const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                       setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
                     }}
-                    placeholder="1.1.1"
+                    placeholder="7.1.7"
                     className="w-20"
                     aria-label="KPI number"
                   />
@@ -679,13 +697,14 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
             {filteredObjectives
               .map((obj) => {
                 // Extract numbers directly from fields (target and KPI have number prefixes)
-                const targetNum = extractNumber(obj.target, /^\d+(\.\d+)?/) || '';
+                // Updated regex to allow three-level numbering like 7.1.7
+                const targetNum = extractNumber(obj.target, /^\d+(\.\d+)*(\.\d+)?/) || '';
                 const kpiNum = extractNumber(obj.kpi, /^\d+(\.\d+)*(\.\d+)?/) || '';
                 
                 // Clean text (remove numbers from start)
                 // Objective doesn't have a number prefix in the database
                 const objText = obj.objective.trim();
-                const targetText = obj.target.replace(/^\d+(\.\d+)?\s*/, '').trim();
+                const targetText = obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
                 const kpiText = obj.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
                 
                 return { obj, targetNum, kpiNum, objText, targetText, kpiText };
@@ -731,57 +750,68 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                     {editingId === obj.id ? (
                     <>
                       <TableCell>
-                        <Input
+                        <Select
                           value={editData.pillar || ''}
-                          onChange={(e) => setEditData({ ...editData, pillar: e.target.value })}
-                          placeholder="Pillar"
-                          aria-label="Edit pillar"
-                        />
+                          onValueChange={(value) => setEditData({ ...editData, pillar: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Pillar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Strategic Themes">Strategic Themes</SelectItem>
+                            <SelectItem value="Contributors">Contributors</SelectItem>
+                            <SelectItem value="Strategic Enablers">Strategic Enablers</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell>
-                        <Input
+                        <Combobox
+                          options={uniqueObjectives}
                           value={editData.objective || ''}
-                          onChange={(e) => setEditData({ ...editData, objective: e.target.value })}
-                          placeholder="Objective"
-                          aria-label="Edit objective"
+                          onValueChange={(value) => setEditData({ ...editData, objective: value })}
+                          placeholder="Select or type objective..."
+                          allowCustom={true}
                         />
                       </TableCell>
                       <TableCell>
                         <Input
-                          value={extractNumber(editData.target || '', /^\d+(\.\d+)?/) || ''}
+                          value={extractNumber(editData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                           onChange={(e) => {
-                            const num = e.target.value;
+                            // Allow dots in the number (e.g., 7.1.7)
+                            const num = e.target.value.replace(/[^\d.]/g, '');
                             const currentTarget = editData.target || '';
-                            const targetText = currentTarget.replace(/^\d+(\.\d+)?\s*/, '');
+                            const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                             setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
                           }}
-                          className="w-16"
-                          placeholder="1.1"
+                          className="w-20"
+                          placeholder="7.1.7"
                           aria-label="Edit target number"
                         />
                       </TableCell>
                       <TableCell>
-                        <Input
-                          value={editData.target?.replace(/^\d+(\.\d+)?\s*/, '') || ''}
-                          onChange={(e) => {
-                            const num = extractNumber(editData.target || '', /^\d+(\.\d+)?/);
-                            setEditData({ ...editData, target: num ? `${num} ${e.target.value}` : e.target.value });
+                        <Combobox
+                          options={uniqueTargets}
+                          value={editData.target?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
+                          onValueChange={(value) => {
+                            const num = extractNumber(editData.target || '', /^\d+(\.\d+)*(\.\d+)?/);
+                            setEditData({ ...editData, target: num ? `${num} ${value}` : value });
                           }}
-                          placeholder="Target"
-                          aria-label="Edit target description"
+                          placeholder="Select or type target..."
+                          allowCustom={true}
                         />
                       </TableCell>
                       <TableCell>
                         <Input
                           value={extractNumber(editData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                           onChange={(e) => {
-                            const num = e.target.value;
+                            // Allow dots in the number (e.g., 7.1.7)
+                            const num = e.target.value.replace(/[^\d.]/g, '');
                             const currentKpi = editData.kpi || '';
                             const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                             setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
                           }}
                           className="w-20"
-                          placeholder="1.1.1"
+                          placeholder="7.1.7"
                           aria-label="Edit KPI number"
                         />
                       </TableCell>
