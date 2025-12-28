@@ -4,13 +4,7 @@ import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Popover,
   PopoverContent,
@@ -36,11 +30,18 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value || "")
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const containerRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     setInputValue(value || "")
   }, [value])
+
+  const filteredOptions = React.useMemo(() => {
+    if (!inputValue.trim()) return options.slice(0, 15) // Show first 15 when empty
+    return options.filter((option) =>
+      option.toLowerCase().includes(inputValue.toLowerCase())
+    ).slice(0, 30) // Limit to 30 results
+  }, [options, inputValue])
 
   const handleSelect = (selectedValue: string) => {
     setInputValue(selectedValue)
@@ -54,13 +55,14 @@ export function Combobox({
     if (allowCustom) {
       onValueChange(newValue)
     }
-    if (!open && newValue) {
+    // Open dropdown when typing
+    if (newValue && !open) {
       setOpen(true)
     }
   }
 
   const handleInputFocus = () => {
-    if (inputValue && filteredOptions.length > 0) {
+    if (filteredOptions.length > 0) {
       setOpen(true)
     }
   }
@@ -68,68 +70,69 @@ export function Combobox({
   const handleInputBlur = (e: React.FocusEvent) => {
     // Delay closing to allow clicking on options
     setTimeout(() => {
-      if (!inputRef.current?.contains(document.activeElement)) {
+      if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
         setOpen(false)
       }
     }, 200)
   }
 
-  const filteredOptions = React.useMemo(() => {
-    if (!inputValue) return options.slice(0, 10) // Show first 10 when empty
-    return options.filter((option) =>
-      option.toLowerCase().includes(inputValue.toLowerCase())
-    ).slice(0, 20) // Limit to 20 results
-  }, [options, inputValue])
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpen(false)
+    }
+  }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <div className="relative" ref={inputRef}>
-        <Input
-          value={inputValue}
-          onChange={handleInputChange}
-          onFocus={handleInputFocus}
-          onBlur={handleInputBlur}
-          placeholder={placeholder}
-          className={cn("w-full pr-8", className)}
-        />
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="absolute right-0 top-0 h-full px-2 py-0 hover:bg-transparent"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setOpen(!open)
-            }}
-          >
-            <ChevronsUpDown className="h-4 w-4 opacity-50" />
-          </Button>
-        </PopoverTrigger>
+    <div className="relative w-full" ref={containerRef}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <div className="relative">
+          <Input
+            value={inputValue}
+            onChange={handleInputChange}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className={cn("w-full pr-8", className)}
+          />
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="absolute right-0 top-0 h-full px-2 py-0 hover:bg-transparent"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setOpen(!open)
+              }}
+            >
+              <ChevronsUpDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+        </div>
         <PopoverContent 
-          className="w-[var(--radix-popover-trigger-width)] p-0" 
+          className="w-[var(--radix-popover-trigger-width)] p-0 z-50" 
           align="start"
+          side="bottom"
+          sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <Command shouldFilter={false}>
-            <CommandList>
-              <CommandEmpty>
-                {allowCustom && inputValue ? (
-                  <div className="py-2 text-sm text-muted-foreground px-2">
-                    No match found. Type to create new.
-                  </div>
-                ) : (
-                  "No options available."
-                )}
-              </CommandEmpty>
-              {filteredOptions.length > 0 && (
-                <CommandGroup>
+          <div className="max-h-[300px] overflow-hidden">
+            {filteredOptions.length > 0 ? (
+              <ScrollArea className="h-full">
+                <div className="p-1">
                   {filteredOptions.map((option) => (
-                    <CommandItem
+                    <div
                       key={option}
-                      value={option}
-                      onSelect={() => handleSelect(option)}
+                      className={cn(
+                        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                        inputValue === option && "bg-accent text-accent-foreground"
+                      )}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        handleSelect(option)
+                      }}
                     >
                       <Check
                         className={cn(
@@ -137,16 +140,24 @@ export function Combobox({
                           inputValue === option ? "opacity-100" : "opacity-0"
                         )}
                       />
-                      {option}
-                    </CommandItem>
+                      <span className="flex-1 truncate">{option}</span>
+                    </div>
                   ))}
-                </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
+                </div>
+              </ScrollArea>
+            ) : (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                {allowCustom && inputValue ? (
+                  <>No match found. Type to create new.</>
+                ) : (
+                  <>No options available.</>
+                )}
+              </div>
+            )}
+          </div>
         </PopoverContent>
-      </div>
-    </Popover>
+      </Popover>
+    </div>
   )
 }
 

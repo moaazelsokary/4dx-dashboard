@@ -628,6 +628,13 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                       setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
                     }}
+                    onKeyDown={(e) => {
+                      // Prevent tab navigation when typing dots
+                      if (e.key === '.') {
+                        e.stopPropagation();
+                        // Don't prevent default, just stop propagation so the dot is typed
+                      }
+                    }}
                     placeholder="7.1.7"
                     className="w-20"
                     aria-label="Target number"
@@ -654,6 +661,13 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       const currentKpi = newData.kpi || '';
                       const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                       setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
+                    }}
+                    onKeyDown={(e) => {
+                      // Prevent tab navigation when typing dots
+                      if (e.key === '.') {
+                        e.stopPropagation();
+                        // Don't prevent default, just stop propagation so the dot is typed
+                      }
                     }}
                     placeholder="7.1.7"
                     className="w-20"
@@ -783,6 +797,12 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                             setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
                           }}
+                          onKeyDown={(e) => {
+                            // Prevent tab navigation when typing dots
+                            if (e.key === '.' || e.key === 'Tab') {
+                              e.stopPropagation();
+                            }
+                          }}
                           className="w-20"
                           placeholder="7.1.7"
                           aria-label="Edit target number"
@@ -809,6 +829,12 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             const currentKpi = editData.kpi || '';
                             const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
                             setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
+                          }}
+                          onKeyDown={(e) => {
+                            // Prevent tab navigation when typing dots
+                            if (e.key === '.' || e.key === 'Tab') {
+                              e.stopPropagation();
+                            }
                           }}
                           className="w-20"
                           placeholder="7.1.7"
