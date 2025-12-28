@@ -595,26 +595,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
             {isAdding && (
               <TableRow
                 onKeyDownCapture={(e) => {
-                  // Prevent table navigation when typing dots in number input fields
+                  // Stop propagation to prevent table navigation when typing dots in number input fields
+                  // Don't prevent default - let the browser type the character naturally
                   if (e.key === '.' && e.target instanceof HTMLInputElement) {
                     const input = e.target as HTMLInputElement;
                     // Only handle if it's a Target # or KPI # input (check by aria-label or placeholder)
                     if (input.getAttribute('aria-label')?.includes('number') || 
                         input.placeholder?.match(/^\d+\.\d+/)) {
-                      e.preventDefault();
                       e.stopPropagation();
                       e.stopImmediatePropagation();
-                      // Manually insert the dot to keep focus in current input
-                      const start = input.selectionStart || 0;
-                      const end = input.selectionEnd || 0;
-                      const currentValue = input.value;
-                      const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
-                      input.value = newValue;
-                      input.setSelectionRange(start + 1, start + 1);
-                      // Trigger onChange manually
-                      const event = new Event('input', { bubbles: true });
-                      input.dispatchEvent(event);
-                      return false;
                     }
                   }
                 }}
@@ -654,27 +643,17 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
                     }}
                     onKeyDown={(e) => {
-                      // Prevent table navigation when typing dots
+                      // Stop propagation to prevent table navigation, but allow the dot to be typed
                       if (e.key === '.') {
-                        e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
-                        // Manually insert the dot to keep focus in current input
-                        const input = e.currentTarget;
-                        const start = input.selectionStart || 0;
-                        const end = input.selectionEnd || 0;
-                        const currentValue = input.value;
-                        const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
-                        const num = newValue.replace(/[^\d.]/g, '');
-                        const currentTarget = newData.target || '';
-                        const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                        setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
-                        // Restore cursor position
-                        setTimeout(() => {
-                          input.setSelectionRange(start + 1, start + 1);
-                          input.focus();
-                        }, 0);
-                        return false;
+                        // Don't prevent default - let browser type the dot naturally
+                      }
+                    }}
+                    onBeforeInput={(e) => {
+                      // Prevent table navigation when typing dots
+                      if (e.data === '.') {
+                        e.stopPropagation();
                       }
                     }}
                     placeholder="1.2"
@@ -705,27 +684,17 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
                     }}
                     onKeyDown={(e) => {
-                      // Prevent table navigation when typing dots
+                      // Stop propagation to prevent table navigation, but allow the dot to be typed
                       if (e.key === '.') {
-                        e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
-                        // Manually insert the dot to keep focus in current input
-                        const input = e.currentTarget;
-                        const start = input.selectionStart || 0;
-                        const end = input.selectionEnd || 0;
-                        const currentValue = input.value;
-                        const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
-                        const num = newValue.replace(/[^\d.]/g, '');
-                        const currentKpi = newData.kpi || '';
-                        const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                        setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
-                        // Restore cursor position
-                        setTimeout(() => {
-                          input.setSelectionRange(start + 1, start + 1);
-                          input.focus();
-                        }, 0);
-                        return false;
+                        // Don't prevent default - let browser type the dot naturally
+                      }
+                    }}
+                    onBeforeInput={(e) => {
+                      // Prevent table navigation when typing dots
+                      if (e.data === '.') {
+                        e.stopPropagation();
                       }
                     }}
                     placeholder="1.1.3"
@@ -820,26 +789,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                     key={obj.id} 
                     className={`border-l-4 ${pillarColor} hover:bg-primary/5 transition-colors duration-200`}
                     onKeyDownCapture={(e) => {
-                      // Prevent table navigation when typing dots in number input fields
+                      // Stop propagation to prevent table navigation when typing dots in number input fields
+                      // Don't prevent default - let the browser type the character naturally
                       if (e.key === '.' && e.target instanceof HTMLInputElement) {
                         const input = e.target as HTMLInputElement;
                         // Only handle if it's a Target # or KPI # input (check by aria-label or placeholder)
                         if (input.getAttribute('aria-label')?.includes('number') || 
                             input.placeholder?.match(/^\d+\.\d+/)) {
-                          e.preventDefault();
                           e.stopPropagation();
                           e.stopImmediatePropagation();
-                          // Manually insert the dot to keep focus in current input
-                          const start = input.selectionStart || 0;
-                          const end = input.selectionEnd || 0;
-                          const currentValue = input.value;
-                          const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
-                          input.value = newValue;
-                          input.setSelectionRange(start + 1, start + 1);
-                          // Trigger onChange manually
-                          const event = new Event('input', { bubbles: true });
-                          input.dispatchEvent(event);
-                          return false;
                         }
                       }
                     }}
@@ -881,27 +839,17 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
                           }}
                           onKeyDown={(e) => {
-                            // Prevent table navigation when typing dots
+                            // Stop propagation to prevent table navigation, but allow the dot to be typed
                             if (e.key === '.') {
-                              e.preventDefault();
                               e.stopPropagation();
                               e.stopImmediatePropagation();
-                              // Manually insert the dot to keep focus in current input
-                              const input = e.currentTarget;
-                              const start = input.selectionStart || 0;
-                              const end = input.selectionEnd || 0;
-                              const currentValue = input.value;
-                              const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
-                              const num = newValue.replace(/[^\d.]/g, '');
-                              const currentTarget = editData.target || '';
-                              const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                              setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
-                              // Restore cursor position
-                              setTimeout(() => {
-                                input.setSelectionRange(start + 1, start + 1);
-                                input.focus();
-                              }, 0);
-                              return false;
+                              // Don't prevent default - let browser type the dot naturally
+                            }
+                          }}
+                          onBeforeInput={(e) => {
+                            // Prevent table navigation when typing dots
+                            if (e.data === '.') {
+                              e.stopPropagation();
                             }
                           }}
                           className="w-20"
@@ -932,27 +880,17 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
                           }}
                           onKeyDown={(e) => {
-                            // Prevent table navigation when typing dots
+                            // Stop propagation to prevent table navigation, but allow the dot to be typed
                             if (e.key === '.') {
-                              e.preventDefault();
                               e.stopPropagation();
                               e.stopImmediatePropagation();
-                              // Manually insert the dot to keep focus in current input
-                              const input = e.currentTarget;
-                              const start = input.selectionStart || 0;
-                              const end = input.selectionEnd || 0;
-                              const currentValue = input.value;
-                              const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
-                              const num = newValue.replace(/[^\d.]/g, '');
-                              const currentKpi = editData.kpi || '';
-                              const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                              setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
-                              // Restore cursor position
-                              setTimeout(() => {
-                                input.setSelectionRange(start + 1, start + 1);
-                                input.focus();
-                              }, 0);
-                              return false;
+                              // Don't prevent default - let browser type the dot naturally
+                            }
+                          }}
+                          onBeforeInput={(e) => {
+                            // Prevent table navigation when typing dots
+                            if (e.data === '.') {
+                              e.stopPropagation();
                             }
                           }}
                           className="w-20"
