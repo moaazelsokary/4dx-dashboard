@@ -55,14 +55,15 @@ export function Combobox({
     if (allowCustom) {
       onValueChange(newValue)
     }
-    // Open dropdown when typing
-    if (newValue && !open) {
+    // Always open dropdown when typing or when there are options
+    if (options.length > 0) {
       setOpen(true)
     }
   }
 
   const handleInputFocus = () => {
-    if (filteredOptions.length > 0) {
+    // Always open when focused if there are options
+    if (options.length > 0) {
       setOpen(true)
     }
   }
@@ -70,10 +71,13 @@ export function Combobox({
   const handleInputBlur = (e: React.FocusEvent) => {
     // Delay closing to allow clicking on options
     setTimeout(() => {
-      if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
+      const activeElement = document.activeElement
+      if (containerRef.current && 
+          !containerRef.current.contains(activeElement) &&
+          !(activeElement && activeElement.closest('[role="listbox"]'))) {
         setOpen(false)
       }
-    }, 200)
+    }, 300)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -112,41 +116,49 @@ export function Combobox({
           </PopoverTrigger>
         </div>
         <PopoverContent 
-          className="w-[var(--radix-popover-trigger-width)] p-0 z-50" 
+          className="w-[var(--radix-popover-trigger-width)] p-0 z-[100] border-2 shadow-lg" 
           align="start"
           side="bottom"
           sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="max-h-[300px] overflow-hidden">
+          <div className="max-h-[300px] overflow-hidden bg-popover">
             {filteredOptions.length > 0 ? (
-              <ScrollArea className="h-full">
+              <ScrollArea className="h-full max-h-[300px]">
                 <div className="p-1">
                   {filteredOptions.map((option) => (
                     <div
                       key={option}
                       className={cn(
-                        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                        inputValue === option && "bg-accent text-accent-foreground"
+                        "relative flex cursor-pointer select-none items-center rounded-sm px-3 py-2 text-sm outline-none transition-colors",
+                        "hover:bg-primary/10 hover:text-primary-foreground",
+                        "focus:bg-primary/10 focus:text-primary-foreground",
+                        inputValue === option && "bg-primary/20 text-primary-foreground font-medium"
                       )}
                       onMouseDown={(e) => {
                         e.preventDefault()
+                        e.stopPropagation()
+                        handleSelect(option)
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
                         handleSelect(option)
                       }}
                     >
                       <Check
                         className={cn(
-                          "mr-2 h-4 w-4",
-                          inputValue === option ? "opacity-100" : "opacity-0"
+                          "mr-2 h-4 w-4 flex-shrink-0",
+                          inputValue === option ? "opacity-100 text-primary" : "opacity-0"
                         )}
                       />
-                      <span className="flex-1 truncate">{option}</span>
+                      <span className="flex-1 truncate text-left">{option}</span>
                     </div>
                   ))}
                 </div>
               </ScrollArea>
             ) : (
-              <div className="py-6 text-center text-sm text-muted-foreground">
+              <div className="py-6 text-center text-sm text-muted-foreground px-4">
                 {allowCustom && inputValue ? (
                   <>No match found. Type to create new.</>
                 ) : (

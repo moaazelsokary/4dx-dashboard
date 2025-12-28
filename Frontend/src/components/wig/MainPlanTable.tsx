@@ -663,10 +663,24 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
                     }}
                     onKeyDown={(e) => {
-                      // Prevent tab navigation when typing dots
+                      // Prevent any navigation when typing dots
                       if (e.key === '.') {
+                        e.preventDefault();
                         e.stopPropagation();
-                        // Don't prevent default, just stop propagation so the dot is typed
+                        // Manually insert the dot
+                        const input = e.currentTarget;
+                        const start = input.selectionStart || 0;
+                        const end = input.selectionEnd || 0;
+                        const currentValue = input.value;
+                        const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
+                        const num = newValue.replace(/[^\d.]/g, '');
+                        const currentKpi = newData.kpi || '';
+                        const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
+                        setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
+                        // Restore cursor position
+                        setTimeout(() => {
+                          input.setSelectionRange(start + 1, start + 1);
+                        }, 0);
                       }
                     }}
                     placeholder="7.1.7"
@@ -831,9 +845,24 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
                           }}
                           onKeyDown={(e) => {
-                            // Prevent tab navigation when typing dots
-                            if (e.key === '.' || e.key === 'Tab') {
+                            // Prevent any navigation when typing dots
+                            if (e.key === '.') {
+                              e.preventDefault();
                               e.stopPropagation();
+                              // Manually insert the dot
+                              const input = e.currentTarget;
+                              const start = input.selectionStart || 0;
+                              const end = input.selectionEnd || 0;
+                              const currentValue = input.value;
+                              const newValue = currentValue.slice(0, start) + '.' + currentValue.slice(end);
+                              const num = newValue.replace(/[^\d.]/g, '');
+                              const currentKpi = editData.kpi || '';
+                              const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
+                              setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
+                              // Restore cursor position
+                              setTimeout(() => {
+                                input.setSelectionRange(start + 1, start + 1);
+                              }, 0);
                             }
                           }}
                           className="w-20"
