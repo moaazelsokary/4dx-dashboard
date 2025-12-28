@@ -118,13 +118,23 @@ app.post('/api/wig/main-objectives', async (req, res) => {
     request.input('kpi', sql.NVarChar, req.body.kpi);
     request.input('annual_target', sql.Decimal(18, 2), req.body.annual_target);
 
-    const result = await request.query(`
+    // Insert the record and get the ID using SCOPE_IDENTITY()
+    const insertResult = await request.query(`
       INSERT INTO main_plan_objectives (pillar, objective, target, kpi, annual_target)
-      OUTPUT INSERTED.*
-      VALUES (@pillar, @objective, @target, @kpi, @annual_target)
+      VALUES (@pillar, @objective, @target, @kpi, @annual_target);
+      SELECT SCOPE_IDENTITY() AS id;
     `);
 
-    res.json(result.recordset[0]);
+    const newId = insertResult.recordset[0].id;
+
+    // Select the newly inserted record
+    const selectRequest = pool.request();
+    selectRequest.input('id', sql.Int, newId);
+    const selectResult = await selectRequest.query(`
+      SELECT * FROM main_plan_objectives WHERE id = @id
+    `);
+
+    res.json(selectResult.recordset[0]);
   } catch (error) {
     handleError(res, error, 'Error creating main objective');
   }
@@ -276,13 +286,14 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     }
 
     // Try to insert with M&E fields, fallback to basic insert if columns don't exist
-    let result;
+    let newId;
     try {
-      result = await request.query(`
+      const insertResult = await request.query(`
         INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov${meFields})
-        OUTPUT INSERTED.*
-        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${meValues})
+        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${meValues});
+        SELECT SCOPE_IDENTITY() AS id;
       `);
+      newId = insertResult.recordset[0].id;
     } catch (error) {
       // If M&E columns don't exist, try without them
       if (isME && error.message && error.message.includes('Invalid column name')) {
@@ -297,15 +308,23 @@ app.post('/api/wig/department-objectives', async (req, res) => {
         basicRequest.input('responsible_person', sql.NVarChar, req.body.responsible_person);
         basicRequest.input('mov', sql.NVarChar, req.body.mov);
         
-        result = await basicRequest.query(`
+        const insertResult = await basicRequest.query(`
           INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov)
-          OUTPUT INSERTED.*
-          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov)
+          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov);
+          SELECT SCOPE_IDENTITY() AS id;
         `);
+        newId = insertResult.recordset[0].id;
       } else {
         throw error;
       }
     }
+
+    // Select the newly inserted record
+    const selectRequest = pool.request();
+    selectRequest.input('id', sql.Int, newId);
+    const result = await selectRequest.query(`
+      SELECT * FROM department_objectives WHERE id = @id
+    `);
 
     res.json(result.recordset[0]);
   } catch (error) {
