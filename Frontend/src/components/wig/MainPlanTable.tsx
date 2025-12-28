@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Combobox } from '@/components/ui/combobox';
+import { Selector } from '@/components/ui/selector';
 import { createMainObjective, updateMainObjective, deleteMainObjective } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import type { MainPlanObjective } from '@/types/wig';
@@ -610,7 +610,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Combobox
+                  <Selector
                     options={uniqueObjectives}
                     value={newData.objective || ''}
                     onValueChange={(value) => setNewData({ ...newData, objective: value })}
@@ -641,7 +641,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                   />
                 </TableCell>
                 <TableCell>
-                  <Combobox
+                  <Selector
                     options={uniqueTargets}
                     value={newData.target?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
                     onValueChange={(value) => {
@@ -793,7 +793,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Combobox
+                        <Selector
                           options={uniqueObjectives}
                           value={editData.objective || ''}
                           onValueChange={(value) => setEditData({ ...editData, objective: value })}
@@ -823,7 +823,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         />
                       </TableCell>
                       <TableCell>
-                        <Combobox
+                        <Selector
                           options={uniqueTargets}
                           value={editData.target?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
                           onValueChange={(value) => {
