@@ -618,7 +618,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                     allowCustom={true}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell
+                  onKeyDownCapture={(e) => {
+                    // Prevent table navigation when typing dots in this cell
+                    if (e.key === '.' && e.target instanceof HTMLInputElement) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
+                >
                   <Input
                     value={extractNumber(newData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                     onChange={(e) => {
@@ -633,6 +641,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       if (e.key === '.') {
                         e.preventDefault();
                         e.stopPropagation();
+                        e.stopImmediatePropagation();
                         // Manually insert the dot
                         const input = e.currentTarget;
                         const start = input.selectionStart || 0;
@@ -647,6 +656,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         setTimeout(() => {
                           input.setSelectionRange(start + 1, start + 1);
                         }, 0);
+                        return false;
                       }
                     }}
                     placeholder="1.2"
@@ -666,7 +676,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                     allowCustom={true}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell
+                  onKeyDownCapture={(e) => {
+                    // Prevent table navigation when typing dots in this cell
+                    if (e.key === '.' && e.target instanceof HTMLInputElement) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
+                >
                   <Input
                     value={extractNumber(newData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                     onChange={(e) => {
@@ -681,6 +699,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       if (e.key === '.') {
                         e.preventDefault();
                         e.stopPropagation();
+                        e.stopImmediatePropagation();
                         // Manually insert the dot
                         const input = e.currentTarget;
                         const start = input.selectionStart || 0;
@@ -695,6 +714,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                         setTimeout(() => {
                           input.setSelectionRange(start + 1, start + 1);
                         }, 0);
+                        return false;
                       }
                     }}
                     placeholder="1.1.3"
@@ -815,7 +835,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                           allowCustom={true}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell
+                        onKeyDownCapture={(e) => {
+                          // Prevent table navigation when typing dots in this cell
+                          if (e.key === '.' && e.target instanceof HTMLInputElement) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }
+                        }}
+                      >
                         <Input
                           value={extractNumber(editData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                           onChange={(e) => {
@@ -830,6 +858,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             if (e.key === '.') {
                               e.preventDefault();
                               e.stopPropagation();
+                              e.stopImmediatePropagation();
                               // Manually insert the dot
                               const input = e.currentTarget;
                               const start = input.selectionStart || 0;
@@ -844,6 +873,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                               setTimeout(() => {
                                 input.setSelectionRange(start + 1, start + 1);
                               }, 0);
+                              return false;
                             }
                           }}
                           className="w-20"
@@ -863,7 +893,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                           allowCustom={true}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell
+                        onKeyDownCapture={(e) => {
+                          // Prevent table navigation when typing dots in this cell
+                          if (e.key === '.' && e.target instanceof HTMLInputElement) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }
+                        }}
+                      >
                         <Input
                           value={extractNumber(editData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
                           onChange={(e) => {
@@ -878,6 +916,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                             if (e.key === '.') {
                               e.preventDefault();
                               e.stopPropagation();
+                              e.stopImmediatePropagation();
                               // Manually insert the dot
                               const input = e.currentTarget;
                               const start = input.selectionStart || 0;
@@ -892,6 +931,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                               setTimeout(() => {
                                 input.setSelectionRange(start + 1, start + 1);
                               }, 0);
+                              return false;
                             }
                           }}
                           className="w-20"
