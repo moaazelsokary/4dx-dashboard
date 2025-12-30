@@ -103,47 +103,25 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Custom handler that prevents drag when clicking on interactive elements
-  const createDragHandler = (originalHandler?: (e: any) => void) => {
-    if (!originalHandler) return undefined;
-    
-    return (e: React.PointerEvent | React.MouseEvent | React.TouchEvent) => {
-      const target = e.target as HTMLElement;
-      
-      // Don't start drag if clicking on buttons, inputs, or other interactive elements
-      if (
-        target.closest('button') ||
-        target.closest('input') ||
-        target.closest('select') ||
-        target.closest('a') ||
-        target.closest('[role="button"]') ||
-        target.closest('[data-dialog-trigger]') ||
-        target.closest('[role="dialog"]') ||
-        target.closest('[data-radix-dialog-trigger]')
-      ) {
-        e.stopPropagation();
-        return;
-      }
-      
-      // Allow drag to start by calling the original listener
-      originalHandler(e);
-    };
+  // Simple handler that prevents drag on buttons
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    // Check if clicking on a button or inside a button
+    if (target.closest('button') || target.closest('[data-no-drag]')) {
+      return; // Don't start drag
+    }
+    // Call original handler if it exists
+    if (listeners?.onPointerDown) {
+      listeners.onPointerDown(e);
+    }
   };
-
-  // Create modified listeners that override all drag start handlers
-  const modifiedListeners = listeners ? {
-    ...listeners,
-    ...(listeners.onPointerDown && { onPointerDown: createDragHandler(listeners.onPointerDown) }),
-    ...(listeners.onMouseDown && { onMouseDown: createDragHandler(listeners.onMouseDown) }),
-    ...(listeners.onTouchStart && { onTouchStart: createDragHandler(listeners.onTouchStart) }),
-  } : undefined;
 
   return (
     <TableRow 
       ref={setNodeRef} 
       style={style}
       {...attributes}
-      {...modifiedListeners}
+      {...(listeners ? { ...listeners, onPointerDown: handlePointerDown } : {})}
       className="cursor-grab active:cursor-grabbing hover:bg-primary/5 transition-colors"
     >
       {children({ attributes: {}, listeners: {}, isDragging })}
@@ -1440,6 +1418,7 @@ export default function DepartmentObjectives() {
                                   type="button"
                                   size="sm"
                                   variant="ghost"
+                                  data-no-drag
                                   onPointerDown={(e) => {
                                     e.stopPropagation();
                                   }}
@@ -1462,6 +1441,7 @@ export default function DepartmentObjectives() {
                                   type="button" 
                                   size="sm" 
                                   variant="ghost" 
+                                  data-no-drag
                                   onPointerDown={(e) => {
                                     e.stopPropagation();
                                   }}
@@ -1498,6 +1478,7 @@ export default function DepartmentObjectives() {
                                       type="button" 
                                       size="sm" 
                                       variant="outline" 
+                                      data-no-drag
                                       aria-label="Edit monthly data" 
                                       title="Edit monthly data"
                                     >
@@ -1510,6 +1491,7 @@ export default function DepartmentObjectives() {
                                 type="button" 
                                 size="sm" 
                                 variant="outline" 
+                                data-no-drag
                                 onPointerDown={(e) => {
                                   e.stopPropagation();
                                 }}
@@ -1527,6 +1509,7 @@ export default function DepartmentObjectives() {
                                 type="button" 
                                 size="sm" 
                                 variant="outline" 
+                                data-no-drag
                                 onPointerDown={(e) => {
                                   e.stopPropagation();
                                 }}
