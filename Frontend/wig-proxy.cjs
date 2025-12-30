@@ -204,7 +204,8 @@ app.get('/api/wig/department-objectives', async (req, res) => {
       query += ' AND d.code = @department_code';
     }
 
-    query += ' ORDER BY do.kpi, do.activity';
+    // Order by sort_order if available, otherwise by kpi and activity
+    query += ' ORDER BY COALESCE(do.sort_order, do.id), do.kpi, do.activity';
 
     const result = await request.query(query);
     res.json(result.recordset);
@@ -286,12 +287,26 @@ app.post('/api/wig/department-objectives', async (req, res) => {
       meValues = ', @me_target, @me_actual, @me_frequency, @me_start_date, @me_end_date, @me_tool, @me_responsible, @me_folder_link';
     }
 
+    // Get max sort_order for this department if sort_order not provided
+    if (!req.body.sort_order) {
+      const maxSortRequest = pool.request();
+      maxSortRequest.input('department_id', sql.Int, req.body.department_id);
+      const maxSortResult = await maxSortRequest.query(`
+        SELECT ISNULL(MAX(sort_order), 0) + 1 AS next_sort_order
+        FROM department_objectives 
+        WHERE department_id = @department_id
+      `);
+      request.input('sort_order', sql.Int, maxSortResult.recordset[0].next_sort_order);
+    } else {
+      request.input('sort_order', sql.Int, req.body.sort_order);
+    }
+
     // Try to insert with M&E fields, fallback to basic insert if columns don't exist
     let newId;
     try {
       const insertResult = await request.query(`
-        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov${meFields})
-        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov${meValues});
+        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov, sort_order${meFields})
+        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov, @sort_order${meValues});
         SELECT SCOPE_IDENTITY() AS id;
       `);
       newId = insertResult.recordset[0].id;
@@ -310,9 +325,20 @@ app.post('/api/wig/department-objectives', async (req, res) => {
         basicRequest.input('responsible_person', sql.NVarChar, req.body.responsible_person);
         basicRequest.input('mov', sql.NVarChar, req.body.mov);
         
+        // Get max sort_order for this department
+        const maxSortRequest = pool.request();
+        maxSortRequest.input('department_id', sql.Int, req.body.department_id);
+        const maxSortResult = await maxSortRequest.query(`
+          SELECT ISNULL(MAX(sort_order), 0) + 1 AS next_sort_order
+          FROM department_objectives 
+          WHERE department_id = @department_id
+        `);
+        const nextSortOrder = maxSortResult.recordset[0].next_sort_order;
+        basicRequest.input('sort_order', sql.Int, nextSortOrder);
+        
         const insertResult = await basicRequest.query(`
-          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov)
-          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov);
+          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov, sort_order)
+          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov, @sort_order);
           SELECT SCOPE_IDENTITY() AS id;
         `);
         newId = insertResult.recordset[0].id;
@@ -352,7 +378,7 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
     const request = pool.request();
     request.input('id', sql.Int, parseInt(req.params.id));
     const updates = [];
-    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'target_type', 'responsible_person', 'mov'];
+    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'target_type', 'responsible_person', 'mov', 'sort_order'];
     
     fields.forEach((field) => {
       if (req.body[field] !== undefined) {
@@ -360,6 +386,8 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
           request.input(field, sql.Int, req.body[field] || null);
         } else if (field === 'department_id' || field === 'activity_target') {
           request.input(field, field === 'department_id' ? sql.Int : sql.Decimal(18, 2), req.body[field]);
+        } else if (field === 'sort_order') {
+          request.input(field, sql.Int, req.body[field]);
         } else {
           request.input(field, sql.NVarChar, req.body[field]);
         }

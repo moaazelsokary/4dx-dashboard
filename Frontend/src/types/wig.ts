@@ -49,6 +49,7 @@ export interface DepartmentObjective {
   mov: string;
   created_at?: string;
   updated_at?: string;
+  sort_order?: number;
   // M&E specific fields
   me_target?: number | null;
   me_actual?: number | null;

@@ -23,6 +23,7 @@ import {
   createDepartmentObjective,
   updateDepartmentObjective,
   deleteDepartmentObjective,
+  updateDepartmentObjectivesOrder,
   getMainObjectives,
   getDepartments,
   getRASCIByDepartment,
@@ -276,7 +277,17 @@ export default function DepartmentObjectives() {
         departmentCode ? getRASCIByDepartment(departmentCode) : Promise.resolve([]),
       ]);
       
-      setObjectives(deptObjectives);
+      // Sort by sort_order if available, otherwise by id
+      const sortedObjectives = [...deptObjectives].sort((a, b) => {
+        if (a.sort_order !== undefined && b.sort_order !== undefined) {
+          return a.sort_order - b.sort_order;
+        }
+        if (a.sort_order !== undefined) return -1;
+        if (b.sort_order !== undefined) return 1;
+        return a.id - b.id;
+      });
+      
+      setObjectives(sortedObjectives);
       setMainObjectives(mainObjs);
       setDepartments(depts);
       setRasciMetrics(rasciData);
@@ -382,28 +393,52 @@ export default function DepartmentObjectives() {
   }, []);
 
   // Drag and drop handler
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      setObjectives(prev => {
-        const oldIndex = prev.findIndex(obj => obj.id === Number(active.id));
-        const newIndex = prev.findIndex(obj => obj.id === Number(over.id));
-        if (oldIndex === -1 || newIndex === -1) return prev;
+      const oldObjectives = [...objectives];
+      const oldIndex = oldObjectives.findIndex(obj => obj.id === Number(active.id));
+      const newIndex = oldObjectives.findIndex(obj => obj.id === Number(over.id));
+      if (oldIndex === -1 || newIndex === -1) return;
+      
+      // Calculate new order
+      const reorderedObjectives = [...oldObjectives];
+      const [movedItem] = reorderedObjectives.splice(oldIndex, 1);
+      
+      // Insert above the target row
+      if (oldIndex < newIndex) {
+        // Moving down: insert at newIndex (which is now newIndex - 1 after splice)
+        reorderedObjectives.splice(newIndex - 1, 0, movedItem);
+      } else {
+        // Moving up: insert at newIndex
+        reorderedObjectives.splice(newIndex, 0, movedItem);
+      }
+      
+      // Optimistically update UI
+      setObjectives(reorderedObjectives);
+      
+      // Save order to database immediately
+      try {
+        // Update sort_order for all affected objectives (non-M&E only)
+        const regularObjectives = reorderedObjectives.filter(
+          obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:')
+        );
         
-        const newArray = [...prev];
-        const [movedItem] = newArray.splice(oldIndex, 1);
+        const updates = regularObjectives.map((obj, index) => ({
+          id: obj.id,
+          sort_order: index + 1,
+        }));
         
-        // Insert above the target row
-        if (oldIndex < newIndex) {
-          // Moving down: insert at newIndex (which is now newIndex - 1 after splice)
-          newArray.splice(newIndex - 1, 0, movedItem);
-        } else {
-          // Moving up: insert at newIndex
-          newArray.splice(newIndex, 0, movedItem);
-        }
-        
-        return newArray;
-      });
+        await updateDepartmentObjectivesOrder(updates);
+      } catch (err) {
+        // Revert on error
+        setObjectives(oldObjectives);
+        toast({
+          title: 'Error',
+          description: 'Failed to save row order',
+          variant: 'destructive',
+        });
+      }
     }
   };
 

@@ -96,6 +96,13 @@ export async function deleteDepartmentObjective(id: number): Promise<{ success: 
   });
 }
 
+export async function updateDepartmentObjectivesOrder(updates: Array<{ id: number; sort_order: number }>): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>('/department-objectives/update-order', {
+    method: 'POST',
+    body: JSON.stringify({ updates }),
+  });
+}
+
 // RASCI
 export async function getRASCI(): Promise<RASCI[]> {
   return fetchAPI<RASCI[]>('/rasci');
