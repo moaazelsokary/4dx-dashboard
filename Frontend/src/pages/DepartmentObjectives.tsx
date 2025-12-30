@@ -1477,27 +1477,23 @@ export default function DepartmentObjectives() {
                                   M&E
                                 </Button>
                               )}
-                              <MonthlyDataEditor 
-                                kpi={obj.kpi} 
-                                departmentId={obj.department_id}
-                                trigger={
-                                  <Button 
-                                    type="button" 
-                                    size="sm" 
-                                    variant="outline" 
-                                    aria-label="Edit monthly data" 
-                                    title="Edit monthly data"
-                                    onPointerDown={(e) => {
-                                      e.stopPropagation();
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                    }}
-                                  >
-                                    <Calendar className="h-4 w-4" />
-                                  </Button>
-                                }
-                              />
+                              <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                                <MonthlyDataEditor 
+                                  kpi={obj.kpi} 
+                                  departmentId={obj.department_id}
+                                  trigger={
+                                    <Button 
+                                      type="button" 
+                                      size="sm" 
+                                      variant="outline" 
+                                      aria-label="Edit monthly data" 
+                                      title="Edit monthly data"
+                                    >
+                                      <Calendar className="h-4 w-4" />
+                                    </Button>
+                                  }
+                                />
+                              </div>
                               <Button 
                                 type="button" 
                                 size="sm" 
