@@ -200,7 +200,7 @@ export default function DepartmentObjectives() {
     type: 120,
     target: 120,
     responsible: 180,
-    mov: 250,
+    mov: 200,
     actions: 150
   });
 
@@ -1219,7 +1219,7 @@ export default function DepartmentObjectives() {
                 minHeight: tableZoom < 1 ? `${100 / tableZoom}%` : 'auto'
               }}
             >
-              <Table>
+              <Table style={{ tableLayout: 'fixed', width: '100%' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10">
