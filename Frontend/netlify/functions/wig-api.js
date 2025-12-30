@@ -254,6 +254,8 @@ exports.handler = async function (event, context) {
     } else if (path.startsWith('/department-objectives/') && method === 'DELETE') {
       const id = parseInt(path.split('/')[2]);
       result = await deleteDepartmentObjective(pool, id);
+    } else if (path === '/department-objectives/update-order' && method === 'POST') {
+      result = await updateDepartmentObjectivesOrder(pool, body);
     }
     // RASCI Metrics
     else if (path === '/rasci' && method === 'GET') {
@@ -806,6 +808,72 @@ async function deleteDepartmentObjective(pool, id) {
 
   const result = await request.query('DELETE FROM department_objectives WHERE id = @id');
   return { success: true, deletedRows: result.rowsAffected[0] };
+}
+
+async function updateDepartmentObjectivesOrder(pool, body) {
+  const { updates } = body; // Array of { id, sort_order }
+
+  if (!Array.isArray(updates) || updates.length === 0) {
+    throw new Error('Updates array is required');
+  }
+
+  // Check if sort_order column exists
+  const checkColumnRequest = pool.request();
+  const columnCheck = await checkColumnRequest.query(`
+    SELECT COUNT(*) as column_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'department_objectives' AND COLUMN_NAME = 'sort_order'
+  `);
+
+  const columnExists = columnCheck.recordset[0].column_exists > 0;
+
+  if (!columnExists) {
+    throw new Error('sort_order column does not exist. Please run the migration: npm run migrate-order-column');
+  }
+
+  // Use a transaction to ensure all updates succeed or fail together
+  const transaction = new sql.Transaction(pool);
+  
+  try {
+    await transaction.begin();
+    console.log('[update-order] Transaction begun, processing', updates.length, 'updates');
+
+    for (let i = 0; i < updates.length; i++) {
+      const update = updates[i];
+      if (!update.id || update.sort_order === undefined || update.sort_order === null) {
+        throw new Error(`Invalid update at index ${i}: id=${update.id}, sort_order=${update.sort_order}`);
+      }
+      
+      const request = new sql.Request(transaction);
+      request.input('id', sql.Int, update.id);
+      request.input('sort_order', sql.Int, update.sort_order);
+      
+      const result = await request.query(`
+        UPDATE department_objectives 
+        SET sort_order = @sort_order, updated_at = GETDATE()
+        WHERE id = @id
+      `);
+      
+      if (result.rowsAffected[0] === 0) {
+        throw new Error(`No row found with id=${update.id} at index ${i}`);
+      }
+      
+      console.log(`[update-order] Updated id=${update.id} to sort_order=${update.sort_order}`);
+    }
+
+    await transaction.commit();
+    console.log('[update-order] Transaction committed successfully');
+    return { success: true };
+  } catch (error) {
+    try {
+      await transaction.rollback();
+      console.log('[update-order] Transaction rolled back');
+    } catch (rollbackError) {
+      console.error('[update-order] Error during rollback:', rollbackError);
+    }
+    console.error('[update-order] Transaction error:', error);
+    throw error;
+  }
 }
 
 // Helper function to normalize KPI name (remove numeric prefixes like "1.3.1 ")

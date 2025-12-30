@@ -145,9 +145,8 @@ export default function KPISelector({
             />
           </div>
         </div>
-        <div className="flex-1 overflow-hidden" style={{ minHeight: 0, maxHeight: '300px' }}>
-          <ScrollArea className="h-full" style={{ height: '300px' }}>
-            <div className="space-y-1 p-2">
+        <div className="flex-1 overflow-auto" style={{ minHeight: 0, maxHeight: '300px' }}>
+          <div className="space-y-1 p-2">
               {filteredKPIs.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
                   No KPIs found
@@ -171,7 +170,6 @@ export default function KPISelector({
                 })
               )}
             </div>
-          </ScrollArea>
         </div>
         <div className="p-2 border-t flex-shrink-0 bg-background">
           {selectedKPIs.length > 0 && (
