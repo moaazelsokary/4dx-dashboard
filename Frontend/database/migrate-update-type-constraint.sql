@@ -17,18 +17,26 @@ GO
 
 -- Add new constraint that allows:
 -- 1. Single values: 'Direct' or 'In direct'
--- 2. Delimited strings: Must start with 'Direct' or 'In direct' and contain only valid values separated by ||
--- We'll use a simpler approach: allow any string that contains only 'Direct', 'In direct', and '||'
+-- 2. Delimited strings: Any string containing '||' (for multiple KPIs)
+-- 3. Also allow 'M&E' and 'M&E MOV' for M&E objectives
 -- More lenient validation - application layer will ensure correctness
+-- First, check if there are any invalid values and update them if needed
+UPDATE [dbo].[department_objectives]
+SET [type] = 'Direct'
+WHERE [type] IS NULL OR [type] = '';
+
+-- Now add the new constraint
 ALTER TABLE [dbo].[department_objectives]
 ADD CONSTRAINT [CK_department_objectives_type] 
 CHECK (
     [type] IS NOT NULL AND 
     LEN([type]) > 0 AND
     (
-        -- Single value must be 'Direct' or 'In direct'
+        -- Single value must be 'Direct', 'In direct', 'M&E', or 'M&E MOV'
         [type] = 'Direct' OR 
         [type] = 'In direct' OR
+        [type] = 'M&E' OR
+        [type] = 'M&E MOV' OR
         -- Or delimited string (contains ||)
         [type] LIKE '%||%'
     )
