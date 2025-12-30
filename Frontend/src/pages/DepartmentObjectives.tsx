@@ -103,12 +103,31 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  // Only enable drag on mouse down if not clicking on interactive elements
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    // Don't start drag if clicking on buttons, inputs, or other interactive elements
+    if (
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('a') ||
+      target.closest('[role="button"]')
+    ) {
+      return;
+    }
+    // Allow drag to start
+    if (listeners?.onPointerDown) {
+      listeners.onPointerDown(e);
+    }
+  };
+
   return (
     <TableRow 
       ref={setNodeRef} 
       style={style}
       {...attributes}
-      {...listeners}
+      {...(listeners ? { ...listeners, onPointerDown: handlePointerDown } : {})}
       className="cursor-grab active:cursor-grabbing hover:bg-primary/5 transition-colors"
     >
       {children({ attributes: {}, listeners: {}, isDragging })}
@@ -1403,7 +1422,14 @@ export default function DepartmentObjectives() {
                                   type="button"
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => handleOpenMEModal(obj)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    handleOpenMEModal(obj);
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                  }}
                                   aria-label={`View ${meKPIsForObjective.length} M&E KPIs`}
                                   title={`View ${meKPIsForObjective.length} M&E KPIs`}
                                 >
@@ -1418,7 +1444,9 @@ export default function DepartmentObjectives() {
                                   type="button" 
                                   size="sm" 
                                   variant="ghost" 
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
                                     setAddingMEForObjective(obj.id);
                                     setNewMEKPI({ 
                                       me_kpi: '', 
@@ -1431,28 +1459,72 @@ export default function DepartmentObjectives() {
                                     tool: '',
                                     responsible: '',
                                     folder_link: ''
-                                  });
-                                }}
-                                aria-label={`Add M&E KPI for objective ${obj.id}`}
-                                title="Add M&E KPI"
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                M&E
-                              </Button>
+                                    });
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                  }}
+                                  aria-label={`Add M&E KPI for objective ${obj.id}`}
+                                  title="Add M&E KPI"
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  M&E
+                                </Button>
                               )}
                               <MonthlyDataEditor 
                                 kpi={obj.kpi} 
                                 departmentId={obj.department_id}
                                 trigger={
-                                  <Button type="button" size="sm" variant="outline" aria-label="Edit monthly data" title="Edit monthly data">
+                                  <Button 
+                                    type="button" 
+                                    size="sm" 
+                                    variant="outline" 
+                                    aria-label="Edit monthly data" 
+                                    title="Edit monthly data"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                    }}
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                  >
                                     <Calendar className="h-4 w-4" />
                                   </Button>
                                 }
                               />
-                              <Button type="button" size="sm" variant="outline" onClick={() => startEdit(obj)} aria-label={`Edit objective ${obj.id}`} title="Edit objective">
+                              <Button 
+                                type="button" 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  startEdit(obj);
+                                }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                aria-label={`Edit objective ${obj.id}`} 
+                                title="Edit objective"
+                              >
                                 <Edit2 className="h-4 w-4" />
                               </Button>
-                              <Button type="button" size="sm" variant="outline" onClick={() => setDeletingId(obj.id)} aria-label={`Delete objective ${obj.id}`} title="Delete objective">
+                              <Button 
+                                type="button" 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setDeletingId(obj.id);
+                                }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                aria-label={`Delete objective ${obj.id}`} 
+                                title="Delete objective"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                                 </div>
