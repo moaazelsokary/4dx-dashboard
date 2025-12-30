@@ -103,8 +103,14 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
   };
 
   return (
-    <TableRow ref={setNodeRef} style={style}>
-      {children({ attributes, listeners, isDragging })}
+    <TableRow 
+      ref={setNodeRef} 
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="cursor-grab active:cursor-grabbing"
+    >
+      {children({ attributes: {}, listeners: {}, isDragging })}
     </TableRow>
   );
 }
@@ -383,8 +389,19 @@ export default function DepartmentObjectives() {
         const oldIndex = prev.findIndex(obj => obj.id === Number(active.id));
         const newIndex = prev.findIndex(obj => obj.id === Number(over.id));
         if (oldIndex === -1 || newIndex === -1) return prev;
+        
         const newArray = [...prev];
-        [newArray[oldIndex], newArray[newIndex]] = [newArray[newIndex], newArray[oldIndex]];
+        const [movedItem] = newArray.splice(oldIndex, 1);
+        
+        // Insert above the target row
+        if (oldIndex < newIndex) {
+          // Moving down: insert at newIndex (which is now newIndex - 1 after splice)
+          newArray.splice(newIndex - 1, 0, movedItem);
+        } else {
+          // Moving up: insert at newIndex
+          newArray.splice(newIndex, 0, movedItem);
+        }
+        
         return newArray;
       });
     }
@@ -1305,7 +1322,7 @@ export default function DepartmentObjectives() {
                                   return (
                                     <>
                                       <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
-                                        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing w-full h-full flex items-center justify-center">
+                                        <div className="w-full h-full flex items-center justify-center">
                                           <span className="text-sm text-muted-foreground">{index + 1}</span>
                                         </div>
                                       </TableCell>
