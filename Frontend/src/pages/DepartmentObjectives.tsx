@@ -103,35 +103,47 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Custom pointer down handler that prevents drag when clicking on interactive elements
-  const handlePointerDown = (e: React.PointerEvent) => {
-    const target = e.target as HTMLElement;
+  // Custom handler that prevents drag when clicking on interactive elements
+  const createDragHandler = (originalHandler?: (e: any) => void) => {
+    if (!originalHandler) return undefined;
     
-    // Don't start drag if clicking on buttons, inputs, or other interactive elements
-    if (
-      target.closest('button') ||
-      target.closest('input') ||
-      target.closest('select') ||
-      target.closest('a') ||
-      target.closest('[role="button"]') ||
-      target.closest('[data-dialog-trigger]') ||
-      target.closest('[role="dialog"]')
-    ) {
-      return;
-    }
-    
-    // Allow drag to start by calling the original listener
-    if (listeners?.onPointerDown) {
-      listeners.onPointerDown(e);
-    }
+    return (e: React.PointerEvent | React.MouseEvent | React.TouchEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Don't start drag if clicking on buttons, inputs, or other interactive elements
+      if (
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('select') ||
+        target.closest('a') ||
+        target.closest('[role="button"]') ||
+        target.closest('[data-dialog-trigger]') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('[data-radix-dialog-trigger]')
+      ) {
+        e.stopPropagation();
+        return;
+      }
+      
+      // Allow drag to start by calling the original listener
+      originalHandler(e);
+    };
   };
+
+  // Create modified listeners that override all drag start handlers
+  const modifiedListeners = listeners ? {
+    ...listeners,
+    ...(listeners.onPointerDown && { onPointerDown: createDragHandler(listeners.onPointerDown) }),
+    ...(listeners.onMouseDown && { onMouseDown: createDragHandler(listeners.onMouseDown) }),
+    ...(listeners.onTouchStart && { onTouchStart: createDragHandler(listeners.onTouchStart) }),
+  } : undefined;
 
   return (
     <TableRow 
       ref={setNodeRef} 
       style={style}
       {...attributes}
-      {...(listeners ? { ...listeners, onPointerDown: handlePointerDown } : {})}
+      {...modifiedListeners}
       className="cursor-grab active:cursor-grabbing hover:bg-primary/5 transition-colors"
     >
       {children({ attributes: {}, listeners: {}, isDragging })}
