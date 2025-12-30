@@ -263,6 +263,7 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     request.input('activity', sql.NVarChar, req.body.activity);
     request.input('type', sql.NVarChar, req.body.type);
     request.input('activity_target', sql.Decimal(18, 2), req.body.activity_target);
+    request.input('target_type', sql.NVarChar, req.body.target_type || 'number');
     request.input('responsible_person', sql.NVarChar, req.body.responsible_person);
     request.input('mov', sql.NVarChar, req.body.mov);
 
@@ -289,8 +290,8 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     let newId;
     try {
       const insertResult = await request.query(`
-        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov${meFields})
-        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${meValues});
+        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov${meFields})
+        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov${meValues});
         SELECT SCOPE_IDENTITY() AS id;
       `);
       newId = insertResult.recordset[0].id;
@@ -305,12 +306,13 @@ app.post('/api/wig/department-objectives', async (req, res) => {
         basicRequest.input('activity', sql.NVarChar, req.body.activity);
         basicRequest.input('type', sql.NVarChar, req.body.type);
         basicRequest.input('activity_target', sql.Decimal(18, 2), req.body.activity_target);
+        basicRequest.input('target_type', sql.NVarChar, req.body.target_type || 'number');
         basicRequest.input('responsible_person', sql.NVarChar, req.body.responsible_person);
         basicRequest.input('mov', sql.NVarChar, req.body.mov);
         
         const insertResult = await basicRequest.query(`
-          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov)
-          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov);
+          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov)
+          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov);
           SELECT SCOPE_IDENTITY() AS id;
         `);
         newId = insertResult.recordset[0].id;
@@ -350,7 +352,7 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
     const request = pool.request();
     request.input('id', sql.Int, parseInt(req.params.id));
     const updates = [];
-    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov'];
+    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'target_type', 'responsible_person', 'mov'];
     
     fields.forEach((field) => {
       if (req.body[field] !== undefined) {
