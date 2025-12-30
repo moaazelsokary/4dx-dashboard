@@ -32,7 +32,7 @@ import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import MEKPIsModal from '@/components/wig/MEKPIsModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, GripVertical } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut } from 'lucide-react';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -182,6 +182,21 @@ export default function DepartmentObjectives() {
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
+
+  // Table zoom state
+  const [tableZoom, setTableZoom] = useState(0.85); // Default 85% zoom
+
+  const handleZoomIn = () => {
+    setTableZoom(prev => Math.min(prev + 0.1, 1.5)); // Max 150%
+  };
+
+  const handleZoomOut = () => {
+    setTableZoom(prev => Math.max(prev - 0.1, 0.5)); // Min 50%
+  };
+
+  const handleZoomReset = () => {
+    setTableZoom(0.85); // Reset to default
+  };
 
   // Filter states for RASCI Metrics table
   const [rasciFilters, setRasciFilters] = useState<{
@@ -1013,7 +1028,44 @@ export default function DepartmentObjectives() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Department Objectives</CardTitle>
-              <Button onClick={(e) => {
+              <div className="flex items-center gap-2">
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-2 border rounded-md px-2 py-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleZoomOut}
+                    disabled={tableZoom <= 0.5}
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-medium min-w-[60px] text-center">
+                    {Math.round(tableZoom * 100)}%
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleZoomIn}
+                    disabled={tableZoom >= 1.5}
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleZoomReset}
+                    title="Reset Zoom"
+                    className="text-xs"
+                  >
+                    Reset
+                  </Button>
+                </div>
+                <Button onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setIsAdding(true);
@@ -1021,16 +1073,26 @@ export default function DepartmentObjectives() {
                 <Plus className="mr-2 h-4 w-4" />
                 Add Objective
               </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-md overflow-x-auto">
+            <div 
+              className="border rounded-md overflow-x-auto"
+              style={{ 
+                zoom: tableZoom,
+                WebkitTransform: `scale(${tableZoom})`,
+                transform: `scale(${tableZoom})`,
+                transformOrigin: 'top left',
+                width: tableZoom < 1 ? `${100 / tableZoom}%` : '100%',
+                minHeight: tableZoom < 1 ? `${100 / tableZoom}%` : 'auto'
+              }}
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }}>
-                      <div className="flex items-center gap-1">
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex items-center justify-center">
                         <span>N</span>
                       </div>
                       <div
@@ -1234,8 +1296,8 @@ export default function DepartmentObjectives() {
                                     {editingId === obj.id ? (
                                     <>
                                       <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
-                                        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex items-center justify-center">
-                                          <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing w-full h-full flex items-center justify-center">
+                                          <span className="text-sm text-muted-foreground">{index + 1}</span>
                                         </div>
                                       </TableCell>
                                   <TableCell style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
@@ -1335,10 +1397,9 @@ export default function DepartmentObjectives() {
                                     ) : (
                                       <>
                                         <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
-                                          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex items-center justify-center">
-                                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing w-full h-full flex items-center justify-center">
+                                            <span className="text-sm text-muted-foreground">{index + 1}</span>
                                           </div>
-                                          <span className="text-sm text-muted-foreground ml-1">{index + 1}</span>
                                         </TableCell>
                                   <TableCell className="font-medium" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
                             <div className="flex flex-wrap gap-1">
