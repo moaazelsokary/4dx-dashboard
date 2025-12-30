@@ -1048,7 +1048,6 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.kpi}
                           onToggle={(value) => toggleFilterValue('kpi', value)}
                           onClear={() => clearFilter('kpi')}
-                          filterId="kpi"
                         />
                       </div>
                       <div
@@ -1066,7 +1065,6 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.activity}
                           onToggle={(value) => toggleFilterValue('activity', value)}
                           onClear={() => clearFilter('activity')}
-                          filterId="activity"
                         />
                       </div>
                       <div
@@ -1084,7 +1082,6 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.type}
                           onToggle={(value) => toggleFilterValue('type', value)}
                           onClear={() => clearFilter('type')}
-                          filterId="type"
                         />
                       </div>
                       <div
@@ -1102,7 +1099,6 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.target}
                           onToggle={(value) => toggleFilterValue('target', value)}
                           onClear={() => clearFilter('target')}
-                          filterId="target"
                         />
                       </div>
                       <div
@@ -1120,7 +1116,6 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.responsible}
                           onToggle={(value) => toggleFilterValue('responsible', value)}
                           onClear={() => clearFilter('responsible')}
-                          filterId="responsible"
                         />
                       </div>
                       <div
@@ -1138,7 +1133,6 @@ export default function DepartmentObjectives() {
                           selectedValues={filters.mov}
                           onToggle={(value) => toggleFilterValue('mov', value)}
                           onClear={() => clearFilter('mov')}
-                          filterId="mov"
                         />
                       </div>
                       <div
@@ -1233,10 +1227,11 @@ export default function DepartmentObjectives() {
                           );
                           
                           return (
-                            <SortableRow key={obj.id} id={obj.id} isEditing={editingId === obj.id}>
-                              {({ attributes, listeners }) => (
-                                <>
-                                  {editingId === obj.id ? (
+                            <>
+                              <SortableRow key={obj.id} id={obj.id} isEditing={editingId === obj.id}>
+                                {({ attributes, listeners }) => (
+                                  <>
+                                    {editingId === obj.id ? (
                                     <>
                                       <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
                                         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex items-center justify-center">
@@ -1429,9 +1424,9 @@ export default function DepartmentObjectives() {
                                   </>
                                 )}
                               </SortableRow>
-                    
-                    {/* Add M&E KPI row for this objective */}
-                    {addingMEForObjective === obj.id && canModifyMEKPIs && (
+                              
+                              {/* Add M&E KPI row for this objective */}
+                              {addingMEForObjective === obj.id && canModifyMEKPIs && (
                       <>
                         <TableRow className="bg-muted/30">
                           <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }}></TableCell>
@@ -1588,7 +1583,6 @@ export default function DepartmentObjectives() {
                           selectedValues={rasciFilters.kpi}
                           onToggle={(value) => toggleRasciFilterValue('kpi', value)}
                           onClear={() => clearRasciFilter('kpi')}
-                          filterId="rasci-kpi"
                         />
                       </div>
                     </TableHead>
@@ -1602,7 +1596,6 @@ export default function DepartmentObjectives() {
                           selectedValues={rasciFilters.role}
                           onToggle={(value) => toggleRasciFilterValue('role', value)}
                           onClear={() => clearRasciFilter('role')}
-                          filterId="rasci-role"
                         />
                       </div>
                     </TableHead>
@@ -1616,7 +1609,6 @@ export default function DepartmentObjectives() {
                           selectedValues={rasciFilters.exists}
                           onToggle={(value) => toggleRasciFilterValue('exists', value)}
                           onClear={() => clearRasciFilter('exists')}
-                          filterId="rasci-exists"
                         />
                       </div>
                     </TableHead>
