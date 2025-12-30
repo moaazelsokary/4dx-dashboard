@@ -34,7 +34,7 @@ import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import MEKPIsModal from '@/components/wig/MEKPIsModal';
 import ObjectiveFormModal from '@/components/wig/ObjectiveFormModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut, GripVertical } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut } from 'lucide-react';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -103,14 +103,38 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  // Custom pointer down handler that prevents drag when clicking on interactive elements
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    
+    // Don't start drag if clicking on buttons, inputs, or other interactive elements
+    if (
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('a') ||
+      target.closest('[role="button"]') ||
+      target.closest('[data-dialog-trigger]') ||
+      target.closest('[role="dialog"]')
+    ) {
+      return;
+    }
+    
+    // Allow drag to start by calling the original listener
+    if (listeners?.onPointerDown) {
+      listeners.onPointerDown(e);
+    }
+  };
+
   return (
     <TableRow 
       ref={setNodeRef} 
       style={style}
       {...attributes}
-      className="hover:bg-primary/5 transition-colors"
+      {...(listeners ? { ...listeners, onPointerDown: handlePointerDown } : {})}
+      className="cursor-grab active:cursor-grabbing hover:bg-primary/5 transition-colors"
     >
-      {children({ attributes, listeners, isDragging })}
+      {children({ attributes: {}, listeners: {}, isDragging })}
     </TableRow>
   );
 }
@@ -1358,15 +1382,7 @@ export default function DepartmentObjectives() {
                                   return (
                                     <>
                                       <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10">
-                                        <div className="w-full h-full flex items-center justify-center gap-1">
-                                          <div
-                                            {...attributes}
-                                            {...listeners}
-                                            className="cursor-grab active:cursor-grabbing touch-none"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <GripVertical className="h-4 w-4 text-primary/60 hover:text-primary" />
-                                          </div>
+                                        <div className="w-full h-full flex items-center justify-center">
                                           <span className="text-sm font-semibold text-primary">{index + 1}</span>
                                         </div>
                                       </TableCell>
@@ -1412,13 +1428,13 @@ export default function DepartmentObjectives() {
                                   type="button"
                                   size="sm"
                                   variant="ghost"
+                                  onPointerDown={(e) => {
+                                    e.stopPropagation();
+                                  }}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
                                     handleOpenMEModal(obj);
-                                  }}
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
                                   }}
                                   aria-label={`View ${meKPIsForObjective.length} M&E KPIs`}
                                   title={`View ${meKPIsForObjective.length} M&E KPIs`}
@@ -1434,6 +1450,9 @@ export default function DepartmentObjectives() {
                                   type="button" 
                                   size="sm" 
                                   variant="ghost" 
+                                  onPointerDown={(e) => {
+                                    e.stopPropagation();
+                                  }}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
@@ -1450,9 +1469,6 @@ export default function DepartmentObjectives() {
                                     responsible: '',
                                     folder_link: ''
                                     });
-                                  }}
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
                                   }}
                                   aria-label={`Add M&E KPI for objective ${obj.id}`}
                                   title="Add M&E KPI"
@@ -1471,11 +1487,10 @@ export default function DepartmentObjectives() {
                                     variant="outline" 
                                     aria-label="Edit monthly data" 
                                     title="Edit monthly data"
-                                    onClick={(e) => {
+                                    onPointerDown={(e) => {
                                       e.stopPropagation();
-                                      e.preventDefault();
                                     }}
-                                    onMouseDown={(e) => {
+                                    onClick={(e) => {
                                       e.stopPropagation();
                                     }}
                                   >
@@ -1487,13 +1502,13 @@ export default function DepartmentObjectives() {
                                 type="button" 
                                 size="sm" 
                                 variant="outline" 
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   e.preventDefault();
                                   startEdit(obj);
-                                }}
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
                                 }}
                                 aria-label={`Edit objective ${obj.id}`} 
                                 title="Edit objective"
@@ -1504,13 +1519,13 @@ export default function DepartmentObjectives() {
                                 type="button" 
                                 size="sm" 
                                 variant="outline" 
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   e.preventDefault();
                                   setDeletingId(obj.id);
-                                }}
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
                                 }}
                                 aria-label={`Delete objective ${obj.id}`} 
                                 title="Delete objective"
