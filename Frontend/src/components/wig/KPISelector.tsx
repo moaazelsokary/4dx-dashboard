@@ -133,8 +133,8 @@ export default function KPISelector({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="start">
-        <div className="p-3 space-y-2">
+      <PopoverContent className="w-[400px] p-0 flex flex-col" style={{ maxHeight: '500px' }} align="start">
+        <div className="p-3 space-y-2 flex-shrink-0 border-b">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
@@ -144,7 +144,9 @@ export default function KPISelector({
               className="h-8"
             />
           </div>
-          <ScrollArea className="h-[300px]">
+        </div>
+        <div className="flex-1 overflow-hidden" style={{ minHeight: 0, maxHeight: '300px' }}>
+          <ScrollArea className="h-full" style={{ height: '300px' }}>
             <div className="space-y-1 p-2">
               {filteredKPIs.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
@@ -170,26 +172,33 @@ export default function KPISelector({
               )}
             </div>
           </ScrollArea>
+        </div>
+        <div className="p-2 border-t flex-shrink-0 bg-background">
           {selectedKPIs.length > 0 && (
-            <div className="p-2 border-t">
-              <div className="flex flex-wrap gap-1">
-                {selectedKPIs.map((kpi) => (
-                  <Badge key={kpi} variant="secondary" className="text-xs">
-                    {kpi}
-                    <button
-                      type="button"
-                      className="ml-1 rounded-full hover:bg-destructive/20"
-                      onClick={(e) => handleRemoveKPI(kpi, e)}
-                      aria-label={`Remove ${kpi}`}
-                      title={`Remove ${kpi}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-1 mb-2 max-h-20 overflow-y-auto">
+              {selectedKPIs.map((kpi) => (
+                <Badge key={kpi} variant="secondary" className="text-xs">
+                  {kpi}
+                  <button
+                    type="button"
+                    className="ml-1 rounded-full hover:bg-destructive/20"
+                    onClick={(e) => handleRemoveKPI(kpi, e)}
+                    aria-label={`Remove ${kpi}`}
+                    title={`Remove ${kpi}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
             </div>
           )}
+          <Button
+            type="button"
+            className="w-full"
+            onClick={() => setOpen(false)}
+          >
+            {selectedKPIs.length > 0 ? `Save Selection (${selectedKPIs.length})` : 'Close'}
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
