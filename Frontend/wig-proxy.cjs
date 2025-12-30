@@ -429,6 +429,44 @@ app.delete('/api/wig/department-objectives/:id', async (req, res) => {
   }
 });
 
+// Update order for multiple department objectives
+app.post('/api/wig/department-objectives/update-order', async (req, res) => {
+  try {
+    const pool = await getPool();
+    const { updates } = req.body; // Array of { id, sort_order }
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ error: 'Updates array is required' });
+    }
+
+    // Use a transaction to ensure all updates succeed or fail together
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+
+    try {
+      for (const update of updates) {
+        const request = new sql.Request(transaction);
+        request.input('id', sql.Int, update.id);
+        request.input('sort_order', sql.Int, update.sort_order);
+        
+        await request.query(`
+          UPDATE department_objectives 
+          SET sort_order = @sort_order, updated_at = GETDATE()
+          WHERE id = @id
+        `);
+      }
+
+      await transaction.commit();
+      res.json({ success: true });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  } catch (error) {
+    handleError(res, error, 'Error updating department objectives order');
+  }
+});
+
 // RASCI Routes
 app.get('/api/wig/rasci', async (req, res) => {
   try {

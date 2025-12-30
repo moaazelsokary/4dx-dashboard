@@ -109,7 +109,7 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
       style={style}
       {...attributes}
       {...listeners}
-      className="cursor-grab active:cursor-grabbing"
+      className="cursor-grab active:cursor-grabbing hover:bg-primary/5 transition-colors"
     >
       {children({ attributes: {}, listeners: {}, isDragging })}
     </TableRow>
@@ -1207,9 +1207,9 @@ export default function DepartmentObjectives() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }}>
+                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10">
                       <div className="flex items-center justify-center">
-                        <span>N</span>
+                        <span className="font-semibold text-primary">N</span>
                       </div>
                       <div
                         className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
@@ -1356,9 +1356,9 @@ export default function DepartmentObjectives() {
 
                                   return (
                                     <>
-                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
+                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10">
                                         <div className="w-full h-full flex items-center justify-center">
-                                          <span className="text-sm text-muted-foreground">{index + 1}</span>
+                                          <span className="text-sm font-semibold text-primary">{index + 1}</span>
                                         </div>
                                       </TableCell>
                                       <TableCell className="font-medium" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
