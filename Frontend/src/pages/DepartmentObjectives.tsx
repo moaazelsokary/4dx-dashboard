@@ -452,9 +452,11 @@ export default function DepartmentObjectives() {
       } catch (err) {
         // Revert on error
         setObjectives(oldObjectives);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to save row order';
+        console.error('Error saving row order:', err);
         toast({
           title: 'Error',
-          description: 'Failed to save row order',
+          description: errorMessage,
           variant: 'destructive',
         });
       }
