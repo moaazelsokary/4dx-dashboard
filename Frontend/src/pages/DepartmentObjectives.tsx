@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,10 @@ import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import MEKPIsModal from '@/components/wig/MEKPIsModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder } from 'lucide-react';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, GripVertical } from 'lucide-react';
+import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -72,6 +75,36 @@ const joinKPIs = (kpis: string | string[] | undefined): string => {
   }
   return kpis;
 };
+
+// SortableRow component for drag-and-drop
+interface SortableRowProps {
+  id: number;
+  children: (props: { attributes: any; listeners: any; isDragging: boolean }) => React.ReactNode;
+  isEditing?: boolean;
+}
+
+function SortableRow({ id, children, isEditing }: SortableRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: id.toString(), disabled: isEditing });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style}>
+      {children({ attributes, listeners, isDragging })}
+    </TableRow>
+  );
+}
 
 export default function DepartmentObjectives() {
   const [user, setUser] = useState<any>(null);
@@ -132,6 +165,23 @@ export default function DepartmentObjectives() {
 
   // Track which filter popover is currently open
   const [openFilter, setOpenFilter] = useState<string | null>(null);
+
+  // Column width resizing state
+  const [columnWidths, setColumnWidths] = useState({
+    index: 60,
+    kpi: 250,
+    activity: 300,
+    type: 120,
+    target: 120,
+    responsible: 180,
+    mov: 250,
+    actions: 150
+  });
+
+  // Column resizing state
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
 
   // Filter states for RASCI Metrics table
   const [rasciFilters, setRasciFilters] = useState<{
@@ -225,6 +275,53 @@ export default function DepartmentObjectives() {
     setEditingId(null);
     setEditData({});
   };
+
+  // Column resizing handlers
+  const handleResizeStart = (column: keyof typeof columnWidths, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColumn(column);
+    setResizeStartX(e.clientX);
+    setResizeStartWidth(columnWidths[column]);
+  };
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!resizingColumn) return;
+    const diff = e.clientX - resizeStartX;
+    const newWidth = Math.max(50, resizeStartWidth + diff);
+    setColumnWidths(prev => ({ ...prev, [resizingColumn]: newWidth }));
+  }, [resizingColumn, resizeStartX, resizeStartWidth]);
+
+  const handleResizeEnd = useCallback(() => {
+    setResizingColumn(null);
+  }, []);
+
+  // Drag and drop handler
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setObjectives(prev => {
+        const oldIndex = prev.findIndex(obj => obj.id === Number(active.id));
+        const newIndex = prev.findIndex(obj => obj.id === Number(over.id));
+        if (oldIndex === -1 || newIndex === -1) return prev;
+        const newArray = [...prev];
+        [newArray[oldIndex], newArray[newIndex]] = [newArray[newIndex], newArray[oldIndex]];
+        return newArray;
+      });
+    }
+  };
+
+  // Add mouse move and up listeners for resizing
+  useEffect(() => {
+    if (resizingColumn) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [resizingColumn, resizeStartX, resizeStartWidth]);
 
   const saveEdit = async (e?: React.MouseEvent) => {
     if (e) {
@@ -931,7 +1028,17 @@ export default function DepartmentObjectives() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
+                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }}>
+                      <div className="flex items-center gap-1">
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                        <span>N</span>
+                      </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('index', e)}
+                      />
+                    </TableHead>
+                    <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }}>
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
                         <ExcelFilter
@@ -944,8 +1051,12 @@ export default function DepartmentObjectives() {
                           filterId="kpi"
                         />
                       </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('kpi', e)}
+                      />
                     </TableHead>
-                    <TableHead>
+                    <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }}>
                       <div className="flex items-center gap-2">
                         <span>Activity</span>
                         <ExcelFilter
@@ -958,8 +1069,12 @@ export default function DepartmentObjectives() {
                           filterId="activity"
                         />
                       </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('activity', e)}
+                      />
                     </TableHead>
-                    <TableHead>
+                    <TableHead style={{ width: columnWidths.type, minWidth: columnWidths.type, position: 'relative' }}>
                       <div className="flex items-center gap-2">
                         <span>Type</span>
                         <ExcelFilter
@@ -972,8 +1087,12 @@ export default function DepartmentObjectives() {
                           filterId="type"
                         />
                       </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('type', e)}
+                      />
                     </TableHead>
-                    <TableHead className="text-right">
+                    <TableHead className="text-right" style={{ width: columnWidths.target, minWidth: columnWidths.target, position: 'relative' }}>
                       <div className="flex items-center gap-2 justify-end">
                         <span>Target</span>
                         <ExcelFilter
@@ -986,8 +1105,12 @@ export default function DepartmentObjectives() {
                           filterId="target"
                         />
                       </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('target', e)}
+                      />
                     </TableHead>
-                    <TableHead>
+                    <TableHead style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible, position: 'relative' }}>
                       <div className="flex items-center gap-2">
                         <span>Responsible</span>
                         <ExcelFilter
@@ -1000,8 +1123,12 @@ export default function DepartmentObjectives() {
                           filterId="responsible"
                         />
                       </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('responsible', e)}
+                      />
                     </TableHead>
-                    <TableHead>
+                    <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }}>
                       <div className="flex items-center gap-2">
                         <span>MOV</span>
                         <ExcelFilter
@@ -1014,15 +1141,22 @@ export default function DepartmentObjectives() {
                           filterId="mov"
                         />
                       </div>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('mov', e)}
+                      />
                     </TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {/* Add Regular Objective Row */}
-                  {isAdding && (
-                    <TableRow>
-                      <TableCell>
+                  <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={filteredObjectives.filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:')).map(obj => obj.id.toString())} strategy={verticalListSortingStrategy}>
+                      {/* Add Regular Objective Row */}
+                      {isAdding && (
+                        <TableRow>
+                          <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }}></TableCell>
+                          <TableCell style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
                         <KPISelector
                           value={newData.kpi}
                           onValueChange={(value) => setNewData({ ...newData, kpi: value })}
@@ -1033,14 +1167,16 @@ export default function DepartmentObjectives() {
                           value={newData.activity || ''}
                           onChange={(e) => setNewData({ ...newData, activity: e.target.value })}
                           placeholder="Activity"
+                          className="w-full"
+                          autoFocus
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }}>
                         <Select
                           value={newData.type || 'Direct'}
                           onValueChange={(value: 'Direct' | 'In direct') => setNewData({ ...newData, type: value })}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1049,30 +1185,32 @@ export default function DepartmentObjectives() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
                         <Input
                           type="number"
                           value={newData.activity_target || ''}
                           onChange={(e) => setNewData({ ...newData, activity_target: parseFloat(e.target.value) || 0 })}
                           placeholder="Target"
-                          className="text-right"
+                          className="text-right w-full"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}>
                         <Input
                           value={newData.responsible_person || ''}
                           onChange={(e) => setNewData({ ...newData, responsible_person: e.target.value })}
                           placeholder="Responsible Person"
+                          className="w-full"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}>
                         <Input
                           value={newData.mov || ''}
                           onChange={(e) => setNewData({ ...newData, mov: e.target.value })}
                           placeholder="MOV"
+                          className="w-full"
                         />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
                         <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" onClick={(e) => handleAdd(e)}>
                             Save
@@ -1085,99 +1223,147 @@ export default function DepartmentObjectives() {
                     </TableRow>
                   )}
 
-                  {/* Display regular objectives with their M&E KPIs */}
-                  {filteredObjectives
-                    .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
-                    .map((obj) => {
-                      // Get M&E KPIs for this objective
-                      const meKPIsForObjective = filteredObjectives.filter(
-                        meObj => (meObj.type === 'M&E' || meObj.type === 'M&E MOV') && meObj.activity?.startsWith(`[M&E-PARENT:${obj.id}]`)
-                      );
-                      
-                      return (
-                        <>
-                          <TableRow key={obj.id}>
-                            {editingId === obj.id ? (
-                        <>
-                          <TableCell>
-                            <KPISelector
-                              value={editData.kpi ? (Array.isArray(editData.kpi) ? editData.kpi : parseKPIs(editData.kpi as string)) : parseKPIs(obj.kpi)}
-                              onValueChange={(value) => setEditData({ ...editData, kpi: value })}
-                              multiple={true}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={editData.activity || obj.activity}
-                              onChange={(e) => setEditData({ ...editData, activity: e.target.value })}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={editData.type || obj.type}
-                              onValueChange={(value: 'Direct' | 'In direct') => setEditData({ ...editData, type: value })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Direct">Direct</SelectItem>
-                                <SelectItem value="In direct">In direct</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={editData.activity_target?.toString() || obj.activity_target.toString()}
-                              onChange={(e) => setEditData({ ...editData, activity_target: parseFloat(e.target.value) || 0 })}
-                              className="text-right"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={editData.responsible_person || obj.responsible_person}
-                              onChange={(e) => setEditData({ ...editData, responsible_person: e.target.value })}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={editData.mov || obj.mov}
-                              onChange={(e) => setEditData({ ...editData, mov: e.target.value })}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button type="button" size="sm" onClick={saveEdit}>
-                                Save
-                              </Button>
-                              <Button type="button" size="sm" variant="outline" onClick={cancelEdit}>
-                                Cancel
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </>
-                      ) : (
-                        <>
-                          <TableCell className="font-medium">
+                      {/* Display regular objectives with their M&E KPIs */}
+                      {filteredObjectives
+                        .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
+                        .map((obj, index) => {
+                          // Get M&E KPIs for this objective
+                          const meKPIsForObjective = filteredObjectives.filter(
+                            meObj => (meObj.type === 'M&E' || meObj.type === 'M&E MOV') && meObj.activity?.startsWith(`[M&E-PARENT:${obj.id}]`)
+                          );
+                          
+                          return (
+                            <SortableRow key={obj.id} id={obj.id} isEditing={editingId === obj.id}>
+                              {({ attributes, listeners }) => (
+                                <>
+                                  {editingId === obj.id ? (
+                                    <>
+                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
+                                        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex items-center justify-center">
+                                          <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                      </TableCell>
+                                  <TableCell style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
+                                    <KPISelector
+                                      value={editData.kpi ? (Array.isArray(editData.kpi) ? editData.kpi : parseKPIs(editData.kpi as string)) : parseKPIs(obj.kpi)}
+                                      onValueChange={(value) => setEditData({ ...editData, kpi: value })}
+                                      multiple={true}
+                                    />
+                                  </TableCell>
+                                  <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }}>
+                                    <Input
+                                      value={editData.activity || obj.activity}
+                                      onChange={(e) => setEditData({ ...editData, activity: e.target.value })}
+                                      className="w-full"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          saveEdit();
+                                        } else if (e.key === 'Escape') {
+                                          cancelEdit();
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }}>
+                                    <Select
+                                      value={editData.type || obj.type}
+                                      onValueChange={(value: 'Direct' | 'In direct') => setEditData({ ...editData, type: value })}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Direct">Direct</SelectItem>
+                                        <SelectItem value="In direct">In direct</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
+                                    <Input
+                                      type="number"
+                                      value={editData.activity_target?.toString() || obj.activity_target.toString()}
+                                      onChange={(e) => setEditData({ ...editData, activity_target: parseFloat(e.target.value) || 0 })}
+                                      className="text-right w-full"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          saveEdit();
+                                        } else if (e.key === 'Escape') {
+                                          cancelEdit();
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}>
+                                    <Input
+                                      value={editData.responsible_person || obj.responsible_person}
+                                      onChange={(e) => setEditData({ ...editData, responsible_person: e.target.value })}
+                                      className="w-full"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          saveEdit();
+                                        } else if (e.key === 'Escape') {
+                                          cancelEdit();
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}>
+                                    <Input
+                                      value={editData.mov || obj.mov}
+                                      onChange={(e) => setEditData({ ...editData, mov: e.target.value })}
+                                      className="w-full"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          saveEdit();
+                                        } else if (e.key === 'Escape') {
+                                          cancelEdit();
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
+                                    <div className="flex justify-end gap-2">
+                                      <Button type="button" size="sm" onClick={saveEdit}>
+                                        Save
+                                      </Button>
+                                      <Button type="button" size="sm" variant="outline" onClick={cancelEdit}>
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </>
+                                    ) : (
+                                      <>
+                                        <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center">
+                                          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex items-center justify-center">
+                                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                          </div>
+                                          <span className="text-sm text-muted-foreground ml-1">{index + 1}</span>
+                                        </TableCell>
+                                  <TableCell className="font-medium" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
                             <div className="flex flex-wrap gap-1">
                               {parseKPIs(obj.kpi).map((kpi, idx) => (
                                 <Badge key={idx} variant="outline" className="text-xs">
                                   {kpi}
                                 </Badge>
                               ))}
-                            </div>
-                          </TableCell>
-                          <TableCell>{obj.activity}</TableCell>
-                          <TableCell>
-                            <Badge variant={obj.type === 'Direct' ? 'default' : 'secondary'}>
-                              {obj.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">{obj.activity_target.toLocaleString()}</TableCell>
-                          <TableCell>{obj.responsible_person}</TableCell>
-                          <TableCell>{obj.mov}</TableCell>
-                          <TableCell className="text-right">
+                                  </div>
+                                </TableCell>
+                                <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }}>{obj.activity}</TableCell>
+                                <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }}>
+                                  <Badge variant={obj.type === 'Direct' ? 'default' : 'secondary'}>
+                                    {obj.type}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>{obj.activity_target.toLocaleString()}</TableCell>
+                                <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}>{obj.responsible_person}</TableCell>
+                                <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}>{obj.mov}</TableCell>
+                                <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
                             <div className="flex justify-end gap-2">
                               {meKPIsForObjective.length > 0 && (
                                 <Button
@@ -1236,17 +1422,20 @@ export default function DepartmentObjectives() {
                               <Button type="button" size="sm" variant="outline" onClick={() => setDeletingId(obj.id)} aria-label={`Delete objective ${obj.id}`} title="Delete objective">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
-                            </div>
-                          </TableCell>
-                        </>
-                      )}
-                    </TableRow>
+                                </div>
+                              </TableCell>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </SortableRow>
                     
                     {/* Add M&E KPI row for this objective */}
                     {addingMEForObjective === obj.id && canModifyMEKPIs && (
                       <>
                         <TableRow className="bg-muted/30">
-                          <TableCell colSpan={2}>
+                          <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }}></TableCell>
+                          <TableCell colSpan={2} style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
                             <Input
                               value={newMEKPI.me_kpi}
                               onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
@@ -1366,9 +1555,11 @@ export default function DepartmentObjectives() {
                         </TableRow>
                       </>
                     )}
-                        </>
+                        </> 
                       );
                     })}
+                    </SortableContext>
+                  </DndContext>
                 </TableBody>
               </Table>
             </div>
