@@ -261,7 +261,16 @@ exports.handler = async function (event, context) {
     else if (path === '/rasci' && method === 'GET') {
       result = await getRASCI(pool, queryParams);
     } else if (path.startsWith('/rasci/kpi/') && method === 'GET') {
-      const kpi = decodeURIComponent(path.split('/kpi/')[1]);
+      // Extract KPI from path - handle URL encoding properly
+      const kpiPath = path.substring('/rasci/kpi/'.length);
+      let kpi;
+      try {
+        kpi = decodeURIComponent(kpiPath);
+      } catch (e) {
+        // If decodeURIComponent fails, try alternative decoding
+        kpi = decodeURIComponent(decodeURIComponent(kpiPath));
+      }
+      console.log('[RASCI] Loading RASCI for KPI:', kpi);
       result = await getRASCIByKPI(pool, kpi);
     } else if (path.startsWith('/rasci/department/') && method === 'GET') {
       const departmentCode = decodeURIComponent(path.split('/department/')[1]);
@@ -1063,14 +1072,21 @@ async function getRASCI(pool, queryParams) {
 
 async function getRASCIByKPI(pool, kpi) {
   try {
+    console.log('[RASCI] getRASCIByKPI called with KPI:', kpi);
+    console.log('[RASCI] KPI length:', kpi ? kpi.length : 0);
+    console.log('[RASCI] KPI type:', typeof kpi);
+    
     const request = pool.request();
     request.input('kpi', sql.NVarChar, kpi);
 
     const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
+    console.log('[RASCI] Query returned', result.recordset ? result.recordset.length : 0, 'records');
     return result.recordset || [];
   } catch (error) {
     console.error('[RASCI] Error in getRASCIByKPI:', error);
     console.error('[RASCI] Error message:', error.message);
+    console.error('[RASCI] Error stack:', error.stack);
+    console.error('[RASCI] KPI that caused error:', kpi);
     
     // If table doesn't exist, return empty array instead of error
     if (error.message && error.message.includes('Invalid object name')) {

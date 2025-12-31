@@ -138,10 +138,12 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
       });
       
       setRasciData(rasciMap);
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Error loading RASCI data for KPI:', kpi, err);
+      const errorMessage = err?.message || err?.toString() || 'Unknown error';
       toast({
         title: 'Error',
-        description: 'Failed to load RASCI data',
+        description: `Failed to load RASCI data: ${errorMessage}`,
         variant: 'destructive',
       });
     } finally {

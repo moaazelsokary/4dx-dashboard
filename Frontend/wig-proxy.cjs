@@ -521,11 +521,29 @@ app.get('/api/wig/rasci/kpi/:kpi', async (req, res) => {
   try {
     const pool = await getPool();
     const request = pool.request();
-    request.input('kpi', sql.NVarChar, decodeURIComponent(req.params.kpi));
+    
+    // Decode the KPI parameter - handle multiple encoding if needed
+    let kpi;
+    try {
+      kpi = decodeURIComponent(req.params.kpi);
+    } catch (e) {
+      // If decodeURIComponent fails, try alternative decoding
+      try {
+        kpi = decodeURIComponent(decodeURIComponent(req.params.kpi));
+      } catch (e2) {
+        kpi = req.params.kpi; // Fallback to raw parameter
+      }
+    }
+    
+    console.log('[RASCI] Loading RASCI for KPI:', kpi);
+    request.input('kpi', sql.NVarChar, kpi);
 
     const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
+    console.log('[RASCI] Query returned', result.recordset ? result.recordset.length : 0, 'records');
     res.json(result.recordset);
   } catch (error) {
+    console.error('[RASCI] Error getting RASCI by KPI:', error);
+    console.error('[RASCI] KPI that caused error:', req.params.kpi);
     handleError(res, error, 'Error getting RASCI by KPI');
   }
 });
