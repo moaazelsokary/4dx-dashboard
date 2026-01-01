@@ -819,7 +819,7 @@ export default function DepartmentObjectives() {
           </Button>
         </PopoverTrigger>
         <PopoverContent 
-          className="min-w-64 max-w-sm w-auto p-0 max-h-[calc(100vh-8rem)]" 
+          className="min-w-64 max-w-[320px] w-auto p-0 max-h-[calc(100vh-8rem)]" 
           align="start"
           side="bottom"
           sideOffset={4}
