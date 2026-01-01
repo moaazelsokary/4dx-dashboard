@@ -1674,11 +1674,11 @@ export default function DepartmentObjectives() {
             <CardTitle>RASCI Metrics</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-md overflow-x-auto">
+            <div className="overflow-x-auto rounded-lg border border-primary/20">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>
+                  <TableRow className="bg-primary/10 hover:bg-primary/15 border-b-2 border-primary/20">
+                    <TableHead className="font-bold text-foreground">
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
                         <ExcelFilter
@@ -1691,7 +1691,7 @@ export default function DepartmentObjectives() {
                         />
                       </div>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="font-bold text-foreground">
                       <div className="flex items-center gap-2">
                         <span>Role</span>
                         <ExcelFilter
@@ -1704,7 +1704,7 @@ export default function DepartmentObjectives() {
                         />
                       </div>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="font-bold text-foreground">
                       <div className="flex items-center gap-2">
                         <span>Exists in your activities</span>
                         <ExcelFilter
@@ -1728,7 +1728,7 @@ export default function DepartmentObjectives() {
                     </TableRow>
                   ) : (
                     filteredRasciMetrics.map((rasci) => (
-                      <TableRow key={rasci.id}>
+                      <TableRow key={rasci.id} className="hover:bg-primary/5 transition-colors duration-200">
                         <TableCell className="font-medium">{rasci.kpi}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{rasci.role}</Badge>
