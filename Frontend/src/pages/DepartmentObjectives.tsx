@@ -1913,7 +1913,7 @@ export default function DepartmentObjectives() {
                           <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-white/20 to-transparent rounded-full blur-3xl"></div>
                         </div>
                         
-                        <Accordion type="single" collapsible className="w-full relative z-10">
+                        <Accordion type="single" collapsible className="w-full relative z-10" defaultValue={`pillar-${pillarIndex}`}>
                           <AccordionItem value={`pillar-${pillarIndex}`} className="border-none">
                             <AccordionTrigger className="px-6 py-5 hover:no-underline group">
                               <div className="flex items-center gap-4 w-full">
@@ -1955,7 +1955,7 @@ export default function DepartmentObjectives() {
                                       key={objIndex} 
                                       className={`border-l-4 ${colors.borderLeft} bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group`}
                                     >
-                                      <Accordion type="single" collapsible>
+                                      <Accordion type="single" collapsible defaultValue={`objective-${pillarIndex}-${objIndex}`}>
                                         <AccordionItem value={`objective-${pillarIndex}-${objIndex}`} className="border-none">
                                           <AccordionTrigger className="px-5 py-4 hover:no-underline group">
                                             <div className="flex items-center gap-3 w-full">
@@ -1995,7 +1995,7 @@ export default function DepartmentObjectives() {
                                                     key={targetIndex} 
                                                     className={`bg-gradient-to-r ${colors.bg} border ${colors.border} transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-lg`}
                                                   >
-                                                    <Accordion type="single" collapsible>
+                                                    <Accordion type="single" collapsible defaultValue={`target-${pillarIndex}-${objIndex}-${targetIndex}`}>
                                                       <AccordionItem value={`target-${pillarIndex}-${objIndex}-${targetIndex}`} className="border-none">
                                                         <AccordionTrigger className="px-4 py-3 hover:no-underline group">
                                                           <div className="flex items-center gap-3 w-full">
