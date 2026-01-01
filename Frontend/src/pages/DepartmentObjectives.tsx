@@ -27,14 +27,15 @@ import {
   getMainObjectives,
   getDepartments,
   getRASCIByDepartment,
+  getHierarchicalPlan,
 } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import MEKPIsModal from '@/components/wig/MEKPIsModal';
 import ObjectiveFormModal from '@/components/wig/ObjectiveFormModal';
-import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence } from '@/types/wig';
-import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut } from 'lucide-react';
+import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence, HierarchicalPlan } from '@/types/wig';
+import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut, Layers, Sparkles, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -44,6 +45,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface MEEKPI {
   id?: number;
@@ -135,6 +137,7 @@ export default function DepartmentObjectives() {
   const [mainObjectives, setMainObjectives] = useState<MainPlanObjective[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [rasciMetrics, setRasciMetrics] = useState<RASCIWithExistence[]>([]);
+  const [hierarchicalData, setHierarchicalData] = useState<HierarchicalPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('objectives');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -283,11 +286,12 @@ export default function DepartmentObjectives() {
         departmentCode = userObj.departments?.[0];
       }
       
-      const [deptObjectives, mainObjs, depts, rasciData] = await Promise.all([
+      const [deptObjectives, mainObjs, depts, rasciData, hierarchical] = await Promise.all([
         getDepartmentObjectives({ department_code: departmentCode }),
         getMainObjectives(),
         getDepartments(),
         departmentCode ? getRASCIByDepartment(departmentCode) : Promise.resolve([]),
+        getHierarchicalPlan(),
       ]);
       
       // Sort by sort_order if available, otherwise by id
@@ -304,6 +308,7 @@ export default function DepartmentObjectives() {
       setMainObjectives(mainObjs);
       setDepartments(depts);
       setRasciMetrics(rasciData);
+      setHierarchicalData(hierarchical);
     } catch (err) {
       toast({
         title: 'Error',
@@ -1070,6 +1075,167 @@ export default function DepartmentObjectives() {
     }
   };
 
+  // Helper functions for hierarchical view
+  const extractNumber = (text: string, pattern: RegExp): string => {
+    const match = text.match(pattern);
+    return match ? match[0] : '';
+  };
+
+  const TARGET_TO_OBJECTIVE_MAP: Record<string, string> = {
+    '1.1': '1.1', '1.2': '1.2', '1.3': '1.3', '1.4': '1.4', '1.5': '1.5',
+    '2.1': '2.1', '3.1': '3.1', '4.1': '4.1', '5.1': '5.1', '5.2': '5.2',
+    '5.3': '5.3', '5.4': '5.4', '6.1': '6.1', '7.1': '7.1', '8.1': '8.1', '9.1': '9.1',
+  };
+
+  const generateHierarchicalNumbers = (data: HierarchicalPlan) => {
+    const objNums = new Map<string, string>();
+    const targetNums = new Map<string, string>();
+    const kpiNums = new Map<string, string>();
+
+    data.pillars.forEach((pillar) => {
+      pillar.objectives.forEach((obj) => {
+        const objKey = `${pillar.pillar}|${obj.objective}`;
+        let objNum = '';
+        if (obj.targets.length > 0) {
+          const firstTarget = obj.targets[0];
+          const targetNum = extractNumber(firstTarget.target, /^\d+(\.\d+)?/);
+          if (targetNum) {
+            objNum = TARGET_TO_OBJECTIVE_MAP[targetNum] || targetNum;
+          }
+        }
+        if (!objNum) {
+          objNum = extractNumber(obj.objective, /^\d+(\.\d+)?/);
+        }
+        objNums.set(objKey, objNum || '');
+        
+        obj.targets.forEach((target) => {
+          const targetKey = `${objKey}|${target.target}`;
+          const extractedTargetNum = extractNumber(target.target, /^\d+(\.\d+)?/);
+          targetNums.set(targetKey, extractedTargetNum || '');
+          
+          target.kpis.forEach((kpi) => {
+            const kpiKey = `${targetKey}|${kpi.kpi}`;
+            const extractedKpiNum = extractNumber(kpi.kpi, /^\d+(\.\d+)*(\.\d+)?/);
+            kpiNums.set(kpiKey, extractedKpiNum || '');
+          });
+        });
+      });
+    });
+
+    return { objNums, targetNums, kpiNums };
+  };
+
+  const sortByNumber = (a: string, b: string): number => {
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+    const aParts = a.split('.').map(Number);
+    const bParts = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const aVal = aParts[i] || 0;
+      const bVal = bParts[i] || 0;
+      if (aVal !== bVal) return aVal - bVal;
+    }
+    return 0;
+  };
+
+  const getPillarColors = (pillar: string) => {
+    if (pillar === 'Strategic Themes') {
+      return {
+        gradient: 'from-blue-500/20 via-blue-400/10 to-indigo-500/20',
+        border: 'border-blue-400/30',
+        borderLeft: 'border-l-blue-500',
+        bg: 'bg-blue-50/50 dark:bg-blue-950/20',
+        text: 'text-blue-700 dark:text-blue-300',
+        icon: 'text-blue-600 dark:text-blue-400',
+        badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-300 dark:border-blue-700',
+      };
+    } else if (pillar === 'Contributors') {
+      return {
+        gradient: 'from-emerald-500/20 via-emerald-400/10 to-teal-500/20',
+        border: 'border-emerald-400/30',
+        borderLeft: 'border-l-emerald-500',
+        bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        icon: 'text-emerald-600 dark:text-emerald-400',
+        badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
+      };
+    } else {
+      return {
+        gradient: 'from-purple-500/20 via-purple-400/10 to-pink-500/20',
+        border: 'border-purple-400/30',
+        borderLeft: 'border-l-purple-500',
+        bg: 'bg-purple-50/50 dark:bg-purple-950/20',
+        text: 'text-purple-700 dark:text-purple-300',
+        icon: 'text-purple-600 dark:text-purple-400',
+        badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 border-purple-300 dark:border-purple-700',
+      };
+    }
+  };
+
+  // Create RASCI Map for lookup
+  const rasciMap = new Map<string, RASCIWithExistence>();
+  rasciMetrics.forEach(rasci => {
+    if (rasci.role && rasci.role !== '—' && rasci.role.trim() !== '') {
+      rasciMap.set(rasci.kpi, rasci);
+    }
+  });
+
+  // Filter hierarchical plan to only include KPIs with RASCI data
+  const filterHierarchyByRASCI = (hierarchical: HierarchicalPlan, rasciMap: Map<string, RASCIWithExistence>, filters: typeof rasciFilters): HierarchicalPlan => {
+    const rasciWithRoles = Array.from(rasciMap.values()).filter(rasci => rasci.role && rasci.role !== '—' && rasci.role.trim() !== '');
+    
+    // Apply filters
+    const filteredRASCI = rasciWithRoles.filter((rasci) => {
+      const matchesKPI = filters.kpi.length === 0 || filters.kpi.includes(rasci.kpi);
+      const matchesRole = filters.role.length === 0 || filters.role.includes(rasci.role);
+      const existsLabel = rasci.exists_in_activities ? 'Exists' : 'Not exists';
+      const matchesExists = filters.exists.length === 0 || filters.exists.includes(existsLabel);
+      return matchesKPI && matchesRole && matchesExists;
+    });
+    
+    const filteredKPISet = new Set(filteredRASCI.map(r => r.kpi));
+    
+    return {
+      pillars: hierarchical.pillars.map(pillar => ({
+        ...pillar,
+        objectives: pillar.objectives.map(obj => ({
+          ...obj,
+          targets: obj.targets.map(target => ({
+            ...target,
+            kpis: target.kpis.filter(kpi => filteredKPISet.has(kpi.kpi))
+          })).filter(target => target.kpis.length > 0)
+        })).filter(obj => obj.targets.length > 0)
+      })).filter(pillar => pillar.objectives.length > 0)
+    };
+  };
+
+  // Filter hierarchical data
+  const filteredHierarchical = hierarchicalData && rasciMap.size > 0 
+    ? filterHierarchyByRASCI(hierarchicalData, rasciMap, rasciFilters)
+    : null;
+
+  // Generate numbers for filtered hierarchy
+  const hierarchicalNumbers = filteredHierarchical ? generateHierarchicalNumbers(filteredHierarchical) : { objNums: new Map(), targetNums: new Map(), kpiNums: new Map() };
+
+  const getObjNum = (pillar: string, objective: string): string => {
+    const objKey = `${pillar}|${objective}`;
+    return hierarchicalNumbers.objNums.get(objKey) || '';
+  };
+
+  const getTargetNum = (pillar: string, objective: string, target: string): string => {
+    const objKey = `${pillar}|${objective}`;
+    const targetKey = `${objKey}|${target}`;
+    return hierarchicalNumbers.targetNums.get(targetKey) || '';
+  };
+
+  const getKpiNum = (pillar: string, objective: string, target: string, kpi: string): string => {
+    const objKey = `${pillar}|${objective}`;
+    const targetKey = `${objKey}|${target}`;
+    const kpiKey = `${targetKey}|${kpi}`;
+    return hierarchicalNumbers.kpiNums.get(kpiKey) || '';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
       {/* Header */}
@@ -1702,7 +1868,7 @@ export default function DepartmentObjectives() {
             </div>
           </CardHeader>
           <CardContent>
-            {filteredRasciMetrics.length === 0 ? (
+            {!filteredHierarchical || filteredHierarchical.pillars.length === 0 ? (
               <Card className="border-2 border-border">
                 <CardContent className="p-8 text-center">
                   <p className="text-muted-foreground">
@@ -1711,33 +1877,210 @@ export default function DepartmentObjectives() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredRasciMetrics.map((rasci) => (
-                  <Card 
-                    key={rasci.id}
-                    className="border-2 border-primary/20 bg-gradient-to-br from-white to-primary/5 rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
-                  >
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-lg mb-3 text-foreground line-clamp-2">
-                        {rasci.kpi}
-                      </h3>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <Badge variant="outline" className="border-primary/30">
-                          {rasci.role}
-                        </Badge>
-                        {rasci.exists_in_activities ? (
-                          <Badge variant="default" className="bg-green-600">
-                            Exists
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            Not exists
-                          </Badge>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="space-y-6 p-2">
+                {(() => {
+                  const pillarOrder = ['Strategic Themes', 'Contributors', 'Strategic Enablers'];
+                  const sortedPillars = [...filteredHierarchical.pillars].sort((a, b) => {
+                    const aIndex = pillarOrder.indexOf(a.pillar);
+                    const bIndex = pillarOrder.indexOf(b.pillar);
+                    if (aIndex === -1 && bIndex === -1) return 0;
+                    if (aIndex === -1) return 1;
+                    if (bIndex === -1) return -1;
+                    return aIndex - bIndex;
+                  });
+
+                  return sortedPillars.map((pillar, pillarIndex) => {
+                    const sortedObjectives = [...pillar.objectives].sort((a, b) => {
+                      const aFirstTarget = a.targets[0]?.target || '';
+                      const bFirstTarget = b.targets[0]?.target || '';
+                      const aTargetNum = extractNumber(aFirstTarget, /^\d+(\.\d+)?/) || '';
+                      const bTargetNum = extractNumber(bFirstTarget, /^\d+(\.\d+)?/) || '';
+                      return sortByNumber(aTargetNum, bTargetNum);
+                    });
+
+                    const colors = getPillarColors(pillar.pillar);
+                    const totalKPIs = sortedObjectives.reduce((sum, obj) => 
+                      sum + obj.targets.reduce((s, t) => s + t.kpis.length, 0), 0
+                    );
+
+                    return (
+                      <Card 
+                        key={pillarIndex} 
+                        className={`border-2 ${colors.border} bg-gradient-to-br ${colors.gradient} shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative`}
+                      >
+                        <div className="absolute inset-0 opacity-5">
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
+                          <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-white/20 to-transparent rounded-full blur-3xl"></div>
+                        </div>
+                        
+                        <Accordion type="single" collapsible className="w-full relative z-10">
+                          <AccordionItem value={`pillar-${pillarIndex}`} className="border-none">
+                            <AccordionTrigger className="px-6 py-5 hover:no-underline group">
+                              <div className="flex items-center gap-4 w-full">
+                                <div className={`p-3 rounded-xl ${colors.bg} border ${colors.border} group-hover:scale-110 transition-transform duration-200`}>
+                                  <Layers className={`h-6 w-6 ${colors.icon}`} />
+                                </div>
+                                <div className="flex-1 text-left">
+                                  <h2 className={`text-2xl font-bold ${colors.text} mb-1`}>{pillar.pillar}</h2>
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    <Badge className={colors.badge}>
+                                      <Target className="h-3 w-3 mr-1" />
+                                      {pillar.objectives.length} Objectives
+                                    </Badge>
+                                    <Badge variant="outline" className="border-current/30">
+                                      <BarChart3 className="h-3 w-3 mr-1" />
+                                      {totalKPIs} KPIs
+                                    </Badge>
+                                  </div>
+                                </div>
+                                <Sparkles className={`h-5 w-5 ${colors.icon} opacity-50 group-hover:opacity-100 transition-opacity`} />
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-6 pb-6">
+                              <div className="space-y-4">
+                                {sortedObjectives.map((objective, objIndex) => {
+                                  const objNum = getObjNum(pillar.pillar, objective.objective);
+                                  const objText = objective.objective.replace(/^\d+(\.\d+)?\s*/, '') || objective.objective;
+                                  
+                                  const sortedTargets = [...objective.targets].sort((a, b) => {
+                                    const aTargetNum = extractNumber(a.target, /^\d+(\.\d+)?/) || '';
+                                    const bTargetNum = extractNumber(b.target, /^\d+(\.\d+)?/) || '';
+                                    return sortByNumber(aTargetNum, bTargetNum);
+                                  });
+
+                                  const objKPIs = sortedTargets.reduce((sum, t) => sum + t.kpis.length, 0);
+
+                                  return (
+                                    <Card 
+                                      key={objIndex} 
+                                      className={`border-l-4 ${colors.borderLeft} bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group`}
+                                    >
+                                      <Accordion type="single" collapsible>
+                                        <AccordionItem value={`objective-${pillarIndex}-${objIndex}`} className="border-none">
+                                          <AccordionTrigger className="px-5 py-4 hover:no-underline group">
+                                            <div className="flex items-center gap-3 w-full">
+                                              <div className={`px-3 py-1.5 rounded-lg ${colors.bg} border ${colors.border} font-mono text-sm font-bold ${colors.text} group-hover:scale-105 transition-transform`}>
+                                                {objNum}
+                                              </div>
+                                              <div className="flex-1 text-left">
+                                                <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
+                                                  {objText}
+                                                </h3>
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                                                  <Target className="h-3 w-3 mr-1" />
+                                                  {objective.targets.length} Targets
+                                                </Badge>
+                                                <Badge variant="outline" className="border-primary/30">
+                                                  {objKPIs} KPIs
+                                                </Badge>
+                                              </div>
+                                            </div>
+                                          </AccordionTrigger>
+                                          <AccordionContent className="px-5 pb-5">
+                                            <div className="space-y-3">
+                                              {sortedTargets.map((target, targetIndex) => {
+                                                const targetNum = getTargetNum(pillar.pillar, objective.objective, target.target);
+                                                const targetText = target.target.replace(/^\d+(\.\d+)?\s*/, '') || target.target;
+                                                
+                                                const sortedKPIs = [...target.kpis].sort((a, b) => {
+                                                  const aKpiNum = extractNumber(a.kpi, /^\d+(\.\d+)*(\.\d+)?/) || '';
+                                                  const bKpiNum = extractNumber(b.kpi, /^\d+(\.\d+)*(\.\d+)?/) || '';
+                                                  return sortByNumber(aKpiNum, bKpiNum);
+                                                });
+
+                                                return (
+                                                  <Card 
+                                                    key={targetIndex} 
+                                                    className={`bg-gradient-to-r ${colors.bg} border ${colors.border} transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-lg`}
+                                                  >
+                                                    <Accordion type="single" collapsible>
+                                                      <AccordionItem value={`target-${pillarIndex}-${objIndex}-${targetIndex}`} className="border-none">
+                                                        <AccordionTrigger className="px-4 py-3 hover:no-underline group">
+                                                          <div className="flex items-center gap-3 w-full">
+                                                            <div className={`px-2.5 py-1 rounded-md ${colors.bg} border ${colors.border} font-mono text-xs font-semibold ${colors.text}`}>
+                                                              {targetNum}
+                                                            </div>
+                                                            <div className="flex-1 text-left">
+                                                              <h4 className="text-base font-medium text-foreground group-hover:text-primary transition-colors">
+                                                                {targetText}
+                                                              </h4>
+                                                            </div>
+                                                            <Badge variant="outline" className="border-primary/30 bg-white/50 dark:bg-gray-800/50">
+                                                              <TrendingUp className="h-3 w-3 mr-1" />
+                                                              {target.kpis.length} KPIs
+                                                            </Badge>
+                                                          </div>
+                                                        </AccordionTrigger>
+                                                        <AccordionContent className="px-4 pb-4">
+                                                          <div className="space-y-3">
+                                                            {sortedKPIs.map((kpi, kpiIndex) => {
+                                                              const kpiNum = getKpiNum(pillar.pillar, objective.objective, target.target, kpi.kpi);
+                                                              const kpiText = kpi.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || kpi.kpi;
+                                                              const rasciData = rasciMap.get(kpi.kpi);
+                                                              return (
+                                                                <Card 
+                                                                  key={kpiIndex} 
+                                                                  className={`border-l-4 ${colors.borderLeft} bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:shadow-lg transition-all duration-200 group`}
+                                                                >
+                                                                  <div className="p-4">
+                                                                    <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+                                                                      <div className="flex items-center gap-3 flex-wrap flex-1">
+                                                                        <div className={`px-2 py-1 rounded ${colors.bg} border ${colors.border} font-mono text-xs font-bold ${colors.text}`}>
+                                                                          {kpiNum}
+                                                                        </div>
+                                                                        <h5 className="font-semibold text-foreground group-hover:text-primary transition-colors flex-1 min-w-[200px]">
+                                                                          {kpiText}
+                                                                        </h5>
+                                                                        {rasciData && (
+                                                                          <>
+                                                                            <Badge variant="outline" className="border-primary/30">
+                                                                              {rasciData.role}
+                                                                            </Badge>
+                                                                            {rasciData.exists_in_activities ? (
+                                                                              <Badge variant="default" className="bg-green-600">
+                                                                                Exists
+                                                                              </Badge>
+                                                                            ) : (
+                                                                              <Badge variant="destructive">
+                                                                                Not exists
+                                                                              </Badge>
+                                                                            )}
+                                                                          </>
+                                                                        )}
+                                                                        <Badge className={`${colors.badge} border font-medium`}>
+                                                                          <Target className="h-3 w-3 mr-1" />
+                                                                          {kpi.annual_target.toLocaleString()}
+                                                                        </Badge>
+                                                                      </div>
+                                                                    </div>
+                                                                  </div>
+                                                                </Card>
+                                                              );
+                                                            })}
+                                                          </div>
+                                                        </AccordionContent>
+                                                      </AccordionItem>
+                                                    </Accordion>
+                                                  </Card>
+                                                );
+                                              })}
+                                            </div>
+                                          </AccordionContent>
+                                        </AccordionItem>
+                                      </Accordion>
+                                    </Card>
+                                  );
+                                })}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      </Card>
+                    );
+                  });
+                })()}
               </div>
             )}
           </CardContent>
