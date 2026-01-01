@@ -1671,81 +1671,75 @@ export default function DepartmentObjectives() {
           <TabsContent value="rasci" className="mt-4">
         <Card>
           <CardHeader>
-            <CardTitle>RASCI Metrics</CardTitle>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <CardTitle>RASCI Metrics</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <ExcelFilter
+                  filterId="rasci-kpi"
+                  column="KPI"
+                  uniqueValues={uniqueRasciKPIs}
+                  selectedValues={rasciFilters.kpi}
+                  onToggle={(value) => toggleRasciFilterValue('kpi', value)}
+                  onClear={() => clearRasciFilter('kpi')}
+                />
+                <ExcelFilter
+                  filterId="rasci-role"
+                  column="Role"
+                  uniqueValues={uniqueRasciRoles}
+                  selectedValues={rasciFilters.role}
+                  onToggle={(value) => toggleRasciFilterValue('role', value)}
+                  onClear={() => clearRasciFilter('role')}
+                />
+                <ExcelFilter
+                  filterId="rasci-exists"
+                  column="Exists"
+                  uniqueValues={uniqueRasciExists}
+                  selectedValues={rasciFilters.exists}
+                  onToggle={(value) => toggleRasciFilterValue('exists', value)}
+                  onClear={() => clearRasciFilter('exists')}
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto rounded-lg border border-primary/20">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-primary/10 hover:bg-primary/15 border-b-2 border-primary/20">
-                    <TableHead className="font-bold text-foreground">
-                      <div className="flex items-center gap-2">
-                        <span>KPI</span>
-                        <ExcelFilter
-                          filterId="rasci-kpi"
-                          column="KPI"
-                          uniqueValues={uniqueRasciKPIs}
-                          selectedValues={rasciFilters.kpi}
-                          onToggle={(value) => toggleRasciFilterValue('kpi', value)}
-                          onClear={() => clearRasciFilter('kpi')}
-                        />
+            {filteredRasciMetrics.length === 0 ? (
+              <Card className="border-2 border-border">
+                <CardContent className="p-8 text-center">
+                  <p className="text-muted-foreground">
+                    No RASCI metrics with assigned roles found for this department.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredRasciMetrics.map((rasci) => (
+                  <Card 
+                    key={rasci.id}
+                    className="border-2 border-primary/20 bg-gradient-to-br from-white to-primary/5 rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+                  >
+                    <CardContent className="p-4">
+                      <h3 className="font-semibold text-lg mb-3 text-foreground line-clamp-2">
+                        {rasci.kpi}
+                      </h3>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <Badge variant="outline" className="border-primary/30">
+                          {rasci.role}
+                        </Badge>
+                        {rasci.exists_in_activities ? (
+                          <Badge variant="default" className="bg-green-600">
+                            Exists
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive">
+                            Not exists
+                          </Badge>
+                        )}
                       </div>
-                    </TableHead>
-                    <TableHead className="font-bold text-foreground">
-                      <div className="flex items-center gap-2">
-                        <span>Role</span>
-                        <ExcelFilter
-                          filterId="rasci-role"
-                          column="Role"
-                          uniqueValues={uniqueRasciRoles}
-                          selectedValues={rasciFilters.role}
-                          onToggle={(value) => toggleRasciFilterValue('role', value)}
-                          onClear={() => clearRasciFilter('role')}
-                        />
-                      </div>
-                    </TableHead>
-                    <TableHead className="font-bold text-foreground">
-                      <div className="flex items-center gap-2">
-                        <span>Exists in your activities</span>
-                        <ExcelFilter
-                          filterId="rasci-exists"
-                          column="Exists in your activities"
-                          uniqueValues={uniqueRasciExists}
-                          selectedValues={rasciFilters.exists}
-                          onToggle={(value) => toggleRasciFilterValue('exists', value)}
-                          onClear={() => clearRasciFilter('exists')}
-                        />
-                      </div>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRasciMetrics.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                        No RASCI metrics with assigned roles found for this department.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredRasciMetrics.map((rasci) => (
-                      <TableRow key={rasci.id} className="hover:bg-primary/5 transition-colors duration-200">
-                        <TableCell className="font-medium">{rasci.kpi}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{rasci.role}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {rasci.exists_in_activities ? (
-                            <Badge variant="default" className="bg-green-600">Exists</Badge>
-                          ) : (
-                            <Badge variant="destructive">Not exists</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
           </TabsContent>
