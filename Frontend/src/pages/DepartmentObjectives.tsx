@@ -818,7 +818,13 @@ export default function DepartmentObjectives() {
             <span className="text-xs">{column}</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start">
+        <PopoverContent 
+          className="min-w-64 max-w-sm w-auto p-0 max-h-[calc(100vh-8rem)]" 
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          collisionPadding={8}
+        >
           <div className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">Filter by {column}</span>
@@ -859,7 +865,7 @@ export default function DepartmentObjectives() {
               </div>
             )}
             <Separator />
-            <ScrollArea className="h-64">
+            <ScrollArea className="max-h-[calc(100vh-20rem)] min-h-[120px]">
               <div className="p-2 space-y-2">
                 {filteredValues.length === 0 ? (
                   <div className="text-sm text-muted-foreground py-2">
