@@ -810,11 +810,12 @@ export default function DepartmentObjectives() {
           <Button
             variant="ghost"
             size="sm"
-            className={`h-6 w-6 p-0 ${hasFilter ? 'text-primary' : ''}`}
+            className={`h-auto px-2 py-1 ${hasFilter ? 'text-primary' : ''}`}
             aria-label={`Filter ${column}`}
             title={`Filter ${column}`}
           >
-            <Filter className="h-3 w-3" />
+            <Filter className="h-3 w-3 mr-1.5" />
+            <span className="text-xs">{column}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-0" align="start">
