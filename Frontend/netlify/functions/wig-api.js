@@ -1,5 +1,6 @@
 // Inline database connection code (to avoid module resolution issues in Netlify)
 const sql = require('mssql');
+const rateLimiter = require('./utils/rate-limiter');
 
 let pool = null;
 
@@ -140,7 +141,8 @@ async function getPool() {
   return pool;
 }
 
-exports.handler = async function (event, context) {
+// Apply rate limiting (general type: 100 requests per minute)
+const handler = rateLimiter('general')(async function (event, context) {
   // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -369,7 +371,9 @@ exports.handler = async function (event, context) {
       }),
     };
   }
-};
+});
+
+exports.handler = handler;
 
 // Main Plan Objectives Functions
 async function getMainObjectives(pool, queryParams) {

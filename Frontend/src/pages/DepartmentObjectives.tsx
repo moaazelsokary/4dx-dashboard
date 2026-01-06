@@ -40,6 +40,8 @@ import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import NavigationBar from '@/components/shared/NavigationBar';
+import ExportButton from '@/components/shared/ExportButton';
+import BidirectionalText from '@/components/ui/BidirectionalText';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -1270,6 +1272,25 @@ export default function DepartmentObjectives() {
               </div>
               
               <div className="flex items-center gap-2">
+                {activeTab === 'objectives' && filteredObjectives.length > 0 && (
+                  <ExportButton
+                    data={filteredObjectives
+                      .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
+                      .map(obj => {
+                        const parsedKPIs = parseKPIs(obj.kpi);
+                        return {
+                          'KPI': parsedKPIs.join(', '),
+                          'Activity': obj.activity || '',
+                          'Type': obj.type || '',
+                          'Target': obj.activity_target || 0,
+                          'Responsible Person': obj.responsible_person || '',
+                          'MOV': obj.mov || '',
+                        };
+                      })}
+                    filename={`department-objectives-${new Date().toISOString().split('T')[0]}`}
+                    title="Department Objectives"
+                  />
+                )}
                 <Button type="button" variant="outline" size="sm" onClick={() => loadData()} className="h-7 px-2 text-xs">
                   <RefreshCw className="w-3 h-3 mr-1" />
                   Refresh
@@ -1558,7 +1579,9 @@ export default function DepartmentObjectives() {
                                           ))}
                                         </div>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }}>{obj.activity}</TableCell>
+                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }}>
+                                        <BidirectionalText>{obj.activity}</BidirectionalText>
+                                      </TableCell>
                                       <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }}>
                                         {showTooltip ? (
                                           <TooltipProvider>
@@ -1583,7 +1606,9 @@ export default function DepartmentObjectives() {
                                         {targetDisplay}
                                       </TableCell>
                                       <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}>{obj.responsible_person}</TableCell>
-                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}>{obj.mov}</TableCell>
+                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}>
+                                        <BidirectionalText>{obj.mov}</BidirectionalText>
+                                      </TableCell>
                                       <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
                             <div className="flex justify-end gap-2">
                               {meKPIsForObjective.length > 0 && (

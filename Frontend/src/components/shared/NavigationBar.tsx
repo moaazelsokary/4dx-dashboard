@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight } from 'lucide-react';
 import { hasPowerBIAccess } from '@/config/powerbi';
+import LanguageSwitcher from './LanguageSwitcher';
 
 interface NavigationBarProps {
   user: {
@@ -33,9 +34,12 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
   const canAccessPowerBI = hasPowerBI;
 
   // For CEO/admin, show all buttons on all pages
-  // For other users, show buttons conditionally based on current page
+  // For department users on "My Objectives" page, show all buttons (like CEO)
+  // For other users on other pages, show buttons conditionally based on current page
   const shouldShowButton = (path: string) => {
     if (isCEO) return true; // CEO/admin sees all buttons on all pages
+    // Department users on department objectives page should see all buttons
+    if (isDepartment && location.pathname === '/department-objectives') return true;
     return location.pathname !== path; // Other users: hide button if on that page
   };
 
@@ -131,6 +135,9 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           Projects Website
         </Button>
       )}
+
+      {/* Language Switcher */}
+      <LanguageSwitcher />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Selector } from '@/components/ui/selector';
+import BidirectionalText from '@/components/ui/BidirectionalText';
 import { createMainObjective, updateMainObjective, deleteMainObjective } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import type { MainPlanObjective } from '@/types/wig';
@@ -937,19 +938,25 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                           {obj.pillar}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium">{objText || obj.objective}</TableCell>
+                      <TableCell className="font-medium">
+                        <BidirectionalText>{objText || obj.objective}</BidirectionalText>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="font-mono text-xs font-bold">
                           {targetNum}
                         </Badge>
                       </TableCell>
-                      <TableCell>{targetText || obj.target}</TableCell>
+                      <TableCell>
+                        <BidirectionalText>{targetText || obj.target}</BidirectionalText>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-mono text-xs font-semibold border-accent/50">
                           {kpiNum}
                         </Badge>
                       </TableCell>
-                      <TableCell>{kpiText || obj.kpi}</TableCell>
+                      <TableCell>
+                        <BidirectionalText>{kpiText || obj.kpi}</BidirectionalText>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Badge className="bg-gradient-to-r from-primary to-accent text-white font-semibold">
                           {obj.annual_target.toLocaleString()}

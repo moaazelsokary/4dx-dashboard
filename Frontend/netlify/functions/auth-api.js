@@ -2,6 +2,7 @@ const sql = require('mssql');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const logger = require('./utils/logger');
+const rateLimiter = require('./utils/rate-limiter');
 
 // Database connection (reuse from db.cjs if available)
 let pool = null;
@@ -47,7 +48,8 @@ async function getDbPool() {
 const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRY = '24h';
 
-exports.handler = async (event, context) => {
+// Apply rate limiting (login type: 5 requests per 15 minutes)
+const handler = rateLimiter('login')(async (event, context) => {
   // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -186,5 +188,7 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({ success: false, error: 'Internal server error' }),
     };
   }
-};
+});
+
+exports.handler = handler;
 
