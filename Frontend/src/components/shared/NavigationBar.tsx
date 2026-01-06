@@ -2,7 +2,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight } from 'lucide-react';
 import { hasPowerBIAccess } from '@/config/powerbi';
-import LanguageSwitcher from './LanguageSwitcher';
 
 interface NavigationBarProps {
   user: {
@@ -135,9 +134,6 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           Projects Website
         </Button>
       )}
-
-      {/* Language Switcher */}
-      <LanguageSwitcher />
     </div>
   );
 }
