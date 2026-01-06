@@ -48,18 +48,44 @@ const handler = rateLimiter('general')(csrfMiddleware(async (event, context) => 
 
     // Send email based on configured service
     let result;
-    switch (EMAIL_SERVICE.toLowerCase()) {
-      case 'sendgrid':
-        result = await sendViaSendGrid(to, subject, emailContent.html, emailContent.text);
-        break;
-      case 'ses':
-        result = await sendViaSES(to, subject, emailContent.html, emailContent.text);
-        break;
-      case 'nodemailer':
-        result = await sendViaNodemailer(to, subject, emailContent.html, emailContent.text);
-        break;
-      default:
-        throw new Error(`Unsupported email service: ${EMAIL_SERVICE}`);
+    try {
+      switch (EMAIL_SERVICE.toLowerCase()) {
+        case 'sendgrid':
+          result = await sendViaSendGrid(to, subject, emailContent.html, emailContent.text);
+          break;
+        case 'ses':
+          result = await sendViaSES(to, subject, emailContent.html, emailContent.text);
+          break;
+        case 'nodemailer':
+          result = await sendViaNodemailer(to, subject, emailContent.html, emailContent.text);
+          break;
+        default:
+          // If no email service is configured, return success but log that email wasn't sent
+          logger.warn('Email service not configured or unsupported', { service: EMAIL_SERVICE });
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              success: true,
+              messageId: 'no-service-configured',
+              message: 'Email service not configured. Email was not sent.',
+            }),
+          };
+      }
+    } catch (serviceError) {
+      // If the service package is not installed, return a helpful error
+      if (serviceError.message.includes('MODULE_NOT_FOUND') || serviceError.message.includes('Cannot find module')) {
+        logger.error('Email service package not installed', serviceError);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: `Email service package not installed. ${serviceError.message}`,
+          }),
+        };
+      }
+      throw serviceError;
     }
 
     logger.info('Email sent successfully', { to, subject });
@@ -114,50 +140,64 @@ async function generateEmailContent(template, data, html, text) {
 
 // Send via SendGrid
 async function sendViaSendGrid(to, subject, html, text) {
-  const sgMail = require('@sendgrid/mail');
-  const apiKey = process.env.SENDGRID_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('SENDGRID_API_KEY not configured');
+  try {
+    const sgMail = require('@sendgrid/mail');
+    const apiKey = process.env.SENDGRID_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('SENDGRID_API_KEY not configured');
+    }
+
+    sgMail.setApiKey(apiKey);
+
+    const msg = {
+      to: Array.isArray(to) ? to : [to],
+      from: EMAIL_FROM,
+      subject,
+      text,
+      html,
+    };
+
+    const result = await sgMail.send(msg);
+    return { messageId: result[0]?.headers['x-message-id'] };
+  } catch (error) {
+    if (error.code === 'MODULE_NOT_FOUND') {
+      throw new Error('@sendgrid/mail package is required for SendGrid. Install it: npm install @sendgrid/mail');
+    }
+    throw error;
   }
-
-  sgMail.setApiKey(apiKey);
-
-  const msg = {
-    to: Array.isArray(to) ? to : [to],
-    from: EMAIL_FROM,
-    subject,
-    text,
-    html,
-  };
-
-  const result = await sgMail.send(msg);
-  return { messageId: result[0]?.headers['x-message-id'] };
 }
 
 // Send via AWS SES
 async function sendViaSES(to, subject, html, text) {
-  const AWS = require('aws-sdk');
-  const ses = new AWS.SES({
-    region: process.env.AWS_REGION || 'us-east-1',
-  });
+  try {
+    const AWS = require('aws-sdk');
+    const ses = new AWS.SES({
+      region: process.env.AWS_REGION || 'us-east-1',
+    });
 
-  const params = {
-    Destination: {
-      ToAddresses: Array.isArray(to) ? to : [to],
-    },
-    Message: {
-      Body: {
-        Html: { Data: html },
-        Text: { Data: text },
+    const params = {
+      Destination: {
+        ToAddresses: Array.isArray(to) ? to : [to],
       },
-      Subject: { Data: subject },
-    },
-    Source: EMAIL_FROM,
-  };
+      Message: {
+        Body: {
+          Html: { Data: html },
+          Text: { Data: text },
+        },
+        Subject: { Data: subject },
+      },
+      Source: EMAIL_FROM,
+    };
 
-  const result = await ses.sendEmail(params).promise();
-  return { messageId: result.MessageId };
+    const result = await ses.sendEmail(params).promise();
+    return { messageId: result.MessageId };
+  } catch (error) {
+    if (error.code === 'MODULE_NOT_FOUND') {
+      throw new Error('aws-sdk package is required for AWS SES. Install it: npm install aws-sdk');
+    }
+    throw error;
+  }
 }
 
 // Send via Nodemailer (SMTP)
