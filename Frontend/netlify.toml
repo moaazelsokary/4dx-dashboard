@@ -6,4 +6,35 @@
 [[redirects]]
   from = "/*"
   to = "/index.html"
-  status = 200 
+  status = 200
+
+# Security Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # HTTPS Enforcement
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    
+    # Content Security Policy
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.mapbox.com https://*.powerbi.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.sharepoint.com https://*.microsoft.com https://*.mapbox.com https://*.powerbi.com https://*.netlify.app; frame-src 'self' https://*.powerbi.com; object-src 'none'; base-uri 'self'; form-action 'self';"
+    
+    # XSS Protection
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    
+    # Referrer Policy
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+    # Permissions Policy
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    
+    # Remove server information
+    X-Powered-By = ""
+
+# Force HTTPS redirect
+[[redirects]]
+  from = "http://*"
+  to = "https://:splat"
+  status = 301
+  force = true

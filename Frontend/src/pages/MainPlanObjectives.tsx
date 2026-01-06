@@ -17,7 +17,7 @@ export default function MainPlanObjectives() {
   const [hierarchicalData, setHierarchicalData] = useState<HierarchicalPlan | null>(null);
   const [tableData, setTableData] = useState<MainPlanObjective[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('hierarchy');
+  const [activeTab, setActiveTab] = useState('view');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -127,7 +127,13 @@ export default function MainPlanObjectives() {
       <div className="container mx-auto px-4 py-4 space-y-4">
         {/* Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsContent value="hierarchy" className="mt-0">
+          <TabsList className="grid w-full max-w-md grid-cols-3 mb-4">
+            <TabsTrigger value="view">View</TabsTrigger>
+            <TabsTrigger value="rasci">RASCI</TabsTrigger>
+            <TabsTrigger value="table">Table</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="view" className="mt-0">
             {hierarchicalData && hierarchicalData.pillars.length > 0 ? (
               <HierarchicalPlanView data={hierarchicalData} />
             ) : (
@@ -139,6 +145,10 @@ export default function MainPlanObjectives() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="rasci" className="mt-0">
+            <RASCIEditor readOnly={user?.role === 'department'} />
           </TabsContent>
 
           <TabsContent value="table" className="mt-0">
@@ -154,10 +164,6 @@ export default function MainPlanObjectives() {
                 />
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="rasci" className="mt-0">
-            <RASCIEditor readOnly={user?.role === 'department'} />
           </TabsContent>
         </Tabs>
       </div>
