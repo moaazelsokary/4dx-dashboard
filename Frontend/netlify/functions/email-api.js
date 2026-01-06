@@ -4,7 +4,8 @@ const csrfMiddleware = require('./utils/csrf-middleware');
 
 // Email service configuration
 // Supports SendGrid, AWS SES, or Nodemailer
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'sendgrid'; // 'sendgrid', 'ses', 'nodemailer'
+// Default to 'none' to avoid requiring packages if email is not configured
+const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'none'; // 'sendgrid', 'ses', 'nodemailer', 'none'
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@lifemakers.org';
 
 // Apply rate limiting
