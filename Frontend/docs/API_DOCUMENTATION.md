@@ -82,21 +82,6 @@ Update a CMS page.
 #### DELETE `/cms-api/pages/:id`
 Delete a CMS page.
 
-### Email API
-
-#### POST `/email-api`
-Send an email notification.
-
-**Request:**
-```json
-{
-  "to": "string | string[]",
-  "subject": "string",
-  "template": "string",
-  "data": {}
-}
-```
-
 ## Rate Limiting
 
 - **Login endpoints**: 5 requests per 15 minutes

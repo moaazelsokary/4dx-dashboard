@@ -30,21 +30,21 @@ const App = () => (
     <BrowserRouter>
       <SkipLink />
       <Suspense fallback={<LoadingFallback />}>
-        <Routes>
-          <Route path="/" element={<SignIn />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/wig-plan-2025" element={<WIGPlan2025 />} />
-          <Route path="/main-plan" element={<MainPlanObjectives />} />
-          <Route path="/department-objectives" element={<DepartmentObjectives />} />
-          <Route path="/test" element={<TestConnection />} />
-          <Route path="/summary" element={<Summary />} />
-          <Route path="/project-details" element={<ProjectDetails />} />
-          <Route path="/powerbi" element={<PowerBIDashboard />} />
-          <Route path="/access-denied" element={<AccessDenied />} />
+      <Routes>
+        <Route path="/" element={<SignIn />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/wig-plan-2025" element={<WIGPlan2025 />} />
+        <Route path="/main-plan" element={<MainPlanObjectives />} />
+        <Route path="/department-objectives" element={<DepartmentObjectives />} />
+        <Route path="/test" element={<TestConnection />} />
+        <Route path="/summary" element={<Summary />} />
+        <Route path="/project-details" element={<ProjectDetails />} />
+        <Route path="/powerbi" element={<PowerBIDashboard />} />
+        <Route path="/access-denied" element={<AccessDenied />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
       </Suspense>
     </BrowserRouter>
   </QueryClientProvider>
