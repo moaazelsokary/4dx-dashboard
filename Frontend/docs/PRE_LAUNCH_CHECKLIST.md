@@ -10,7 +10,6 @@ Use this checklist before deploying to production.
 - [ ] User authentication works
 - [ ] Role-based access control works
 - [ ] Data export (Excel, CSV, PDF) works
-- [ ] Email notifications are sent
 - [ ] CMS functionality works (if implemented)
 
 ## Browser Testing
