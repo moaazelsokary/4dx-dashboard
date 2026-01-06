@@ -41,60 +41,16 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
 
   return (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
-      {/* Strategic Plan 2026 - CEO/admin and department users */}
-      {canAccessMainPlan && (isCEO || isDepartment || showWIGTabs) && (
+      {/* Strategic Plan 2026 */}
+      {canAccessMainPlan && (
         <Button
-          variant={location.pathname === '/main-plan' && (activeTab === 'hierarchy' || !showWIGTabs) ? 'default' : 'outline'}
+          variant={location.pathname === '/main-plan' ? 'default' : 'outline'}
           size="sm"
-          onClick={() => {
-            if (showWIGTabs) {
-              onTabChange?.('hierarchy');
-            } else {
-              navigate('/main-plan');
-            }
-          }}
+          onClick={() => navigate('/main-plan')}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
           <Layers className="w-3 h-3 mr-1" />
           Strategic Plan 2026
-        </Button>
-      )}
-
-      {/* Table - CEO/admin and department users */}
-      {canAccessMainPlan && (isCEO || isDepartment || showWIGTabs) && (
-        <Button
-          variant={location.pathname === '/main-plan' && activeTab === 'table' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => {
-            if (showWIGTabs) {
-              onTabChange?.('table');
-            } else {
-              navigate('/main-plan');
-            }
-          }}
-          className="h-7 px-2 text-xs whitespace-nowrap"
-        >
-          <Table2 className="w-3 h-3 mr-1" />
-          Table
-        </Button>
-      )}
-
-      {/* RASCI - CEO/admin and department users */}
-      {canAccessMainPlan && (isCEO || isDepartment || showWIGTabs) && (
-        <Button
-          variant={location.pathname === '/main-plan' && activeTab === 'rasci' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => {
-            if (showWIGTabs) {
-              onTabChange?.('rasci');
-            } else {
-              navigate('/main-plan');
-            }
-          }}
-          className="h-7 px-2 text-xs whitespace-nowrap"
-        >
-          <Users className="w-3 h-3 mr-1" />
-          RASCI
         </Button>
       )}
 
