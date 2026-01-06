@@ -3,15 +3,30 @@
  * Protects against XSS attacks by sanitizing user input
  */
 
-// For now, we'll use a simple sanitization approach
-// In production, consider using DOMPurify library
+import DOMPurify from 'dompurify';
+
+/**
+ * Sanitize HTML content using DOMPurify
+ * Removes dangerous HTML while preserving safe formatting
+ */
 export const sanitizeHtml = (dirty: string): string => {
-  // Remove script tags and event handlers
-  return dirty
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/javascript:/gi, '')
-    .replace(/data:text\/html/gi, '');
+  if (!dirty) return '';
+  
+  // Configure DOMPurify with safe defaults
+  const config = {
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'a', 'blockquote', 'code', 'pre', 'span', 'div',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img'
+    ],
+    ALLOWED_ATTR: [
+      'href', 'title', 'alt', 'src', 'width', 'height', 'class', 'id',
+      'target', 'rel'
+    ],
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  };
+  
+  return DOMPurify.sanitize(dirty, config);
 };
 
 /**

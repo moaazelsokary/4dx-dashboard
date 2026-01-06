@@ -11,6 +11,7 @@ import RASCIEditor from '@/components/wig/RASCIEditor';
 import type { HierarchicalPlan, MainPlanObjective } from '@/types/wig';
 import { LogOut, RefreshCw, Loader2 } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
+import ExportButton from '@/components/shared/ExportButton';
 
 export default function MainPlanObjectives() {
   const [user, setUser] = useState<any>(null);
@@ -102,6 +103,21 @@ export default function MainPlanObjectives() {
               </div>
               
               <div className="flex items-center gap-2">
+                {activeTab === 'table' && tableData.length > 0 && (
+                  <ExportButton
+                    data={tableData.map(obj => ({
+                      'Pillar': obj.pillar || '',
+                      'Objective': obj.objective || '',
+                      'Target Number': obj.targetNum || '',
+                      'Target': obj.target || '',
+                      'KPI Number': obj.kpiNum || '',
+                      'KPI': obj.kpi || '',
+                      'Annual Target': obj.annual_target || 0,
+                    }))}
+                    filename={`main-plan-objectives-${new Date().toISOString().split('T')[0]}`}
+                    title="Main Plan Objectives"
+                  />
+                )}
                 <Button variant="outline" size="sm" onClick={loadData} className="h-7 px-2 text-xs">
                   <RefreshCw className="w-3 h-3 mr-1" />
                   Refresh

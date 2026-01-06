@@ -1,0 +1,62 @@
+{
+  "common": {
+    "signOut": "تسجيل الخروج",
+    "refresh": "تحديث",
+    "loading": "جاري التحميل...",
+    "error": "خطأ",
+    "success": "نجح",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "close": "إغلاق",
+    "export": "تصدير",
+    "exporting": "جاري التصدير...",
+    "exportAsExcel": "تصدير كملف Excel",
+    "exportAsCSV": "تصدير كملف CSV",
+    "exportAsPDF": "تصدير كملف PDF"
+  },
+  "navigation": {
+    "strategicPlan2026": "الخطة الاستراتيجية 2026",
+    "departmentObjectives": "أهداف القسم",
+    "myObjectives": "أهدافي",
+    "powerBIDashboards": "لوحات Power BI",
+    "plan2025": "خطة 2025",
+    "projectsSummary": "ملخص المشاريع",
+    "projectsDetails": "تفاصيل المشاريع",
+    "projectsWebsite": "موقع المشاريع"
+  },
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "ceoDashboard": "لوحة تحكم الرئيس التنفيذي",
+    "lagMeasuresDashboard": "لوحة تحكم مقاييس LAG",
+    "lagMeasures": "مقاييس LAG",
+    "activeMeasures": "مقاييس نشطة",
+    "departmentHealth": "صحة القسم",
+    "refreshData": "تحديث البيانات",
+    "connectionError": "خطأ في الاتصال",
+    "syncing": "جاري المزامنة..."
+  },
+  "objectives": {
+    "title": "الأهداف",
+    "departmentObjectives": "أهداف القسم",
+    "mainPlanObjectives": "أهداف الخطة الرئيسية",
+    "kpi": "مؤشر الأداء الرئيسي",
+    "activity": "النشاط",
+    "type": "النوع",
+    "target": "الهدف",
+    "responsiblePerson": "الشخص المسؤول",
+    "mov": "MOV",
+    "actions": "الإجراءات"
+  },
+  "signIn": {
+    "title": "تسجيل الدخول",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "signIn": "تسجيل الدخول",
+    "signingIn": "جاري تسجيل الدخول...",
+    "invalidCredentials": "اسم المستخدم أو كلمة المرور غير صحيحة"
+  }
+}
+

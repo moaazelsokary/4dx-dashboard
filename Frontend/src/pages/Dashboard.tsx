@@ -27,6 +27,7 @@ import type { LagMetric } from "@/services/sharepointService";
 import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth } from "@/lib/utils";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { hasPowerBIAccess } from "@/config/powerbi";
+import ExportButton from "@/components/shared/ExportButton";
 
 interface User {
   username: string;
@@ -637,6 +638,21 @@ const Dashboard = () => {
                   <RefreshCw className="w-4 h-4 mr-1" />
                   Refresh Data
                 </Button>
+                {!isLoading && !error && displayData.length > 0 && (
+                  <ExportButton
+                    data={displayData.map(lag => ({
+                      'LAG Name': lag.name,
+                      'Department': lag.department || '',
+                      'Target': lag.target,
+                      'Achieved': lag.value,
+                      'Percentage': lag.target === 0 ? 'Not Yet' : `${((lag.value / lag.target) * 100).toFixed(2)}%`,
+                      'Trend': lag.trend || '',
+                      'Period': selectedPeriod,
+                    }))}
+                    filename={`dashboard-lag-metrics-${new Date().toISOString().split('T')[0]}`}
+                    title="LAG Metrics"
+                  />
+                )}
                 <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
                 <LogOut className="w-4 h-4 mr-1" />
                 Sign Out

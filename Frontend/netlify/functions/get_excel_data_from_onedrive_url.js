@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const rateLimiter = require('./utils/rate-limiter');
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
@@ -114,7 +115,8 @@ async function getWorksheetData(accessToken, userEmail, fileId, worksheetName, r
   return data.values;
 }
 
-exports.handler = async function(event) {
+// Apply rate limiting (export type: 10 requests per hour)
+const handler = rateLimiter('export')(async function(event) {
   // Add CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -236,4 +238,6 @@ exports.handler = async function(event) {
       body: JSON.stringify({ error: error.message })
     };
   }
-}; 
+});
+
+exports.handler = handler; 

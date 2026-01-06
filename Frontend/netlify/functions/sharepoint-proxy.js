@@ -1,6 +1,8 @@
 const fetch = require('node-fetch');
+const rateLimiter = require('./utils/rate-limiter');
 
-exports.handler = async function(event, context) {
+// Apply rate limiting (general type: 100 requests per minute)
+const handler = rateLimiter('general')(async function(event, context) {
   // Only allow GET and POST
   if (event.httpMethod !== "POST" && event.httpMethod !== "GET") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -67,4 +69,6 @@ exports.handler = async function(event, context) {
   } catch (error) {
     return { statusCode: 500, body: error.message };
   }
-}; 
+});
+
+exports.handler = handler; 
