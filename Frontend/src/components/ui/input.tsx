@@ -1,13 +1,33 @@
 import * as React from "react"
-import { containsArabic } from "@/utils/textDirection"
+import { containsArabic, containsEnglish } from "@/utils/textDirection"
 
 import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onPaste, ...props }, ref) => {
     // Auto-detect direction for bidirectional text support
     const value = props.value as string | undefined;
-    const dir = value && containsArabic(value) ? 'auto' : undefined;
+    const hasArabic = value && containsArabic(value);
+    const hasEnglish = value && containsEnglish(value);
+    const isMixed = hasArabic && hasEnglish;
+    
+    // Use 'auto' for mixed content, specific direction for single-language content
+    const dir = isMixed ? 'auto' : (hasArabic ? 'rtl' : undefined);
+    
+    // Handle paste events from Excel - preserve bidirectional text
+    const handlePaste = React.useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+      if (onPaste) {
+        onPaste(e);
+        return;
+      }
+
+      // Get pasted text
+      const pastedText = e.clipboardData.getData('text/plain');
+      
+      // If pasted text contains mixed content, ensure it's preserved
+      // The browser's default paste should handle this, but we can clean up if needed
+      // For now, let the browser handle it naturally
+    }, [onPaste]);
     
     return (
       <input
@@ -19,8 +39,10 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         ref={ref}
         dir={dir}
         style={{
-          unicodeBidi: dir === 'auto' ? 'plaintext' : undefined,
+          unicodeBidi: dir === 'auto' ? 'plaintext' : (dir === 'rtl' ? 'embed' : undefined),
+          textAlign: 'start', // Use 'start' instead of 'left' or 'right' for better bidi support
         }}
+        onPaste={handlePaste}
         {...props}
       />
     )

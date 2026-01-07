@@ -71,16 +71,13 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     ([_, config]) => config.theme || config.color
   )
 
-  if (!colorConfig.length) {
-    return null
-  }
-
   return (
     <style
       dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
+        __html: `
+${Object.entries(THEMES)
+  .map(
+    ([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
@@ -92,8 +89,20 @@ ${colorConfig
   .join("\n")}
 }
 `
-          )
-          .join("\n"),
+  )
+  .join("\n")}
+/* Bidirectional text support for chart axis labels */
+[data-chart=${id}] .recharts-cartesian-axis-tick text {
+  direction: auto;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+[data-chart=${id}] .recharts-polar-angle-axis-tick text {
+  direction: auto;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+`,
       }}
     />
   )

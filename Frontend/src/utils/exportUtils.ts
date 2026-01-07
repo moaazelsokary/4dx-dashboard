@@ -10,6 +10,34 @@ export const exportToExcel = async (data: any[], filename: string = 'export'): P
     const XLSX = await import('xlsx');
     
     const worksheet = XLSX.utils.json_to_sheet(data);
+    
+    // Set cell styles to preserve bidirectional text
+    // Excel will automatically handle bidirectional text if the content is properly encoded
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    
+    // Iterate through all cells and set alignment for better bidirectional support
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cellAddress]) continue;
+        
+        // Get cell value
+        const cell = worksheet[cellAddress];
+        const cellValue = cell.v;
+        
+        // Check if cell contains Arabic text
+        if (typeof cellValue === 'string' && /[\u0600-\u06FF]/.test(cellValue)) {
+          // Set alignment to support bidirectional text
+          // Excel will automatically detect and handle bidirectional text
+          if (!cell.s) cell.s = {};
+          if (!cell.s.alignment) cell.s.alignment = {};
+          // Use 'left' alignment for mixed content - Excel will handle bidirectional automatically
+          cell.s.alignment.horizontal = 'left';
+          cell.s.alignment.vertical = 'center';
+        }
+      }
+    }
+    
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
     
@@ -46,8 +74,13 @@ export const exportToCSV = (data: any[], filename: string = 'export'): void => {
     )
   ].join('\n');
 
+  // Add UTF-8 BOM for proper Arabic display in Excel
+  // BOM (Byte Order Mark) tells Excel to interpret the file as UTF-8
+  const BOM = '\uFEFF';
+  const csvWithBOM = BOM + csvContent;
+
   // Create blob and download
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   
@@ -63,6 +96,8 @@ export const exportToCSV = (data: any[], filename: string = 'export'): void => {
 };
 
 // PDF export using jsPDF
+// Note: jsPDF has limited bidirectional text support. For full bidirectional support,
+// consider using html2canvas to capture rendered HTML tables with bidirectional text.
 export const exportToPDF = async (
   data: any[],
   filename: string = 'export',
@@ -91,7 +126,10 @@ export const exportToPDF = async (
       doc.setFontSize(12);
       doc.setFont(undefined, 'bold');
       headers.forEach((header, i) => {
-        doc.text(header, 14 + (i * 40), y);
+        const headerText = String(header || '').substring(0, 15);
+        // jsPDF will render text as-is, preserving UTF-8 encoding
+        // However, bidirectional text may not render correctly without additional plugins
+        doc.text(headerText, 14 + (i * 40), y);
       });
       
       y += lineHeight;
@@ -107,6 +145,8 @@ export const exportToPDF = async (
         
         row.forEach((cell, i) => {
           const cellValue = String(cell || '').substring(0, 15); // Truncate long values
+          // Preserve text as-is - UTF-8 encoding is maintained
+          // Note: For full bidirectional support, consider using html2canvas
           doc.text(cellValue, 14 + (i * 40), y);
         });
         
