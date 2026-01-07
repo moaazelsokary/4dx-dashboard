@@ -17,28 +17,6 @@ function extractNumber(text: string, pattern: RegExp): string {
   return match ? match[0] : '';
 }
 
-// Helper to detect direction from text
-function detectDirection(text: string): 'rtl' | 'ltr' {
-  if (!text) return 'ltr';
-  
-  // Find first strong character (Arabic or English)
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char)) {
-      return 'rtl';
-    } else if (/[a-zA-Z]/.test(char)) {
-      return 'ltr';
-    }
-  }
-  
-  // If no strong character found but contains Arabic, use RTL
-  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text)) {
-    return 'rtl';
-  }
-  
-  return 'ltr';
-}
-
 // Target to Objective number mapping (target number -> objective number)
 const TARGET_TO_OBJECTIVE_MAP: Record<string, string> = {
   '1.1': '1.1',
@@ -219,17 +197,10 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
           sum + obj.targets.reduce((s, t) => s + t.kpis.length, 0), 0
         );
 
-        // Detect direction from pillar name
-        const pillarDir = detectDirection(pillar.pillar);
-
         return (
           <Card 
             key={pillarIndex} 
-            dir={pillarDir}
             className={`border-2 ${colors.border} bg-gradient-to-br ${colors.gradient} shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative`}
-            style={{
-              textAlign: pillarDir === 'rtl' ? 'right' : 'left',
-            }}
           >
             {/* Decorative background pattern */}
             <div className="absolute inset-0 opacity-5">
@@ -277,17 +248,10 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
 
                       const objKPIs = sortedTargets.reduce((sum, t) => sum + t.kpis.length, 0);
 
-                      // Detect direction from objective text
-                      const objDir = detectDirection(objText);
-
                       return (
                         <Card 
                           key={objIndex} 
-                          dir={objDir}
                           className={`border-l-4 ${colors.borderLeft} bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group`}
-                          style={{
-                            textAlign: objDir === 'rtl' ? 'right' : 'left',
-                          }}
                         >
                           <Accordion type="single" collapsible>
                             <AccordionItem value={`objective-${pillarIndex}-${objIndex}`} className="border-none">
@@ -325,17 +289,10 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                       return sortByNumber(aKpiNum, bKpiNum);
                                     });
 
-                                    // Detect direction from target text
-                                    const targetDir = detectDirection(targetText);
-
                                     return (
                                       <Card 
                                         key={targetIndex} 
-                                        dir={targetDir}
                                         className={`bg-gradient-to-r ${colors.bg} border ${colors.border} transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-lg`}
-                                        style={{
-                                          textAlign: targetDir === 'rtl' ? 'right' : 'left',
-                                        }}
                                       >
                                         <Accordion type="single" collapsible>
                                           <AccordionItem value={`target-${pillarIndex}-${objIndex}-${targetIndex}`} className="border-none">
@@ -362,17 +319,10 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                                   const isExpanded = expandedKPIs.has(kpiId);
                                                   const kpiNum = getKpiNum(pillar.pillar, objective.objective, target.target, kpi.kpi);
                                                   const kpiText = kpi.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || kpi.kpi;
-                                                  // Detect direction from KPI text
-                                                  const kpiDir = detectDirection(kpiText);
-
                                                   return (
                                                     <Card 
                                                       key={kpiIndex} 
-                                                      dir={kpiDir}
                                                       className={`border-l-4 ${colors.borderLeft} bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:shadow-lg transition-all duration-200 group`}
-                                                      style={{
-                                                        textAlign: kpiDir === 'rtl' ? 'right' : 'left',
-                                                      }}
                                                     >
                                                       <div className="p-4">
                                                         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
