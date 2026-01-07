@@ -63,162 +63,46 @@ const BidirectionalText = ({
       return children;
     }
 
-    const hasArabic = containsArabic(textContent);
-    const hasEnglish = containsEnglish(textContent);
-    const isMixed = hasArabic && hasEnglish;
-
-    // If not mixed, use simple direction with proper bidi handling
-    if (!isMixed) {
-      const dir = hasArabic ? 'rtl' : 'ltr';
-      return (
-        <span 
-          dir={dir} 
-          style={{ 
-            unicodeBidi: 'plaintext',
-            textAlign: 'start',
-          }}
-        >
-          {textContent}
-        </span>
-      );
-    }
-
-    // For mixed content, we need to segment the text intelligently
-    // Split into segments: Arabic blocks, English blocks, numbers, symbols
-    const segments: Array<{ text: string; type: 'arabic' | 'english' | 'number' | 'symbol' | 'neutral' }> = [];
-    let currentSegment = '';
-    let currentType: 'arabic' | 'english' | 'number' | 'symbol' | 'neutral' | null = null;
-
+    // Determine base direction from first strong character
+    // If starts with Arabic, entire content is RTL
+    // If starts with English, entire content is LTR
+    let baseDir: 'rtl' | 'ltr' = 'ltr';
+    
+    // Find first strong character (Arabic or English)
     for (let i = 0; i < textContent.length; i++) {
       const char = textContent[i];
-      let charType: 'arabic' | 'english' | 'number' | 'symbol' | 'neutral';
-
       if (isArabicChar(char)) {
-        charType = 'arabic';
+        baseDir = 'rtl';
+        break;
       } else if (isEnglishChar(char)) {
-        charType = 'english';
-      } else if (isNumberChar(char)) {
-        charType = 'number';
-      } else if (isCurrencyOrPercent(char)) {
-        charType = 'symbol';
-      } else {
-        charType = 'neutral'; // spaces, punctuation, etc.
-      }
-
-      // If this is the first character or same type as current segment, add to current segment
-      if (currentType === null || charType === currentType || charType === 'neutral') {
-        currentSegment += char;
-        if (charType !== 'neutral') {
-          currentType = charType;
-        }
-      } else {
-        // Different type - save current segment and start new one
-        if (currentSegment.trim() && currentType) {
-          segments.push({ text: currentSegment, type: currentType });
-        }
-        currentSegment = char;
-        currentType = charType === 'neutral' ? null : charType;
+        baseDir = 'ltr';
+        break;
       }
     }
 
-    // Add last segment
-    if (currentSegment && currentType) {
-      segments.push({ text: currentSegment, type: currentType });
-    } else if (currentSegment.trim()) {
-      // Handle trailing neutral characters
-      segments.push({ text: currentSegment, type: 'neutral' });
-    }
-
-    // If we couldn't segment properly, fall back to simple approach
-    if (segments.length === 0) {
-      return (
-        <span
-          dir="auto"
-          style={{
-            unicodeBidi: 'plaintext',
-            textAlign: 'start',
-          }}
-        >
-          {textContent}
-        </span>
-      );
-    }
-
-    // Group consecutive segments of the same type together
-    // This ensures Arabic segments appear together, then English segments together
-    // Example: "نسبة القرارات المنية desicion on ai" should render as:
-    // "نسبة القرارات المبنية desicion on ai" (all Arabic together, then English)
-    const groupedSegments: Array<{ text: string; type: 'arabic' | 'english' | 'number' | 'symbol' | 'neutral' }> = [];
-    
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-      
-      // Handle neutral segments - keep them as-is
-      if (segment.type === 'neutral') {
-        groupedSegments.push(segment);
-        continue;
-      }
-      
-      // For non-neutral segments, check if we should merge with previous segment of same type
-      const lastGrouped = groupedSegments[groupedSegments.length - 1];
-      
-      // Merge with previous segment if same type (Arabic with Arabic, English with English)
-      // This groups all Arabic together, all English together
-      if (lastGrouped && lastGrouped.type === segment.type && lastGrouped.type !== 'neutral') {
-        // Merge: combine text and preserve spaces between segments
-        groupedSegments[groupedSegments.length - 1] = {
-          text: lastGrouped.text + segment.text,
-          type: segment.type,
-        };
-      } else {
-        // Start new group
-        groupedSegments.push(segment);
+    // If no strong character found, check if text contains Arabic
+    if (baseDir === 'ltr') {
+      const hasArabic = containsArabic(textContent);
+      if (hasArabic) {
+        baseDir = 'rtl';
       }
     }
 
-    // Determine base direction from first strong character
-    const firstStrongSegment = groupedSegments.find(s => s.type !== 'neutral');
-    const baseDir = firstStrongSegment?.type === 'arabic' ? 'rtl' : 'ltr';
-
-    // Render grouped segments with proper direction and Unicode isolation
-    // Use Unicode bidirectional isolation marks to ensure proper ordering
+    // Use base direction for entire content
+    // This ensures if it starts with Arabic, everything is RTL
+    // If it starts with English, everything is LTR
     return (
-      <span
-        dir={baseDir}
-        style={{
-          unicodeBidi: 'isolate',
-          textAlign: 'start',
+      <span 
+        dir={baseDir} 
+        style={{ 
+          unicodeBidi: 'plaintext',
+          textAlign: baseDir === 'rtl' ? 'right' : 'left',
         }}
       >
-        {groupedSegments.map((segment, idx) => {
-          if (segment.type === 'neutral') {
-            return <span key={idx}>{segment.text}</span>;
-          }
-
-          // Determine direction for this segment
-          const segmentDir = segment.type === 'arabic' ? 'rtl' : 'ltr';
-          
-          // Add Unicode bidirectional isolation marks
-          // \u2066 = LTR isolate, \u2067 = RTL isolate, \u2069 = pop directional isolate
-          const isolatedText = segment.type === 'arabic'
-            ? `\u2067${segment.text}\u2069` // RTL isolate
-            : `\u2066${segment.text}\u2069`; // LTR isolate
-
-          return (
-            <span
-              key={idx}
-              dir={segmentDir}
-              style={{
-                unicodeBidi: 'embed',
-                display: 'inline',
-              }}
-            >
-              {isolatedText}
-            </span>
-          );
-        })}
+        {textContent}
       </span>
     );
+
   }, [textContent, children]);
 
   return (

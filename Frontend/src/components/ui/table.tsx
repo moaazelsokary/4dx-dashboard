@@ -69,36 +69,98 @@ TableRow.displayName = "TableRow"
 const TableHead = React.forwardRef<
   HTMLTableCellElement,
   React.ThHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <th
-    ref={ref}
-    className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
-      className
-    )}
-    style={{
-      textAlign: 'start', // Use 'start' instead of 'left' for better bidirectional support
-      ...props.style,
-    }}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  // Detect direction from header content
+  // If content starts with Arabic, entire header is RTL
+  // If content starts with English, entire header is LTR
+  let dir: 'rtl' | 'ltr' | undefined = undefined;
+  const textContent = typeof children === 'string' ? children : '';
+  
+  if (textContent) {
+    // Find first strong character (Arabic or English)
+    for (let i = 0; i < textContent.length; i++) {
+      const char = textContent[i];
+      if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char)) {
+        dir = 'rtl';
+        break;
+      } else if (/[a-zA-Z]/.test(char)) {
+        dir = 'ltr';
+        break;
+      }
+    }
+    
+    // If no strong character found but contains Arabic, use RTL
+    if (!dir && /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(textContent)) {
+      dir = 'rtl';
+    }
+  }
+  
+  return (
+    <th
+      ref={ref}
+      className={cn(
+        "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        className
+      )}
+      dir={dir}
+      style={{
+        textAlign: dir === 'rtl' ? 'right' : (dir === 'ltr' ? 'left' : 'start'),
+        unicodeBidi: dir ? 'plaintext' : undefined,
+        ...props.style,
+      }}
+      {...props}
+    >
+      {children}
+    </th>
+  );
+})
 TableHead.displayName = "TableHead"
 
 const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <td
-    ref={ref}
-    className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
-    style={{
-      textAlign: 'start', // Use 'start' instead of 'left' for better bidirectional support
-      ...props.style,
-    }}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  // Detect direction from cell content
+  // If content starts with Arabic, entire cell is RTL
+  // If content starts with English, entire cell is LTR
+  let dir: 'rtl' | 'ltr' | undefined = undefined;
+  const textContent = typeof children === 'string' ? children : '';
+  
+  if (textContent) {
+    // Find first strong character (Arabic or English)
+    for (let i = 0; i < textContent.length; i++) {
+      const char = textContent[i];
+      if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char)) {
+        dir = 'rtl';
+        break;
+      } else if (/[a-zA-Z]/.test(char)) {
+        dir = 'ltr';
+        break;
+      }
+    }
+    
+    // If no strong character found but contains Arabic, use RTL
+    if (!dir && /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(textContent)) {
+      dir = 'rtl';
+    }
+  }
+  
+  return (
+    <td
+      ref={ref}
+      className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
+      dir={dir}
+      style={{
+        textAlign: dir === 'rtl' ? 'right' : (dir === 'ltr' ? 'left' : 'start'),
+        unicodeBidi: dir ? 'plaintext' : undefined,
+        ...props.style,
+      }}
+      {...props}
+    >
+      {children}
+    </td>
+  );
+})
 TableCell.displayName = "TableCell"
 
 const TableCaption = React.forwardRef<
