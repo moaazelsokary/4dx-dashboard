@@ -144,11 +144,43 @@ const BidirectionalText = ({
       );
     }
 
+    // Group consecutive segments of the same type together
+    // This ensures Arabic segments appear together, then English segments together
+    // Example: "نسبة القرارات المنية desicion on ai" should render as:
+    // "نسبة القرارات المبنية desicion on ai" (all Arabic together, then English)
+    const groupedSegments: Array<{ text: string; type: 'arabic' | 'english' | 'number' | 'symbol' | 'neutral' }> = [];
+    
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      
+      // Handle neutral segments - keep them as-is
+      if (segment.type === 'neutral') {
+        groupedSegments.push(segment);
+        continue;
+      }
+      
+      // For non-neutral segments, check if we should merge with previous segment of same type
+      const lastGrouped = groupedSegments[groupedSegments.length - 1];
+      
+      // Merge with previous segment if same type (Arabic with Arabic, English with English)
+      // This groups all Arabic together, all English together
+      if (lastGrouped && lastGrouped.type === segment.type && lastGrouped.type !== 'neutral') {
+        // Merge: combine text and preserve spaces between segments
+        groupedSegments[groupedSegments.length - 1] = {
+          text: lastGrouped.text + segment.text,
+          type: segment.type,
+        };
+      } else {
+        // Start new group
+        groupedSegments.push(segment);
+      }
+    }
+
     // Determine base direction from first strong character
-    const firstStrongSegment = segments.find(s => s.type !== 'neutral');
+    const firstStrongSegment = groupedSegments.find(s => s.type !== 'neutral');
     const baseDir = firstStrongSegment?.type === 'arabic' ? 'rtl' : 'ltr';
 
-    // Render segments with proper direction and Unicode isolation
+    // Render grouped segments with proper direction and Unicode isolation
     // Use Unicode bidirectional isolation marks to ensure proper ordering
     return (
       <span
@@ -158,7 +190,7 @@ const BidirectionalText = ({
           textAlign: 'start',
         }}
       >
-        {segments.map((segment, idx) => {
+        {groupedSegments.map((segment, idx) => {
           if (segment.type === 'neutral') {
             return <span key={idx}>{segment.text}</span>;
           }
