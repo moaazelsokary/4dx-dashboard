@@ -24,18 +24,6 @@ export default defineConfig(({ mode }) => ({
       input: {
         main: path.resolve(__dirname, 'index.html'),
       },
-      external: (id) => {
-        // Make Sentry optional - don't bundle it if not installed
-        if (id === '@sentry/react' || id.startsWith('@sentry/')) {
-          try {
-            require.resolve(id);
-            return false; // Bundle if installed
-          } catch {
-            return true; // External if not installed
-          }
-        }
-        return false;
-      },
     },
   },
 }));
