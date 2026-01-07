@@ -28,6 +28,7 @@ import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth }
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { hasPowerBIAccess } from "@/config/powerbi";
 import NavigationBar from "@/components/shared/NavigationBar";
+import OptimizedImage from "@/components/ui/OptimizedImage";
 
 interface User {
   username: string;
@@ -592,10 +593,11 @@ const WIGPlan2025 = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <img 
+                  <OptimizedImage 
                     src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
                     alt="Logo" 
                     className="w-full h-full object-contain"
+                    sizes="48px"
                   />
                 </div>
                 <div>

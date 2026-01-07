@@ -8,6 +8,7 @@ import { Shield, User } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { dataCacheService } from "@/services/dataCacheService";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
+import OptimizedImage from "@/components/ui/OptimizedImage";
 
 const SignIn = () => {
   const [username, setUsername] = useState("");
@@ -90,10 +91,11 @@ const SignIn = () => {
       <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16">
         {/* Logo Area */}
         <div className="flex-1 flex flex-col items-center md:items-start justify-center">
-            <img 
+            <OptimizedImage 
               src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
               alt="Life Makers Egypt" 
-            className="w-40 h-40 md:w-64 md:h-64 object-contain mb-4 md:mb-0"
+              className="w-40 h-40 md:w-64 md:h-64 object-contain mb-4 md:mb-0"
+              sizes="(max-width: 768px) 160px, 256px"
             />
           <div className="hidden md:block mt-6">
             <h1 className="text-4xl font-bold text-foreground mb-2">Strategic Plan 2026</h1>

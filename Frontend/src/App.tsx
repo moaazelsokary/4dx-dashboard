@@ -20,6 +20,8 @@ const ProjectDetails = lazy(() => import("./pages/OneDriveProject"));
 const PowerBIDashboard = lazy(() => import("./pages/PowerBIDashboard"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const Settings = lazy(() => import("./pages/Settings"));
+const CMSDashboard = lazy(() => import("./pages/admin/CMSDashboard"));
 
 const queryClient = new QueryClient();
 
@@ -43,6 +45,8 @@ const App = () => (
         <Route path="/access-denied" element={<AccessDenied />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/admin/cms" element={<CMSDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       </Suspense>

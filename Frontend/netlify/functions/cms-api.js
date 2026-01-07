@@ -2,6 +2,7 @@ const sql = require('mssql');
 const logger = require('./utils/logger');
 const rateLimiter = require('./utils/rate-limiter');
 const csrfMiddleware = require('./utils/csrf-middleware');
+const authMiddleware = require('./utils/auth-middleware');
 
 // Reuse database connection from db.cjs if available
 let pool = null;
@@ -19,8 +20,17 @@ async function getDbPool() {
   }
 }
 
-// Apply rate limiting and CSRF protection
-const handler = rateLimiter('general')(csrfMiddleware(async (event, context) => {
+// Apply rate limiting, CSRF protection, and auth middleware
+// GET requests: optional auth (public read access)
+// POST/PUT/DELETE: required auth with Admin/Editor role
+const handler = rateLimiter('general')(
+  csrfMiddleware(
+    authMiddleware({
+      optional: true, // Allow GET requests without auth
+      resource: 'cms',
+      requiredRoles: [], // Check permissions instead of roles
+    })(
+      async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
@@ -40,6 +50,48 @@ const handler = rateLimiter('general')(csrfMiddleware(async (event, context) => 
     const pool = await getDbPool();
     const { httpMethod, path } = event;
     const body = event.body ? JSON.parse(event.body) : {};
+
+    // Check authentication and permissions for write operations
+    if (['POST', 'PUT', 'DELETE'].includes(httpMethod)) {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Authentication required',
+            message: 'Please sign in to perform this action',
+          }),
+        };
+      }
+      
+      // Check permissions - Admin and Editor can modify CMS content
+      const userRole = event.user.role || '';
+      if (!['Admin', 'Editor', 'CEO'].includes(userRole)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Insufficient permissions',
+            message: 'You must be an Admin or Editor to modify CMS content',
+          }),
+        };
+      }
+      
+      // Editor cannot delete (only Admin and CEO can)
+      if (httpMethod === 'DELETE' && userRole === 'Editor') {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Insufficient permissions',
+            message: 'Editors cannot delete content. Only Admins can delete.',
+          }),
+        };
+      }
+    }
 
     // Route handling
     if (path.includes('/pages')) {
@@ -65,7 +117,9 @@ const handler = rateLimiter('general')(csrfMiddleware(async (event, context) => 
       body: JSON.stringify({ success: false, error: 'Internal server error' }),
     };
   }
-}));
+    })
+  )
+);
 
 // Pages CRUD
 async function handlePages(method, pool, body, path) {
@@ -179,23 +233,52 @@ async function handleImages(method, pool, body, path) {
     const request = pool.request();
     const result = await request.query(`
       SELECT id, filename, original_filename, file_path, file_size, 
-             mime_type, width, height, alt_text, created_at
+             mime_type, width, height, alt_text, url, created_at
       FROM cms_images
       ORDER BY created_at DESC
     `);
 
+    // Map file_path to url if url is not set
+    const mappedData = result.recordset.map(img => ({
+      ...img,
+      url: img.url || img.file_path || `/uploads/${img.filename}`,
+    }));
+
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, data: result.recordset }),
+      body: JSON.stringify({ success: true, data: mappedData }),
     };
   }
 
-  // POST, PUT, DELETE would be implemented similarly
+  if (method === 'POST') {
+    // Image upload would be handled via multipart/form-data
+    // For now, return a placeholder - full implementation would handle file upload
+    return {
+      statusCode: 501,
+      headers,
+      body: JSON.stringify({ success: false, error: 'Image upload not fully implemented. Use file upload endpoint.' }),
+    };
+  }
+
+  if (method === 'DELETE') {
+    const id = path.split('/').pop();
+    const request = pool.request();
+    request.input('id', sql.Int, id);
+
+    await request.query('DELETE FROM cms_images WHERE id = @id');
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: 'Image deleted' }),
+    };
+  }
+
   return {
-    statusCode: 501,
+    statusCode: 405,
     headers,
-    body: JSON.stringify({ success: false, error: 'Not implemented' }),
+    body: JSON.stringify({ success: false, error: 'Method not allowed' }),
   };
 }
 
@@ -208,14 +291,21 @@ async function handleAnnouncements(method, pool, body, path) {
 
   if (method === 'GET') {
     const request = pool.request();
-    const result = await request.query(`
-      SELECT id, title, content, image_id, link_url, link_text,
-             start_date, end_date, is_active, display_order, created_at
-      FROM cms_announcements
-      WHERE is_active = 1 AND (start_date IS NULL OR start_date <= GETDATE())
-            AND (end_date IS NULL OR end_date >= GETDATE())
-      ORDER BY display_order, created_at DESC
-    `);
+    // For admin, show all announcements. For public, filter by active and date
+    const isAdmin = path.includes('/admin');
+    const query = isAdmin
+      ? `SELECT id, title, content, image_id, link_url, link_text,
+                start_date, end_date, is_active, priority, display_order, created_at, updated_at
+         FROM cms_announcements
+         ORDER BY display_order, created_at DESC`
+      : `SELECT id, title, content, image_id, link_url, link_text,
+                start_date, end_date, is_active, priority, display_order, created_at
+         FROM cms_announcements
+         WHERE is_active = 1 AND (start_date IS NULL OR start_date <= GETDATE())
+               AND (end_date IS NULL OR end_date >= GETDATE())
+         ORDER BY priority DESC, display_order, created_at DESC`;
+
+    const result = await request.query(query);
 
     return {
       statusCode: 200,
@@ -224,11 +314,88 @@ async function handleAnnouncements(method, pool, body, path) {
     };
   }
 
-  // POST, PUT, DELETE would be implemented similarly
+  if (method === 'POST') {
+    const { title, content, image_id, link_url, link_text, start_date, end_date, is_active, priority, display_order } = body;
+    const request = pool.request();
+    
+    request.input('title', sql.NVarChar, title);
+    request.input('content', sql.NVarChar(sql.MAX), content);
+    request.input('image_id', sql.Int, image_id || null);
+    request.input('link_url', sql.NVarChar, link_url || null);
+    request.input('link_text', sql.NVarChar, link_text || null);
+    request.input('start_date', sql.DateTime2, start_date ? new Date(start_date) : null);
+    request.input('end_date', sql.DateTime2, end_date ? new Date(end_date) : null);
+    request.input('is_active', sql.Bit, is_active ?? true);
+    request.input('priority', sql.Int, priority || 0);
+    request.input('display_order', sql.Int, display_order || 0);
+
+    const result = await request.query(`
+      INSERT INTO cms_announcements (title, content, image_id, link_url, link_text, start_date, end_date, is_active, priority, display_order)
+      OUTPUT INSERTED.id, INSERTED.title, INSERTED.content, INSERTED.image_id, INSERTED.link_url, INSERTED.link_text,
+             INSERTED.start_date, INSERTED.end_date, INSERTED.is_active, INSERTED.priority, INSERTED.display_order,
+             INSERTED.created_at, INSERTED.updated_at
+      VALUES (@title, @content, @image_id, @link_url, @link_text, @start_date, @end_date, @is_active, @priority, @display_order)
+    `);
+
+    return {
+      statusCode: 201,
+      headers,
+      body: JSON.stringify({ success: true, data: result.recordset[0] }),
+    };
+  }
+
+  if (method === 'PUT') {
+    const id = path.split('/').pop();
+    const { title, content, image_id, link_url, link_text, start_date, end_date, is_active, priority, display_order } = body;
+    const request = pool.request();
+    
+    request.input('id', sql.Int, id);
+    request.input('title', sql.NVarChar, title);
+    request.input('content', sql.NVarChar(sql.MAX), content);
+    request.input('image_id', sql.Int, image_id || null);
+    request.input('link_url', sql.NVarChar, link_url || null);
+    request.input('link_text', sql.NVarChar, link_text || null);
+    request.input('start_date', sql.DateTime2, start_date ? new Date(start_date) : null);
+    request.input('end_date', sql.DateTime2, end_date ? new Date(end_date) : null);
+    request.input('is_active', sql.Bit, is_active ?? true);
+    request.input('priority', sql.Int, priority || 0);
+    request.input('display_order', sql.Int, display_order || 0);
+
+    await request.query(`
+      UPDATE cms_announcements
+      SET title = @title, content = @content, image_id = @image_id,
+          link_url = @link_url, link_text = @link_text,
+          start_date = @start_date, end_date = @end_date,
+          is_active = @is_active, priority = @priority, display_order = @display_order,
+          updated_at = GETDATE()
+      WHERE id = @id
+    `);
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: 'Announcement updated' }),
+    };
+  }
+
+  if (method === 'DELETE') {
+    const id = path.split('/').pop();
+    const request = pool.request();
+    request.input('id', sql.Int, id);
+
+    await request.query('DELETE FROM cms_announcements WHERE id = @id');
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: 'Announcement deleted' }),
+    };
+  }
+
   return {
-    statusCode: 501,
+    statusCode: 405,
     headers,
-    body: JSON.stringify({ success: false, error: 'Not implemented' }),
+    body: JSON.stringify({ success: false, error: 'Method not allowed' }),
   };
 }
 
@@ -241,12 +408,18 @@ async function handleMenu(method, pool, body, path) {
 
   if (method === 'GET') {
     const request = pool.request();
-    const result = await request.query(`
-      SELECT id, label, url, icon, parent_id, display_order, is_active, target_blank
-      FROM cms_menu_items
-      WHERE is_active = 1
-      ORDER BY display_order, label
-    `);
+    // For admin, show all items. For public, filter by active
+    const isAdmin = path.includes('/admin');
+    const query = isAdmin
+      ? `SELECT id, label, url, icon, parent_id, display_order, is_active, target_blank
+         FROM cms_menu_items
+         ORDER BY display_order, label`
+      : `SELECT id, label, url, icon, parent_id, display_order, is_active, target_blank
+         FROM cms_menu_items
+         WHERE is_active = 1
+         ORDER BY display_order, label`;
+
+    const result = await request.query(query);
 
     return {
       statusCode: 200,
@@ -255,11 +428,78 @@ async function handleMenu(method, pool, body, path) {
     };
   }
 
-  // POST, PUT, DELETE would be implemented similarly
+  if (method === 'POST') {
+    const { label, url, icon, parent_id, display_order, is_active, target_blank } = body;
+    const request = pool.request();
+    
+    request.input('label', sql.NVarChar, label);
+    request.input('url', sql.NVarChar, url);
+    request.input('icon', sql.NVarChar, icon || null);
+    request.input('parent_id', sql.Int, parent_id || null);
+    request.input('display_order', sql.Int, display_order || 0);
+    request.input('is_active', sql.Bit, is_active ?? true);
+    request.input('target_blank', sql.Bit, target_blank || false);
+
+    const result = await request.query(`
+      INSERT INTO cms_menu_items (label, url, icon, parent_id, display_order, is_active, target_blank)
+      OUTPUT INSERTED.id, INSERTED.label, INSERTED.url, INSERTED.icon, INSERTED.parent_id,
+             INSERTED.display_order, INSERTED.is_active, INSERTED.target_blank
+      VALUES (@label, @url, @icon, @parent_id, @display_order, @is_active, @target_blank)
+    `);
+
+    return {
+      statusCode: 201,
+      headers,
+      body: JSON.stringify({ success: true, data: result.recordset[0] }),
+    };
+  }
+
+  if (method === 'PUT') {
+    const id = path.split('/').pop();
+    const { label, url, icon, parent_id, display_order, is_active, target_blank } = body;
+    const request = pool.request();
+    
+    request.input('id', sql.Int, id);
+    request.input('label', sql.NVarChar, label);
+    request.input('url', sql.NVarChar, url);
+    request.input('icon', sql.NVarChar, icon || null);
+    request.input('parent_id', sql.Int, parent_id || null);
+    request.input('display_order', sql.Int, display_order || 0);
+    request.input('is_active', sql.Bit, is_active ?? true);
+    request.input('target_blank', sql.Bit, target_blank || false);
+
+    await request.query(`
+      UPDATE cms_menu_items
+      SET label = @label, url = @url, icon = @icon, parent_id = @parent_id,
+          display_order = @display_order, is_active = @is_active, target_blank = @target_blank
+      WHERE id = @id
+    `);
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: 'Menu item updated' }),
+    };
+  }
+
+  if (method === 'DELETE') {
+    const id = path.split('/').pop();
+    const request = pool.request();
+    request.input('id', sql.Int, id);
+
+    await request.query('DELETE FROM cms_menu_items WHERE id = @id');
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: 'Menu item deleted' }),
+    };
+  }
+
   return {
-    statusCode: 501,
+    statusCode: 405,
     headers,
-    body: JSON.stringify({ success: false, error: 'Not implemented' }),
+    body: JSON.stringify({ success: false, error: 'Method not allowed' }),
   };
 }
 

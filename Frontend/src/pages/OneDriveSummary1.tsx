@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import OptimizedImage from '@/components/ui/OptimizedImage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -937,10 +938,11 @@ const Summary: React.FC = () => {
             <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
                 <div className="w-12 h-12 flex items-center justify-center p-1">
-                <img 
+                <OptimizedImage 
                   src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
                   alt="Logo" 
                   className="w-full h-full object-contain"
+                  sizes="48px"
                 />
               </div>
               <div>

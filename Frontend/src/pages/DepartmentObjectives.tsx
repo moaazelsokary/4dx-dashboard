@@ -48,6 +48,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import OptimizedImage from '@/components/ui/OptimizedImage';
 
 interface MEEKPI {
   id?: number;
@@ -1255,10 +1256,11 @@ export default function DepartmentObjectives() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <img 
+                  <OptimizedImage 
                     src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
                     alt="Logo" 
                     className="w-full h-full object-contain"
+                    sizes="48px"
                   />
                 </div>
                 <div>
