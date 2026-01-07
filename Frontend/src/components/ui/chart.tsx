@@ -45,15 +45,25 @@ const ChartContainer = React.forwardRef<
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
 
+  // Detect overall direction from config labels
+  const configLabels = Object.values(config).map(c => c.label).filter(Boolean);
+  const chartDir = configLabels.length > 0 
+    ? detectDirection(configLabels[0] as string)
+    : 'ltr';
+
   return (
     <ChartContext.Provider value={{ config }}>
       <div
         data-chart={chartId}
         ref={ref}
+        dir={chartDir}
         className={cn(
           "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
           className
         )}
+        style={{
+          textAlign: chartDir === 'rtl' ? 'right' : 'left',
+        }}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
@@ -66,10 +76,39 @@ const ChartContainer = React.forwardRef<
 })
 ChartContainer.displayName = "Chart"
 
+// Helper to detect direction from text
+const detectDirection = (text: string | React.ReactNode): 'rtl' | 'ltr' => {
+  if (!text) return 'ltr';
+  const textStr = typeof text === 'string' ? text : String(text);
+  
+  // Find first strong character (Arabic or English)
+  for (let i = 0; i < textStr.length; i++) {
+    const char = textStr[i];
+    if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char)) {
+      return 'rtl';
+    } else if (/[a-zA-Z]/.test(char)) {
+      return 'ltr';
+    }
+  }
+  
+  // If no strong character found but contains Arabic, use RTL
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(textStr)) {
+    return 'rtl';
+  }
+  
+  return 'ltr';
+};
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([_, config]) => config.theme || config.color
   )
+
+  // Detect overall direction from config labels
+  const configLabels = Object.values(config).map(c => c.label).filter(Boolean);
+  const overallDir = configLabels.length > 0 
+    ? detectDirection(configLabels[0] as string)
+    : 'ltr';
 
   return (
     <style
@@ -92,6 +131,7 @@ ${colorConfig
   )
   .join("\n")}
 /* Bidirectional text support for chart axis labels */
+/* Use dir="auto" to let browser detect direction from first character */
 [data-chart=${id}] .recharts-cartesian-axis-tick text {
   direction: auto;
   unicode-bidi: plaintext;
@@ -101,6 +141,19 @@ ${colorConfig
   direction: auto;
   unicode-bidi: plaintext;
   text-align: start;
+}
+/* Ensure proper alignment based on detected direction */
+[data-chart=${id}][dir="rtl"] .recharts-cartesian-axis-tick text {
+  text-align: right;
+}
+[data-chart=${id}][dir="ltr"] .recharts-cartesian-axis-tick text {
+  text-align: left;
+}
+[data-chart=${id}][dir="rtl"] .recharts-polar-angle-axis-tick text {
+  text-align: right;
+}
+[data-chart=${id}][dir="ltr"] .recharts-polar-angle-axis-tick text {
+  text-align: left;
 }
 `,
       }}
@@ -183,13 +236,23 @@ const ChartTooltipContent = React.forwardRef<
 
     const nestLabel = payload.length === 1 && indicator !== "dot"
 
+    // Detect direction from tooltip content
+    const tooltipText = tooltipLabel 
+      ? (typeof tooltipLabel === 'string' ? tooltipLabel : String(tooltipLabel))
+      : '';
+    const tooltipDir = detectDirection(tooltipText);
+
     return (
       <div
         ref={ref}
+        dir={tooltipDir}
         className={cn(
           "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
           className
         )}
+        style={{
+          textAlign: tooltipDir === 'rtl' ? 'right' : 'left',
+        }}
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
@@ -284,14 +347,29 @@ const ChartLegendContent = React.forwardRef<
       return null
     }
 
+    // Detect direction from legend labels
+    const legendLabels = payload.map(item => {
+      const key = `${nameKey || item.dataKey || "value"}`;
+      const itemConfig = getPayloadConfigFromPayload(config, item, key);
+      return itemConfig?.label || '';
+    }).filter(Boolean);
+    
+    const legendDir = legendLabels.length > 0 
+      ? detectDirection(legendLabels[0] as string)
+      : 'ltr';
+
     return (
       <div
         ref={ref}
+        dir={legendDir}
         className={cn(
           "flex items-center justify-center gap-4",
           verticalAlign === "top" ? "pb-3" : "pt-3",
           className
         )}
+        style={{
+          textAlign: legendDir === 'rtl' ? 'right' : 'left',
+        }}
       >
         {payload.map((item) => {
           const key = `${nameKey || item.dataKey || "value"}`
