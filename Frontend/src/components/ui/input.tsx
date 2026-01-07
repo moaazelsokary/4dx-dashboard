@@ -5,14 +5,30 @@ import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, onPaste, ...props }, ref) => {
-    // Auto-detect direction for bidirectional text support
+    // Auto-detect direction based on first character
+    // If starts with Arabic, entire field is RTL
+    // If starts with English, entire field is LTR
     const value = props.value as string | undefined;
-    const hasArabic = value && containsArabic(value);
-    const hasEnglish = value && containsEnglish(value);
-    const isMixed = hasArabic && hasEnglish;
+    let dir: 'rtl' | 'ltr' | undefined = undefined;
     
-    // Use 'auto' for mixed content, specific direction for single-language content
-    const dir = isMixed ? 'auto' : (hasArabic ? 'rtl' : undefined);
+    if (value) {
+      // Find first strong character (Arabic or English)
+      for (let i = 0; i < value.length; i++) {
+        const char = value[i];
+        if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char)) {
+          dir = 'rtl';
+          break;
+        } else if (/[a-zA-Z]/.test(char)) {
+          dir = 'ltr';
+          break;
+        }
+      }
+      
+      // If no strong character found but contains Arabic, use RTL
+      if (!dir && containsArabic(value)) {
+        dir = 'rtl';
+      }
+    }
     
     // Handle paste events from Excel - preserve bidirectional text
     const handlePaste = React.useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -39,8 +55,8 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         ref={ref}
         dir={dir}
         style={{
-          unicodeBidi: dir === 'auto' ? 'plaintext' : (dir === 'rtl' ? 'embed' : undefined),
-          textAlign: 'start', // Use 'start' instead of 'left' or 'right' for better bidi support
+          unicodeBidi: dir ? 'plaintext' : undefined,
+          textAlign: dir === 'rtl' ? 'right' : (dir === 'ltr' ? 'left' : 'start'),
         }}
         onPaste={handlePaste}
         {...props}
