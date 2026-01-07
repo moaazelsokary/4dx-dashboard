@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ChevronRight, ChevronDown, Target, TrendingUp, Layers, BarChart3, Sparkles } from 'lucide-react';
 import DepartmentBreakdown from './DepartmentBreakdown';
+import BidirectionalText from '@/components/ui/BidirectionalText';
 import type { HierarchicalPlan } from '@/types/wig';
 
 interface HierarchicalPlanViewProps {
@@ -14,6 +15,28 @@ interface HierarchicalPlanViewProps {
 function extractNumber(text: string, pattern: RegExp): string {
   const match = text.match(pattern);
   return match ? match[0] : '';
+}
+
+// Helper to detect direction from text
+function detectDirection(text: string): 'rtl' | 'ltr' {
+  if (!text) return 'ltr';
+  
+  // Find first strong character (Arabic or English)
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char)) {
+      return 'rtl';
+    } else if (/[a-zA-Z]/.test(char)) {
+      return 'ltr';
+    }
+  }
+  
+  // If no strong character found but contains Arabic, use RTL
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text)) {
+    return 'rtl';
+  }
+  
+  return 'ltr';
 }
 
 // Target to Objective number mapping (target number -> objective number)
@@ -196,10 +219,17 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
           sum + obj.targets.reduce((s, t) => s + t.kpis.length, 0), 0
         );
 
+        // Detect direction from pillar name
+        const pillarDir = detectDirection(pillar.pillar);
+
         return (
           <Card 
             key={pillarIndex} 
+            dir={pillarDir}
             className={`border-2 ${colors.border} bg-gradient-to-br ${colors.gradient} shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative`}
+            style={{
+              textAlign: pillarDir === 'rtl' ? 'right' : 'left',
+            }}
           >
             {/* Decorative background pattern */}
             <div className="absolute inset-0 opacity-5">
@@ -215,7 +245,9 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                       <Layers className={`h-6 w-6 ${colors.icon}`} />
                     </div>
                     <div className="flex-1 text-left">
-                      <h2 className={`text-2xl font-bold ${colors.text} mb-1`}>{pillar.pillar}</h2>
+                      <h2 className={`text-2xl font-bold ${colors.text} mb-1`}>
+                        <BidirectionalText>{pillar.pillar}</BidirectionalText>
+                      </h2>
                       <div className="flex items-center gap-3 flex-wrap">
                         <Badge className={colors.badge}>
                           <Target className="h-3 w-3 mr-1" />
@@ -245,10 +277,17 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
 
                       const objKPIs = sortedTargets.reduce((sum, t) => sum + t.kpis.length, 0);
 
+                      // Detect direction from objective text
+                      const objDir = detectDirection(objText);
+
                       return (
                         <Card 
                           key={objIndex} 
+                          dir={objDir}
                           className={`border-l-4 ${colors.borderLeft} bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group`}
+                          style={{
+                            textAlign: objDir === 'rtl' ? 'right' : 'left',
+                          }}
                         >
                           <Accordion type="single" collapsible>
                             <AccordionItem value={`objective-${pillarIndex}-${objIndex}`} className="border-none">
@@ -259,7 +298,7 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                   </div>
                                   <div className="flex-1 text-left">
                                     <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
-                                      {objText}
+                                      <BidirectionalText>{objText}</BidirectionalText>
                                     </h3>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -286,10 +325,17 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                       return sortByNumber(aKpiNum, bKpiNum);
                                     });
 
+                                    // Detect direction from target text
+                                    const targetDir = detectDirection(targetText);
+
                                     return (
                                       <Card 
                                         key={targetIndex} 
+                                        dir={targetDir}
                                         className={`bg-gradient-to-r ${colors.bg} border ${colors.border} transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-lg`}
+                                        style={{
+                                          textAlign: targetDir === 'rtl' ? 'right' : 'left',
+                                        }}
                                       >
                                         <Accordion type="single" collapsible>
                                           <AccordionItem value={`target-${pillarIndex}-${objIndex}-${targetIndex}`} className="border-none">
@@ -300,7 +346,7 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                                 </div>
                                                 <div className="flex-1 text-left">
                                                   <h4 className="text-base font-medium text-foreground group-hover:text-primary transition-colors">
-                                                    {targetText}
+                                                    <BidirectionalText>{targetText}</BidirectionalText>
                                                   </h4>
                                                 </div>
                                                 <Badge variant="outline" className="border-primary/30 bg-white/50 dark:bg-gray-800/50">
@@ -316,10 +362,17 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                                   const isExpanded = expandedKPIs.has(kpiId);
                                                   const kpiNum = getKpiNum(pillar.pillar, objective.objective, target.target, kpi.kpi);
                                                   const kpiText = kpi.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || kpi.kpi;
+                                                  // Detect direction from KPI text
+                                                  const kpiDir = detectDirection(kpiText);
+
                                                   return (
                                                     <Card 
                                                       key={kpiIndex} 
+                                                      dir={kpiDir}
                                                       className={`border-l-4 ${colors.borderLeft} bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:shadow-lg transition-all duration-200 group`}
+                                                      style={{
+                                                        textAlign: kpiDir === 'rtl' ? 'right' : 'left',
+                                                      }}
                                                     >
                                                       <div className="p-4">
                                                         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
@@ -328,7 +381,7 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                                               {kpiNum}
                                                             </div>
                                                             <h5 className="font-semibold text-foreground group-hover:text-primary transition-colors flex-1 min-w-[200px]">
-                                                              {kpiText}
+                                                              <BidirectionalText>{kpiText}</BidirectionalText>
                                                             </h5>
                                                             <Badge className={`${colors.badge} border font-medium`}>
                                                               <Target className="h-3 w-3 mr-1" />
