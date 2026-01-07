@@ -15,7 +15,15 @@ export async function initSentry() {
   }
 
   try {
-    const Sentry = await import('@sentry/react');
+    // Dynamic import with error handling for missing package
+    const Sentry = await import('@sentry/react').catch(() => {
+      console.log('Sentry package not installed, error tracking disabled');
+      return null;
+    });
+    
+    if (!Sentry) {
+      return;
+    }
     
     Sentry.init({
       dsn,
@@ -42,12 +50,14 @@ export function captureException(error: Error, context?: Record<string, any>) {
     return;
   }
 
-  import('@sentry/react').then((Sentry) => {
-    Sentry.captureException(error, {
-      contexts: {
-        custom: context || {},
-      },
-    });
+  import('@sentry/react').catch(() => null).then((Sentry) => {
+    if (Sentry) {
+      Sentry.captureException(error, {
+        contexts: {
+          custom: context || {},
+        },
+      });
+    }
   });
 }
 
@@ -57,28 +67,34 @@ export function captureMessage(message: string, level: 'info' | 'warning' | 'err
     return;
   }
 
-  import('@sentry/react').then((Sentry) => {
-    Sentry.captureMessage(message, level);
+  import('@sentry/react').catch(() => null).then((Sentry) => {
+    if (Sentry) {
+      Sentry.captureMessage(message, level);
+    }
   });
 }
 
 export function setUser(user: { id?: string; username?: string; role?: string }) {
   if (!sentryInitialized) return;
 
-  import('@sentry/react').then((Sentry) => {
-    Sentry.setUser({
-      id: user.id,
-      username: user.username,
-      role: user.role,
-    });
+  import('@sentry/react').catch(() => null).then((Sentry) => {
+    if (Sentry) {
+      Sentry.setUser({
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      });
+    }
   });
 }
 
 export function clearUser() {
   if (!sentryInitialized) return;
 
-  import('@sentry/react').then((Sentry) => {
-    Sentry.setUser(null);
+  import('@sentry/react').catch(() => null).then((Sentry) => {
+    if (Sentry) {
+      Sentry.setUser(null);
+    }
   });
 }
 
