@@ -305,7 +305,7 @@ const ChartLegendContent = React.forwardRef<
                   }}
                 />
               )}
-              {itemConfig?.label}
+              <BidirectionalText>{itemConfig?.label}</BidirectionalText>
             </div>
           )
         })}
