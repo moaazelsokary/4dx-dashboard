@@ -1,9 +1,14 @@
 import * as React from "react"
+import { containsArabic } from "@/utils/textDirection"
 
 import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, ...props }, ref) => {
+    // Auto-detect direction for bidirectional text support
+    const value = props.value as string | undefined;
+    const dir = value && containsArabic(value) ? 'auto' : undefined;
+    
     return (
       <input
         type={type}
@@ -12,6 +17,10 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className
         )}
         ref={ref}
+        dir={dir}
+        style={{
+          unicodeBidi: dir === 'auto' ? 'plaintext' : undefined,
+        }}
         {...props}
       />
     )

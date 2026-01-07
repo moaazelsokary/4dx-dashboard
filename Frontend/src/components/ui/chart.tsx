@@ -2,6 +2,7 @@ import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
+import BidirectionalText from "@/components/ui/BidirectionalText"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
@@ -147,7 +148,7 @@ const ChartTooltipContent = React.forwardRef<
       if (labelFormatter) {
         return (
           <div className={cn("font-medium", labelClassName)}>
-            {labelFormatter(value, payload)}
+            <BidirectionalText>{labelFormatter(value, payload)}</BidirectionalText>
           </div>
         )
       }
@@ -156,7 +157,7 @@ const ChartTooltipContent = React.forwardRef<
         return null
       }
 
-      return <div className={cn("font-medium", labelClassName)}>{value}</div>
+      return <div className={cn("font-medium", labelClassName)}><BidirectionalText>{value}</BidirectionalText></div>
     }, [
       label,
       labelFormatter,
@@ -233,7 +234,7 @@ const ChartTooltipContent = React.forwardRef<
                       <div className="grid gap-1.5">
                         {nestLabel ? tooltipLabel : null}
                         <span className="text-muted-foreground">
-                          {itemConfig?.label || item.name}
+                          <BidirectionalText>{itemConfig?.label || item.name}</BidirectionalText>
                         </span>
                       </div>
                       {item.value && (
