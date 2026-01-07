@@ -1,4 +1,7 @@
 
+/* Import Arabic-compatible fonts from Google Fonts - must be at the top */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -88,9 +91,6 @@
     --ring: 24 95% 53%;
   }
 }
-
-/* Import Arabic-compatible fonts from Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&display=swap');
 
 @layer base {
   * {
