@@ -28,6 +28,7 @@ import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth }
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { hasPowerBIAccess } from "@/config/powerbi";
 import ExportButton from "@/components/shared/ExportButton";
+import OptimizedImage from "@/components/ui/OptimizedImage";
 
 interface User {
   username: string;
@@ -590,10 +591,11 @@ const Dashboard = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-3">
               <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
-                <img 
+                <OptimizedImage 
                   src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
                   alt="Logo" 
                   className="w-full h-full object-contain"
+                  sizes="64px"
                 />
               </div>
               <div>

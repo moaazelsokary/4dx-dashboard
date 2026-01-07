@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { POWERBI_CONFIG, getDashboardById, getAccessibleDashboards, type DashboardConfig } from '@/config/powerbi';
+import OptimizedImage from '@/components/ui/OptimizedImage';
 
 const PowerBIDashboard: React.FC = () => {
   const [selectedDashboard, setSelectedDashboard] = useState<string>('');
@@ -109,10 +110,11 @@ const PowerBIDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <img 
+                  <OptimizedImage 
                     src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
                     alt="Logo" 
                     className="w-full h-full object-contain"
+                    sizes="48px"
                   />
                 </div>
                 <div>

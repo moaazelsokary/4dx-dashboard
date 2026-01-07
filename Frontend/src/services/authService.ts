@@ -4,6 +4,7 @@
  */
 
 import { logError, logInfo } from './logger';
+import { getCsrfHeader, clearCsrfToken } from '@/utils/csrf';
 
 export interface User {
   username: string;
@@ -36,6 +37,7 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getCsrfHeader(),
       },
       body: JSON.stringify({ username, password }),
     });
@@ -74,6 +76,8 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
 export const signOut = (): void => {
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  // Clear CSRF token on sign out
+  clearCsrfToken();
   logInfo('User signed out');
 };
 

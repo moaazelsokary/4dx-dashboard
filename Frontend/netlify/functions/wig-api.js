@@ -1,6 +1,7 @@
 // Inline database connection code (to avoid module resolution issues in Netlify)
 const sql = require('mssql');
 const rateLimiter = require('./utils/rate-limiter');
+const authMiddleware = require('./utils/auth-middleware');
 
 let pool = null;
 
@@ -141,8 +142,15 @@ async function getPool() {
   return pool;
 }
 
-// Apply rate limiting (general type: 100 requests per minute)
-const handler = rateLimiter('general')(async function (event, context) {
+// Apply auth middleware and rate limiting
+// GET requests: optional auth (public read access)
+// POST/PUT/DELETE: required auth with appropriate permissions
+const handler = rateLimiter('general')(
+  authMiddleware({
+    optional: true, // Allow GET requests without auth, but check auth if provided
+    resource: 'wig', // Resource name for permission checks
+  })(
+    async function (event, context) {
   // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -219,6 +227,39 @@ const handler = rateLimiter('general')(async function (event, context) {
           },
         }),
       };
+    }
+
+    // Check authentication for write operations
+    if (['POST', 'PUT', 'DELETE'].includes(method)) {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({
+            error: 'Authentication required',
+            message: 'Please sign in to perform this action',
+          }),
+        };
+      }
+      
+      // Check permissions based on role
+      const userRole = event.user.role || '';
+      if (!['CEO', 'Admin', 'department'].includes(userRole)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({
+            error: 'Insufficient permissions',
+            message: 'You do not have permission to perform this action',
+          }),
+        };
+      }
+      
+      // Department users can only modify their own department's data
+      if (userRole === 'department' && method !== 'GET') {
+        // Additional department-specific checks can be added here
+        // For now, allow department users to modify data (they're already filtered by department_id)
+      }
     }
 
     // Main Plan Objectives
@@ -371,7 +412,9 @@ const handler = rateLimiter('general')(async function (event, context) {
       }),
     };
   }
-});
+    }
+  )
+);
 
 exports.handler = handler;
 
