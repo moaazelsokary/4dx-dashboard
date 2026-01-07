@@ -14,9 +14,12 @@ export async function initSentry() {
     return;
   }
 
+  // Use string variable to prevent Vite from statically analyzing the import
+  const sentryPackage = '@sentry/react';
+  
   try {
-    // Dynamic import with error handling for missing package
-    const Sentry = await import('@sentry/react').catch(() => {
+    // Dynamic import with string variable prevents static analysis
+    const Sentry = await import(/* @vite-ignore */ sentryPackage).catch(() => {
       console.log('Sentry package not installed, error tracking disabled');
       return null;
     });
@@ -44,13 +47,15 @@ export async function initSentry() {
   }
 }
 
+const sentryPackage = '@sentry/react';
+
 export function captureException(error: Error, context?: Record<string, any>) {
   if (!sentryInitialized) {
     console.error('Error (Sentry not initialized):', error, context);
     return;
   }
 
-  import('@sentry/react').catch(() => null).then((Sentry) => {
+  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
     if (Sentry) {
       Sentry.captureException(error, {
         contexts: {
@@ -67,7 +72,7 @@ export function captureMessage(message: string, level: 'info' | 'warning' | 'err
     return;
   }
 
-  import('@sentry/react').catch(() => null).then((Sentry) => {
+  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
     if (Sentry) {
       Sentry.captureMessage(message, level);
     }
@@ -77,7 +82,7 @@ export function captureMessage(message: string, level: 'info' | 'warning' | 'err
 export function setUser(user: { id?: string; username?: string; role?: string }) {
   if (!sentryInitialized) return;
 
-  import('@sentry/react').catch(() => null).then((Sentry) => {
+  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
     if (Sentry) {
       Sentry.setUser({
         id: user.id,
@@ -91,7 +96,7 @@ export function setUser(user: { id?: string; username?: string; role?: string })
 export function clearUser() {
   if (!sentryInitialized) return;
 
-  import('@sentry/react').catch(() => null).then((Sentry) => {
+  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
     if (Sentry) {
       Sentry.setUser(null);
     }
