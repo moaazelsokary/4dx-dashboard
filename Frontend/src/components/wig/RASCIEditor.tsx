@@ -10,6 +10,7 @@ import { getRASCIByKPI, createOrUpdateRASCI, deleteRASCI, getKPIsWithRASCI, getD
 import { toast } from '@/hooks/use-toast';
 import type { RASCI, Department } from '@/types/wig';
 import { Loader2, Save, Trash2, Users, CheckCircle2, XCircle, AlertCircle, Info, HelpCircle } from 'lucide-react';
+import BidirectionalText from '@/components/ui/BidirectionalText';
 
 interface RASCIEditorProps {
   kpi?: string;
@@ -415,7 +416,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
                       <TableCell className="font-semibold">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${hasAnyRole ? 'bg-primary' : 'bg-gray-300'}`}></div>
-                          {dept.name}
+                          <BidirectionalText>{dept.name}</BidirectionalText>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
