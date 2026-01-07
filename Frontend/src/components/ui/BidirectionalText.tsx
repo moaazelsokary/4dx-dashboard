@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { containsArabic, containsEnglish } from '@/utils/textDirection';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,7 @@ interface BidirectionalTextProps {
 /**
  * Component for rendering mixed Arabic/English text with proper bidirectional support
  * Automatically detects and arranges mixed content correctly
+ * Splits text into segments and wraps each with proper direction
  */
 const BidirectionalText = ({
   children,
@@ -22,34 +23,48 @@ const BidirectionalText = ({
     ? String(children)
     : '';
 
-  if (!textContent) {
-    return <span className={cn(className)}>{children}</span>;
-  }
+  // Process text to split into segments and wrap with proper direction
+  const processedContent = useMemo(() => {
+    if (!textContent) {
+      return children;
+    }
 
-  // Check if text contains both Arabic and English
-  const hasArabic = containsArabic(textContent);
-  const hasEnglish = containsEnglish(textContent);
-  const isMixed = hasArabic && hasEnglish;
+    const hasArabic = containsArabic(textContent);
+    const hasEnglish = containsEnglish(textContent);
+    const isMixed = hasArabic && hasEnglish;
 
-  // For mixed content, split into segments and wrap each with proper direction
-  if (isMixed) {
+    // If not mixed, use simple direction
+    if (!isMixed) {
+      return (
+        <span dir={hasArabic ? 'rtl' : 'ltr'} style={{ unicodeBidi: 'embed' }}>
+          {textContent}
+        </span>
+      );
+    }
+
     // Split text into segments (Arabic vs non-Arabic)
     const segments: Array<{ text: string; isArabic: boolean }> = [];
     let currentSegment = '';
     let currentIsArabic = false;
+    let segmentStarted = false;
     
     for (let i = 0; i < textContent.length; i++) {
       const char = textContent[i];
+      // Check if character is Arabic (including extended Arabic ranges)
       const charIsArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(char);
+      // Check if character is English/Latin
+      const charIsEnglish = /[a-zA-Z]/.test(char);
       
-      if (i === 0) {
+      if (!segmentStarted) {
+        // Start first segment
         currentIsArabic = charIsArabic;
         currentSegment = char;
-      } else if (charIsArabic === currentIsArabic || char === ' ') {
-        // Include spaces in current segment
+        segmentStarted = true;
+      } else if (charIsArabic === currentIsArabic || (!charIsArabic && !charIsEnglish)) {
+        // Same type or neutral character (space, punctuation) - add to current segment
         currentSegment += char;
       } else {
-        // Segment boundary - save current and start new
+        // Different type - save current segment and start new one
         if (currentSegment.trim()) {
           segments.push({ text: currentSegment, isArabic: currentIsArabic });
         }
@@ -59,54 +74,54 @@ const BidirectionalText = ({
     }
     
     // Add last segment
-    if (currentSegment.trim()) {
+    if (currentSegment) {
       segments.push({ text: currentSegment, isArabic: currentIsArabic });
     }
 
-    // If we have segments, render them with proper direction
-    if (segments.length > 0) {
-      return (
-        <span
-          className={cn(className)}
-          dir="auto"
-          style={{
-            unicodeBidi: 'plaintext',
-            textAlign: 'start',
-          }}
-        >
-          {segments.map((segment, idx) => {
-            // Determine if segment should be RTL (Arabic) or LTR (English/other)
-            const segmentDir = segment.isArabic ? 'rtl' : 'ltr';
-            return (
-              <span
-                key={idx}
-                dir={segmentDir}
-                style={{
-                  unicodeBidi: 'embed',
-                  display: 'inline',
-                }}
-              >
-                {segment.text}
-              </span>
-            );
-          })}
-        </span>
-      );
+    // Render segments with proper direction
+    if (segments.length === 0) {
+      return textContent;
     }
-  }
 
-  // For non-mixed content, use simple direction detection
-  const dir = hasArabic ? 'rtl' : 'ltr';
+    // Determine base direction (RTL if starts with Arabic, LTR otherwise)
+    const baseDir = segments[0]?.isArabic ? 'rtl' : 'ltr';
+
+    // Use Unicode bidirectional isolation marks to ensure proper ordering
+    // This ensures Arabic text flows RTL and English flows LTR correctly
+    return (
+      <span dir={baseDir} style={{ unicodeBidi: 'isolate' }}>
+        {segments.map((segment, idx) => {
+          const segmentDir = segment.isArabic ? 'rtl' : 'ltr';
+          // Add bidirectional marks to ensure proper ordering
+          const isolatedText = segment.isArabic 
+            ? `\u2067${segment.text}\u2069` // RTL isolate marks
+            : `\u2066${segment.text}\u2069`; // LTR isolate marks
+          
+          return (
+            <span
+              key={idx}
+              dir={segmentDir}
+              style={{
+                unicodeBidi: 'embed',
+                display: 'inline',
+              }}
+            >
+              {isolatedText}
+            </span>
+          );
+        })}
+      </span>
+    );
+  }, [textContent, children]);
 
   return (
     <span
       className={cn(className)}
-      dir={dir}
       style={{
         textAlign: 'start',
       }}
     >
-      {children}
+      {processedContent}
     </span>
   );
 };

@@ -1574,7 +1574,7 @@ export default function DepartmentObjectives() {
                                         <div className="flex flex-wrap gap-1">
                                           {parsedKPIs.map((kpi, idx) => (
                                             <Badge key={idx} variant="outline" className="text-xs">
-                                              {kpi}
+                                              <BidirectionalText>{kpi}</BidirectionalText>
                                             </Badge>
                                           ))}
                                         </div>
@@ -1605,7 +1605,9 @@ export default function DepartmentObjectives() {
                                       <TableCell className="text-right" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
                                         {targetDisplay}
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}>{obj.responsible_person}</TableCell>
+                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}>
+                                        <BidirectionalText>{obj.responsible_person}</BidirectionalText>
+                                      </TableCell>
                                       <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}>
                                         <BidirectionalText>{obj.mov}</BidirectionalText>
                                       </TableCell>
