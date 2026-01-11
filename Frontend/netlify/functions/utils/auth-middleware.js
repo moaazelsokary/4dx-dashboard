@@ -120,14 +120,19 @@ function authMiddleware(options = {}) {
 
       const token = extractToken(event);
       
-      // If optional and no token, proceed without user
-      if (optional && !token) {
+      // For POST/PUT/DELETE requests, authentication is required even if optional is true
+      const isWriteRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(event.httpMethod.toUpperCase());
+      
+      // If optional and no token, proceed without user only for GET requests
+      // For write requests, require authentication
+      if (optional && !token && !isWriteRequest) {
         return handler(event, context);
       }
 
       // If not optional and no token, return 401
-      if (!optional && !token) {
-        logger.warn('Unauthorized request - no token', { path: event.path });
+      // Also require auth for write requests even if optional is true
+      if ((!optional || isWriteRequest) && !token) {
+        logger.warn('Unauthorized request - no token', { path: event.path, method: event.httpMethod });
         return {
           statusCode: 401,
           headers: {
