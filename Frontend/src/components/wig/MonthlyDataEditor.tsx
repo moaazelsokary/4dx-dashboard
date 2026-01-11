@@ -227,10 +227,10 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
             })}
             
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} aria-label="Cancel editing monthly data" title="Cancel">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={true} aria-label="Cancel editing monthly data" title="Cancel">
                 Cancel
               </Button>
-              <Button type="button" onClick={saveAll} disabled={saving} aria-label="Save all monthly data" title="Save all monthly data">
+              <Button type="button" onClick={saveAll} disabled={true} aria-label="Save all monthly data" title="Save all monthly data">
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
