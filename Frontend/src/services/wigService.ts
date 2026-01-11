@@ -25,6 +25,12 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   const csrfHeaders = needsAuth ? getCsrfHeader() : {};
   const authHeaders = needsAuth ? getAuthHeader() : {};
 
+  // Debug: Log auth headers for POST requests
+  if (needsAuth && process.env.NODE_ENV === 'development') {
+    console.log('[WIG Service] Auth headers:', authHeaders);
+    console.log('[WIG Service] Has token:', !!authHeaders['Authorization']);
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {

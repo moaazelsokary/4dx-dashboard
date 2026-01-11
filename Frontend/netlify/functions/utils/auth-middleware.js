@@ -12,8 +12,25 @@ const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'you
  * Extract JWT token from Authorization header
  */
 function extractToken(event) {
-  const authHeader = event.headers['authorization'] || event.headers['Authorization'];
+  // Check all possible header name variations (case-insensitive)
+  const authHeader = event.headers['authorization'] || 
+                     event.headers['Authorization'] ||
+                     event.headers['AUTHORIZATION'] ||
+                     (() => {
+                       // Check all headers for case-insensitive match
+                       for (const key in event.headers) {
+                         if (key.toLowerCase() === 'authorization') {
+                           return event.headers[key];
+                         }
+                       }
+                       return null;
+                     })();
+  
   if (!authHeader) {
+    logger.warn('No Authorization header found', { 
+      availableHeaders: Object.keys(event.headers),
+      path: event.path 
+    });
     return null;
   }
   
@@ -25,6 +42,10 @@ function extractToken(event) {
     return parts[0];
   }
   
+  logger.warn('Invalid Authorization header format', { 
+    header: authHeader.substring(0, 20) + '...',
+    path: event.path 
+  });
   return null;
 }
 
