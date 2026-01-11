@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getMonthlyData, createOrUpdateMonthlyData } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
+import { isAuthenticated } from '@/services/authService';
 import type { MonthlyData } from '@/types/wig';
 import { Calendar, Loader2 } from 'lucide-react';
 import { format, parse, addMonths, startOfMonth } from 'date-fns';
@@ -74,6 +75,16 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   };
 
   const saveAll = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated()) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please sign in to save monthly data',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const promises: Promise<MonthlyData>[] = [];
@@ -108,11 +119,22 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       setOpen(false);
     } catch (err) {
       console.error('Error saving monthly data:', err);
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to save monthly data',
-        variant: 'destructive',
-      });
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save monthly data';
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes('Authentication required') || errorMessage.includes('401')) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Your session may have expired. Please sign in again.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setSaving(false);
     }
