@@ -1731,12 +1731,34 @@ async function calculatePlanCheckers(pool) {
 
 // Monthly Data Functions
 async function getMonthlyData(pool, departmentObjectiveId) {
+  // First get the kpi and department_id from the department_objective
+  const deptObjRequest = pool.request();
+  deptObjRequest.input('department_objective_id', sql.Int, departmentObjectiveId);
+  const deptObjResult = await deptObjRequest.query(`
+    SELECT kpi, department_id 
+    FROM department_objectives 
+    WHERE id = @department_objective_id
+  `);
+
+  if (deptObjResult.recordset.length === 0) {
+    return []; // Return empty array if objective not found
+  }
+
+  const kpi = deptObjResult.recordset[0].kpi;
+  const department_id = deptObjResult.recordset[0].department_id;
+
+  if (!kpi || !department_id) {
+    return []; // Return empty array if kpi or department_id is missing
+  }
+
+  // Query by kpi and department_id (the new primary key after migration)
   const request = pool.request();
-  request.input('department_objective_id', sql.Int, departmentObjectiveId);
+  request.input('kpi', sql.NVarChar, kpi);
+  request.input('department_id', sql.Int, department_id);
 
   const result = await request.query(`
     SELECT * FROM department_monthly_data 
-    WHERE department_objective_id = @department_objective_id
+    WHERE kpi = @kpi AND department_id = @department_id
     ORDER BY month
   `);
 
@@ -1779,10 +1801,12 @@ async function createOrUpdateMonthlyData(pool, body) {
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
     // Try to update first (using kpi and department_id as the key)
+    // Also update department_objective_id to ensure consistency
     const updateResult = await request.query(`
       UPDATE department_monthly_data
       SET target_value = @target_value,
           actual_value = @actual_value,
+          department_objective_id = @department_objective_id,
           updated_at = GETDATE()
       WHERE kpi = @kpi AND department_id = @department_id AND month = @month
     `);
