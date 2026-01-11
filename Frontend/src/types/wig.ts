@@ -63,9 +63,9 @@ export interface DepartmentObjective {
 
 export interface MonthlyData {
   id: number;
-  department_objective_id?: number; // Kept for backward compatibility
-  kpi: string;
-  department_id: number;
+  department_objective_id: number; // Required - each objective has unique calendar values
+  kpi?: string; // Optional - may be included in query results for reference
+  department_id?: number; // Optional - may be included in query results for reference
   month: string; // YYYY-MM format
   target_value: number | null;
   actual_value: number | null;

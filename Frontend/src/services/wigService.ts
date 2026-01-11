@@ -177,9 +177,8 @@ export async function calculatePlanCheckers(): Promise<PlanChecker[]> {
 }
 
 // Monthly Data
-export async function getMonthlyData(kpi: string, departmentId: number): Promise<MonthlyData[]> {
-  const encodedKpi = encodeURIComponent(kpi);
-  return fetchAPI<MonthlyData[]>(`/monthly-data/${encodedKpi}/${departmentId}`);
+export async function getMonthlyData(departmentObjectiveId: number): Promise<MonthlyData[]> {
+  return fetchAPI<MonthlyData[]>(`/monthly-data/${departmentObjectiveId}`);
 }
 
 export async function createOrUpdateMonthlyData(data: Omit<MonthlyData, 'id' | 'created_at' | 'updated_at'>): Promise<MonthlyData> {

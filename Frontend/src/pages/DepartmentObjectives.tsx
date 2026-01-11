@@ -1673,8 +1673,7 @@ export default function DepartmentObjectives() {
                               )}
                               <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
                                 <MonthlyDataEditor 
-                                  kpi={obj.kpi} 
-                                  departmentId={obj.department_id}
+                                  departmentObjectiveId={obj.id}
                                   trigger={
                                     <Button 
                                       type="button" 
