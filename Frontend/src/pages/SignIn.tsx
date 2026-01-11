@@ -8,6 +8,7 @@ import { Shield, User } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { dataCacheService } from "@/services/dataCacheService";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
+import { signIn } from "@/services/authService";
 import OptimizedImage from "@/components/ui/OptimizedImage";
 
 const SignIn = () => {
@@ -16,43 +17,15 @@ const SignIn = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Mock authentication - departments must match environment configuration (lowercase)
-  const mockUsers = {
-    "CEO": { role: "CEO", departments: ["all"], password: "Life@2025" },
-    "hr": { role: "department", departments: ["hr"], password: "Life@0000" },
-    "it": { role: "department", departments: ["it"], password: "Life@0000" },
-    "operations": { role: "department", departments: ["operations"], password: "Life@0000" },
-    "communication": { role: "department", departments: ["communication"], password: "Life@0000" },
-    "dfr": { role: "department", departments: ["dfr"], password: "Life@0000" },
-    "case": { role: "department", departments: ["case"], password: "Life@0000" },
-    "bdm": { role: "department", departments: ["bdm"], password: "Life@0000" },
-    "security": { role: "department", departments: ["security"], password: "Life@0000" },
-    "admin": { role: "CEO", departments: ["all"], password: "Life@2025" },
-    "procurement": { role: "department", departments: ["procurement"], password: "Life@0000" },
-    "offices": { role: "department", departments: ["offices"], password: "Life@0000" },
-    "community": { role: "department", departments: ["community"], password: "Life@0000" },
-    "volunteers": { role: "department", departments: ["volunteers"], password: "Life@0000" },
-    "finance": { role: "department", departments: ["finance"], password: "Life@0000" },
-    "administrative": { role: "department", departments: ["administrative"], password: "Life@0000" },
-    "project": { role: "project", departments: ["project"], password: "Life@0000" }
-  };
-
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate authentication delay
-    setTimeout(async () => {
-      if (mockUsers[username as keyof typeof mockUsers] && password === mockUsers[username as keyof typeof mockUsers].password) {
-        const user = mockUsers[username as keyof typeof mockUsers];
-        
-        // Store user info in localStorage (in real app, use proper session management)
-        localStorage.setItem("user", JSON.stringify({
-          username,
-          role: user.role,
-          departments: user.departments
-        }));
+    try {
+      // Use database authentication service
+      const result = await signIn(username, password);
 
+      if (result.success && result.user) {
         // Start pre-loading both OneDrive and SharePoint data in background
         Promise.all([
           dataCacheService.preloadData(),
@@ -63,14 +36,12 @@ const SignIn = () => {
           console.error('❌ Data pre-loading failed:', error);
         });
 
-        // Removed welcome toast - silent sign in
-
         // Redirect based on role
-        if (user.role === "project") {
+        if (result.user.role === "project") {
           navigate("/summary");
-        } else if (user.role === "CEO") {
+        } else if (result.user.role === "CEO") {
           navigate("/main-plan");
-        } else if (user.role === "department") {
+        } else if (result.user.role === "department") {
           navigate("/department-objectives");
         } else {
           navigate("/dashboard");
@@ -78,12 +49,20 @@ const SignIn = () => {
       } else {
         toast({
           title: "Sign in failed",
-          description: "Invalid username or password",
+          description: result.error || "Invalid username or password",
           variant: "destructive",
         });
       }
+    } catch (error) {
+      console.error('Sign in error:', error);
+      toast({
+        title: "Sign in failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

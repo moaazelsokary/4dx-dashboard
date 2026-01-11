@@ -26,7 +26,8 @@
     "proxy": "node proxy-server.cjs",
     "onedrive-proxy": "node onedrive-proxy.cjs",
     "wig-proxy": "node wig-proxy.cjs",
-    "proxies": "concurrently \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\""
+    "auth-proxy": "node auth-proxy.cjs",
+    "proxies": "concurrently \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\" \"npm run auth-proxy\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
