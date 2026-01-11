@@ -1731,34 +1731,14 @@ async function calculatePlanCheckers(pool) {
 
 // Monthly Data Functions
 async function getMonthlyData(pool, departmentObjectiveId) {
-  // First get the kpi and department_id from the department_objective
-  const deptObjRequest = pool.request();
-  deptObjRequest.input('department_objective_id', sql.Int, departmentObjectiveId);
-  const deptObjResult = await deptObjRequest.query(`
-    SELECT kpi, department_id 
-    FROM department_objectives 
-    WHERE id = @department_objective_id
-  `);
-
-  if (deptObjResult.recordset.length === 0) {
-    return []; // Return empty array if objective not found
-  }
-
-  const kpi = deptObjResult.recordset[0].kpi;
-  const department_id = deptObjResult.recordset[0].department_id;
-
-  if (!kpi || !department_id) {
-    return []; // Return empty array if kpi or department_id is missing
-  }
-
-  // Query by kpi and department_id (the new primary key after migration)
+  // Query by department_objective_id to get calendar for this specific objective
+  // Each department objective should have its own calendar
   const request = pool.request();
-  request.input('kpi', sql.NVarChar, kpi);
-  request.input('department_id', sql.Int, department_id);
+  request.input('department_objective_id', sql.Int, departmentObjectiveId);
 
   const result = await request.query(`
     SELECT * FROM department_monthly_data 
-    WHERE kpi = @kpi AND department_id = @department_id
+    WHERE department_objective_id = @department_objective_id
     ORDER BY month
   `);
 
@@ -1800,15 +1780,16 @@ async function createOrUpdateMonthlyData(pool, body) {
     request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-    // Try to update first (using kpi and department_id as the key)
-    // Also update department_objective_id to ensure consistency
+    // Use department_objective_id as the primary key for updates/inserts
+    // This ensures each department objective has its own calendar
     const updateResult = await request.query(`
       UPDATE department_monthly_data
       SET target_value = @target_value,
           actual_value = @actual_value,
-          department_objective_id = @department_objective_id,
+          kpi = @kpi,
+          department_id = @department_id,
           updated_at = GETDATE()
-      WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+      WHERE department_objective_id = @department_objective_id AND month = @month
     `);
 
     if (updateResult.rowsAffected[0] === 0) {
@@ -1827,14 +1808,13 @@ async function createOrUpdateMonthlyData(pool, body) {
       `);
     }
 
-    // Select the updated/inserted record
+    // Select the updated/inserted record using department_objective_id
     const selectRequest = pool.request();
-    selectRequest.input('kpi', sql.NVarChar, kpi);
-    selectRequest.input('department_id', sql.Int, department_id);
+    selectRequest.input('department_objective_id', sql.Int, body.department_objective_id);
     selectRequest.input('month', sql.Date, body.month);
     const selectResult = await selectRequest.query(`
       SELECT * FROM department_monthly_data 
-      WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+      WHERE department_objective_id = @department_objective_id AND month = @month
     `);
 
     if (selectResult.recordset.length === 0) {
