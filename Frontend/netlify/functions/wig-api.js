@@ -1780,9 +1780,9 @@ async function createOrUpdateMonthlyData(pool, body) {
     request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-    // Use department_objective_id as the primary key for updates/inserts
-    // This ensures each department objective has its own calendar
-    const updateResult = await request.query(`
+    // Use MERGE to handle both update and insert, and handle unique constraint
+    // First try to update by department_objective_id
+    const updateByDeptObjResult = await request.query(`
       UPDATE department_monthly_data
       SET target_value = @target_value,
           actual_value = @actual_value,
@@ -1792,20 +1792,53 @@ async function createOrUpdateMonthlyData(pool, body) {
       WHERE department_objective_id = @department_objective_id AND month = @month
     `);
 
-    if (updateResult.rowsAffected[0] === 0) {
-      // Insert new record - need a new request for INSERT
-      const insertRequest = pool.request();
-      insertRequest.input('kpi', sql.NVarChar, kpi);
-      insertRequest.input('department_id', sql.Int, department_id);
-      insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
-      insertRequest.input('month', sql.Date, body.month);
-      insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
-      insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+    if (updateByDeptObjResult.rowsAffected[0] === 0) {
+      // No record found with this department_objective_id and month
+      // Check if a record exists with same kpi, department_id, and month (unique constraint)
+      const checkRequest = pool.request();
+      checkRequest.input('kpi', sql.NVarChar, kpi);
+      checkRequest.input('department_id', sql.Int, department_id);
+      checkRequest.input('month', sql.Date, body.month);
       
-      await insertRequest.query(`
-        INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
-        VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
+      const existingRecord = await checkRequest.query(`
+        SELECT id, department_objective_id 
+        FROM department_monthly_data 
+        WHERE kpi = @kpi AND department_id = @department_id AND month = @month
       `);
+
+      if (existingRecord.recordset.length > 0) {
+        // Update existing record to use this department_objective_id
+        const updateExistingRequest = pool.request();
+        updateExistingRequest.input('kpi', sql.NVarChar, kpi);
+        updateExistingRequest.input('department_id', sql.Int, department_id);
+        updateExistingRequest.input('department_objective_id', sql.Int, body.department_objective_id);
+        updateExistingRequest.input('month', sql.Date, body.month);
+        updateExistingRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
+        updateExistingRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+        
+        await updateExistingRequest.query(`
+          UPDATE department_monthly_data
+          SET target_value = @target_value,
+              actual_value = @actual_value,
+              department_objective_id = @department_objective_id,
+              updated_at = GETDATE()
+          WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+        `);
+      } else {
+        // No existing record, safe to insert
+        const insertRequest = pool.request();
+        insertRequest.input('kpi', sql.NVarChar, kpi);
+        insertRequest.input('department_id', sql.Int, department_id);
+        insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
+        insertRequest.input('month', sql.Date, body.month);
+        insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
+        insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+        
+        await insertRequest.query(`
+          INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
+          VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
+        `);
+      }
     }
 
     // Select the updated/inserted record using department_objective_id
