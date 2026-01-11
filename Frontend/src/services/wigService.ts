@@ -10,6 +10,7 @@ import type {
   KPIBreakdownResponse,
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
+import { getAuthHeader } from './authService';
 
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
@@ -18,16 +19,18 @@ const API_BASE_URL = isLocalhost
   : '/.netlify/functions/wig-api';
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  // Include CSRF token for POST, PUT, DELETE requests
+  // Include CSRF token and auth header for POST, PUT, DELETE requests
   const method = options?.method || 'GET';
-  const needsCsrf = ['POST', 'PUT', 'DELETE'].includes(method.toUpperCase());
-  const csrfHeaders = needsCsrf ? getCsrfHeader() : {};
+  const needsAuth = ['POST', 'PUT', 'DELETE'].includes(method.toUpperCase());
+  const csrfHeaders = needsAuth ? getCsrfHeader() : {};
+  const authHeaders = needsAuth ? getAuthHeader() : {};
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...csrfHeaders,
+      ...authHeaders,
       ...options?.headers,
     },
   });
