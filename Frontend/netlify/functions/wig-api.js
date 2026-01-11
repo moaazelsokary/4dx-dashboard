@@ -1724,42 +1724,67 @@ async function createOrUpdateMonthlyData(pool, body) {
       throw new Error('Missing required fields: department_objective_id or month');
     }
 
+    // First, get the kpi and department_id from department_objectives
+    const deptObjRequest = pool.request();
+    deptObjRequest.input('department_objective_id', sql.Int, body.department_objective_id);
+    const deptObjResult = await deptObjRequest.query(`
+      SELECT kpi, department_id 
+      FROM department_objectives 
+      WHERE id = @department_objective_id
+    `);
+
+    if (deptObjResult.recordset.length === 0) {
+      throw new Error(`Department objective with id ${body.department_objective_id} not found`);
+    }
+
+    const kpi = deptObjResult.recordset[0].kpi;
+    const department_id = deptObjResult.recordset[0].department_id;
+
+    if (!kpi || !department_id) {
+      throw new Error(`Department objective ${body.department_objective_id} is missing kpi or department_id`);
+    }
+
     const request = pool.request();
+    request.input('kpi', sql.NVarChar, kpi);
+    request.input('department_id', sql.Int, department_id);
     request.input('department_objective_id', sql.Int, body.department_objective_id);
     request.input('month', sql.Date, body.month);
     request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-    // Update without OUTPUT clause due to triggers
+    // Try to update first (using kpi and department_id as the key)
     const updateResult = await request.query(`
       UPDATE department_monthly_data
       SET target_value = @target_value,
           actual_value = @actual_value,
           updated_at = GETDATE()
-      WHERE department_objective_id = @department_objective_id AND month = @month
+      WHERE kpi = @kpi AND department_id = @department_id AND month = @month
     `);
 
     if (updateResult.rowsAffected[0] === 0) {
       // Insert new record - need a new request for INSERT
       const insertRequest = pool.request();
+      insertRequest.input('kpi', sql.NVarChar, kpi);
+      insertRequest.input('department_id', sql.Int, department_id);
       insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
       insertRequest.input('month', sql.Date, body.month);
       insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
       insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
       
       await insertRequest.query(`
-        INSERT INTO department_monthly_data (department_objective_id, month, target_value, actual_value)
-        VALUES (@department_objective_id, @month, @target_value, @actual_value)
+        INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
+        VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
       `);
     }
 
     // Select the updated/inserted record
     const selectRequest = pool.request();
-    selectRequest.input('department_objective_id', sql.Int, body.department_objective_id);
+    selectRequest.input('kpi', sql.NVarChar, kpi);
+    selectRequest.input('department_id', sql.Int, department_id);
     selectRequest.input('month', sql.Date, body.month);
     const selectResult = await selectRequest.query(`
       SELECT * FROM department_monthly_data 
-      WHERE department_objective_id = @department_objective_id AND month = @month
+      WHERE kpi = @kpi AND department_id = @department_id AND month = @month
     `);
 
     if (selectResult.recordset.length === 0) {
