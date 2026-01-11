@@ -33,6 +33,8 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
       ? 'http://localhost:3000/api/auth/signin'
       : '/.netlify/functions/auth-api';
 
+    console.log('[Auth Service] Attempting sign in:', { username, apiUrl, isLocalhost });
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -42,12 +44,25 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
       body: JSON.stringify({ username, password }),
     });
 
+    console.log('[Auth Service] Response status:', response.status);
+    console.log('[Auth Service] Response ok:', response.ok);
+
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Authentication failed' }));
-      return { success: false, error: error.error || 'Authentication failed' };
+      let errorData;
+      try {
+        const text = await response.text();
+        console.log('[Auth Service] Error response text:', text);
+        errorData = JSON.parse(text);
+      } catch (e) {
+        console.error('[Auth Service] Failed to parse error response:', e);
+        errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+      }
+      console.error('[Auth Service] Sign in failed:', errorData);
+      return { success: false, error: errorData.error || errorData.message || 'Authentication failed' };
     }
 
     const data = await response.json();
+    console.log('[Auth Service] Response data:', { success: data.success, hasUser: !!data.user, hasToken: !!data.token });
     
     if (data.success && data.user && data.token) {
       // Store token and user info
@@ -63,10 +78,12 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
       };
     }
 
+    console.error('[Auth Service] Invalid response format:', data);
     return { success: false, error: data.error || 'Authentication failed' };
   } catch (error) {
+    console.error('[Auth Service] Sign in exception:', error);
     logError('Sign in error', error as Error, { username });
-    return { success: false, error: 'Network error. Please try again.' };
+    return { success: false, error: error instanceof Error ? error.message : 'Network error. Please try again.' };
   }
 };
 

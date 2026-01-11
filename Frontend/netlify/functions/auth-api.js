@@ -184,10 +184,19 @@ const handler = rateLimiter('login')(async (event, context) => {
     };
   } catch (error) {
     logger.error('Authentication error', error);
+    console.error('[Auth API] Full error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ success: false, error: 'Internal server error' }),
+      body: JSON.stringify({ 
+        success: false, 
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }),
     };
   }
 });
