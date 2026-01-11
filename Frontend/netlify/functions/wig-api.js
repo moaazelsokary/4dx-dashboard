@@ -857,9 +857,35 @@ async function updateDepartmentObjective(pool, id, body) {
   }
 }
 
-async function deleteDepartmentObjective(pool, id) {
+async function deleteDepartmentObjective(pool, id, user = null) {
   const request = pool.request();
   request.input('id', sql.Int, id);
+
+  // If user is a department user, verify they can only delete their own department's objectives
+  if (user && user.role === 'department' && user.departments && user.departments.length > 0) {
+    // First check if the objective belongs to the user's department
+    const checkRequest = pool.request();
+    checkRequest.input('id', sql.Int, id);
+    checkRequest.input('department_name', sql.NVarChar, user.departments[0]); // Use first department
+    
+    const checkResult = await checkRequest.query(`
+      SELECT do.id, d.name as department_name
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+      WHERE do.id = @id
+    `);
+
+    if (checkResult.recordset.length === 0) {
+      throw new Error('Department objective not found');
+    }
+
+    const objectiveDept = checkResult.recordset[0].department_name?.toLowerCase();
+    const userDept = user.departments[0]?.toLowerCase();
+
+    if (objectiveDept !== userDept) {
+      throw new Error('You can only delete objectives from your own department');
+    }
+  }
 
   const result = await request.query('DELETE FROM department_objectives WHERE id = @id');
   return { success: true, deletedRows: result.rowsAffected[0] };

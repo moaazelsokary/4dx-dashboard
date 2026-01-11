@@ -93,9 +93,9 @@ function hasPermission(user, resource, action) {
     return true;
   }
   
-  // Department users can read and update their own department's data
+  // Department users can read, update, create, and delete their own department's data
   if (role === 'department') {
-    return action === 'read' || action === 'update' || action === 'create';
+    return action === 'read' || action === 'update' || action === 'create' || action === 'delete';
   }
   
   // Editor can read and update (but not delete)
