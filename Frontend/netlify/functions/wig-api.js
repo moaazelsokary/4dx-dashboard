@@ -296,7 +296,7 @@ const handler = rateLimiter('general')(
       result = await updateDepartmentObjective(pool, id, body);
     } else if (path.startsWith('/department-objectives/') && method === 'DELETE') {
       const id = parseInt(path.split('/')[2]);
-      result = await deleteDepartmentObjective(pool, id);
+      result = await deleteDepartmentObjective(pool, id, event.user);
     } else if (path === '/department-objectives/update-order' && method === 'POST') {
       result = await updateDepartmentObjectivesOrder(pool, body);
     }
