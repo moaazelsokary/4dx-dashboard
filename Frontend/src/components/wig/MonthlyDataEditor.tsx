@@ -77,6 +77,9 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   const saveAll = async () => {
     // Check if user is authenticated
     if (!isAuthenticated()) {
+      console.error('[MonthlyDataEditor] User not authenticated');
+      console.error('[MonthlyDataEditor] Token:', localStorage.getItem('auth-token'));
+      console.error('[MonthlyDataEditor] User:', localStorage.getItem('user'));
       toast({
         title: 'Authentication Required',
         description: 'Please sign in to save monthly data',
@@ -84,6 +87,9 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       });
       return;
     }
+
+    // Debug: Log authentication status
+    console.log('[MonthlyDataEditor] User authenticated, proceeding with save');
 
     try {
       setSaving(true);
