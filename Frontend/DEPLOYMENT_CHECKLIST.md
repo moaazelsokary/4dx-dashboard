@@ -18,13 +18,14 @@
 
 ### 3. Environment Variables Required in Netlify Dashboard
 
-#### For Database Connection (WIG API Functions)
+#### For Database Connection (WIG API Functions & Auth API)
 Set these in Netlify Dashboard → Site Settings → Environment Variables:
 
 - `SERVER` or `VITE_SERVER` - SQL Server address (e.g., `server,1433`)
 - `DATABASE` or `VITE_DATABASE` - Database name
 - `UID` or `VITE_UID` or `VIE_UID` - Database username
 - `PWD` or `VITE_PWD` - Database password
+- `JWT_SECRET` or `VITE_JWT_SECRET` - Secret key for JWT token generation (use a strong random string in production)
 
 #### For OneDrive/SharePoint Integration
 - `CLIENT_ID` - Microsoft Azure App Client ID
@@ -48,6 +49,7 @@ All functions are in `netlify/functions/`:
 - ✅ `wig-api.js` - WIG plan API endpoints
 - ✅ `get_excel_data_from_onedrive_url.js` - OneDrive Excel data fetcher
 - ✅ `sharepoint-proxy.js` - SharePoint API proxy
+- ✅ `auth-api.js` - User authentication API (database-based)
 - ✅ `test.js` - Test function
 - ✅ `db.cjs` - Database connection module
 
@@ -75,6 +77,7 @@ All functions are in `netlify/functions/`:
      - Power BI Dashboards
    - Test API endpoints:
      - `/.netlify/functions/wig-api/main-objectives`
+     - `/.netlify/functions/auth-api` (POST with username/password)
      - `/.netlify/functions/test`
 
 ### 6. Post-Deployment Verification
