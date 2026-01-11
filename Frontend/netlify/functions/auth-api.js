@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 const logger = require('./utils/logger');
 const rateLimiter = require('./utils/rate-limiter');
 
+// Authentication API - Database-based user authentication
+
 // Database connection (reuse from db.cjs if available)
 let pool = null;
 
