@@ -116,8 +116,16 @@ export const isAuthenticated = (): boolean => {
 export const getAuthHeader = (): Record<string, string> => {
   const token = getAuthToken();
   if (!token) {
+    console.warn('[Auth Service] No token found in localStorage');
     return {};
   }
+  
+  // Debug: Log token presence (but not the actual token for security)
+  console.log('[Auth Service] Token found, creating Authorization header', {
+    tokenLength: token.length,
+    tokenPrefix: token.substring(0, 10) + '...',
+  });
+  
   return {
     'Authorization': `Bearer ${token}`,
   };

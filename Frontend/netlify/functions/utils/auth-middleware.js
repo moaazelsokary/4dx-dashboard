@@ -139,10 +139,20 @@ function authMiddleware(options = {}) {
         return handler(event, context);
       }
 
+      // Debug: Log all headers for POST requests to diagnose issues
+      const isWriteRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(event.httpMethod.toUpperCase());
+      if (isWriteRequest) {
+        logger.info('Auth middleware - Write request received', {
+          method: event.httpMethod,
+          path: event.path,
+          headers: Object.keys(event.headers),
+          hasAuthHeader: !!extractToken(event),
+        });
+      }
+
       const token = extractToken(event);
       
       // For POST/PUT/DELETE requests, authentication is required even if optional is true
-      const isWriteRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(event.httpMethod.toUpperCase());
       
       // If optional and no token, proceed without user only for GET requests
       // For write requests, require authentication
@@ -153,7 +163,17 @@ function authMiddleware(options = {}) {
       // If not optional and no token, return 401
       // Also require auth for write requests even if optional is true
       if ((!optional || isWriteRequest) && !token) {
-        logger.warn('Unauthorized request - no token', { path: event.path, method: event.httpMethod });
+        logger.warn('Unauthorized request - no token', { 
+          path: event.path, 
+          method: event.httpMethod,
+          availableHeaders: Object.keys(event.headers),
+          headerValues: Object.keys(event.headers).reduce((acc, key) => {
+            if (key.toLowerCase().includes('auth')) {
+              acc[key] = event.headers[key] ? 'present' : 'missing';
+            }
+            return acc;
+          }, {})
+        });
         return {
           statusCode: 401,
           headers: {
