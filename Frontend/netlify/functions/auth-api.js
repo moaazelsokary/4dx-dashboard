@@ -32,17 +32,30 @@ async function getDbPool() {
     database: process.env.DATABASE || process.env.VITE_DATABASE,
     options: {
       encrypt: true,
-      trustServerCertificate: false,
+      trustServerCertificate: true, // Changed to true for Azure SQL
       enableArithAbort: true,
     },
   };
 
   try {
+    console.log('[Auth API] Attempting database connection...', {
+      server: server,
+      port: port,
+      database: config.database,
+      user: config.user,
+      hasPassword: !!password
+    });
     pool = await sql.connect(config);
     logger.info('Database connection established for auth-api');
+    console.log('[Auth API] Database connection successful');
     return pool;
   } catch (error) {
     logger.error('Database connection failed', error);
+    console.error('[Auth API] Database connection error:', {
+      message: error.message,
+      code: error.code,
+      name: error.name
+    });
     throw error;
   }
 }
