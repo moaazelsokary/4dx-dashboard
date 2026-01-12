@@ -4,7 +4,8 @@
  */
 
 // Build version - will be replaced during build
-const BUILD_VERSION = '__BUILD_VERSION__';
+declare const __BUILD_VERSION__: string;
+const BUILD_VERSION = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '__BUILD_VERSION__';
 const VERSION_CHECK_INTERVAL = 60000; // Check every minute
 const VERSION_STORAGE_KEY = 'app-version';
 

@@ -3,7 +3,8 @@
  */
 
 const SW_PATH = '/sw.js';
-const SW_VERSION = '__BUILD_VERSION__';
+declare const __BUILD_VERSION__: string;
+const SW_VERSION = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '__BUILD_VERSION__';
 
 /**
  * Register service worker if supported
