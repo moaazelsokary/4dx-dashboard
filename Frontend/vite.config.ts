@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
       {
         name: 'replace-sw-version',
         buildStart() {
-          // Replace version in source file before build
+          // Replace version in source file before build (Vite copies public/ to dist/)
           const swPath = path.resolve(__dirname, 'public/sw.js');
           if (fs.existsSync(swPath)) {
             let swContent = fs.readFileSync(swPath, 'utf-8');
@@ -39,13 +39,13 @@ export default defineConfig(({ mode }) => {
             fs.writeFileSync(swPath, swContent);
           }
         },
-        generateBundle() {
-          // Also ensure it's replaced in the output
-          const swPath = path.resolve(__dirname, 'public/sw.js');
-          if (fs.existsSync(swPath)) {
-            let swContent = fs.readFileSync(swPath, 'utf-8');
+        closeBundle() {
+          // After build completes, ensure version is replaced in dist/sw.js
+          const distSwPath = path.resolve(__dirname, 'dist/sw.js');
+          if (fs.existsSync(distSwPath)) {
+            let swContent = fs.readFileSync(distSwPath, 'utf-8');
             swContent = swContent.replace(/__BUILD_VERSION__/g, buildVersion);
-            fs.writeFileSync(swPath, swContent);
+            fs.writeFileSync(distSwPath, swContent);
           }
         },
       },
