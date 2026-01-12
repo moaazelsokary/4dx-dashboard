@@ -27,10 +27,20 @@ export default defineConfig(({ mode }) => {
           }
         },
       },
-      // Replace build version in service worker file
+      // Replace build version in service worker file during build
       {
         name: 'replace-sw-version',
+        buildStart() {
+          // Replace version in source file before build
+          const swPath = path.resolve(__dirname, 'public/sw.js');
+          if (fs.existsSync(swPath)) {
+            let swContent = fs.readFileSync(swPath, 'utf-8');
+            swContent = swContent.replace(/__BUILD_VERSION__/g, buildVersion);
+            fs.writeFileSync(swPath, swContent);
+          }
+        },
         generateBundle() {
+          // Also ensure it's replaced in the output
           const swPath = path.resolve(__dirname, 'public/sw.js');
           if (fs.existsSync(swPath)) {
             let swContent = fs.readFileSync(swPath, 'utf-8');

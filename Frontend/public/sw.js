@@ -63,14 +63,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For external resources (fonts, etc.), always fetch from network
+  // For external resources (fonts, etc.), don't intercept - let browser handle
+  // Service workers shouldn't intercept external requests due to CSP restrictions
   if (url.origin !== self.location.origin) {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' }).catch(() => {
-        // If network fails, try cache as fallback
-        return caches.match(request);
-      })
-    );
+    // Don't intercept external requests - let them pass through normally
     return;
   }
 
