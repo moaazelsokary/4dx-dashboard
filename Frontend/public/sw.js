@@ -63,6 +63,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // For external resources (fonts, etc.), always fetch from network
+  if (url.origin !== self.location.origin) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' }).catch(() => {
+        // If network fails, try cache as fallback
+        return caches.match(request);
+      })
+    );
+    return;
+  }
+
   // For assets (JS/CSS), use cache-first strategy
   // Vite already handles versioning with hashes
   event.respondWith(

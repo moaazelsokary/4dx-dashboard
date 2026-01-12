@@ -158,14 +158,17 @@ export function initVersionCheck(): void {
     }
   });
 
-  // Check on page load
-  checkForNewVersion().then((hasNewVersion) => {
-    if (hasNewVersion) {
-      console.log('[Version Check] New version detected on load, reloading...');
-      clearInterval(versionCheckInterval!);
-      forceReload();
-    }
-  });
+  // Check on page load (but don't reload immediately - wait a bit to avoid reload loops)
+  // Only reload if we detect a version change after the page has fully loaded
+  setTimeout(() => {
+    checkForNewVersion().then((hasNewVersion) => {
+      if (hasNewVersion) {
+        console.log('[Version Check] New version detected after load, reloading...');
+        clearInterval(versionCheckInterval!);
+        forceReload();
+      }
+    });
+  }, 5000); // Wait 5 seconds after page load before checking
 }
 
 /**
