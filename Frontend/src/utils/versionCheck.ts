@@ -5,7 +5,8 @@
 
 // Build version - will be replaced during build
 declare const __BUILD_VERSION__: string;
-const BUILD_VERSION = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '__BUILD_VERSION__';
+const BUILD_VERSION_RAW = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '__BUILD_VERSION__';
+const BUILD_VERSION = String(BUILD_VERSION_RAW || '__BUILD_VERSION__');
 const VERSION_CHECK_INTERVAL = 60000; // Check every minute
 const VERSION_STORAGE_KEY = 'app-version';
 
@@ -17,10 +18,11 @@ let versionCheckInterval: number | null = null;
 export function getBuildVersion(): string {
   // In production, BUILD_VERSION will be replaced with actual version
   // In development, return timestamp
-  if (BUILD_VERSION.startsWith('__') && BUILD_VERSION.endsWith('__')) {
+  const versionStr = String(BUILD_VERSION || '');
+  if (versionStr.startsWith('__') && versionStr.endsWith('__')) {
     return Date.now().toString();
   }
-  return BUILD_VERSION;
+  return versionStr || Date.now().toString();
 }
 
 /**

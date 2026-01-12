@@ -10,7 +10,7 @@ export async function initSentry() {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   
   if (!dsn) {
-    console.log('Sentry DSN not provided, error tracking disabled');
+    // Sentry is optional - silently skip if DSN not provided
     return;
   }
 
