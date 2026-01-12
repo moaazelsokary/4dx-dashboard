@@ -8,7 +8,35 @@
   to = "/index.html"
   status = 200
 
-# Security Headers
+# Cache Control Headers - HTML files (no cache)
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+
+# Cache Control Headers - All HTML files (no cache)
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+
+# Cache Control Headers - Versioned assets (CSS/JS with hash - long cache)
+[[headers]]
+  for = "/assets/*.{js,css}"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Cache Control Headers - Static assets (images, fonts, etc.)
+[[headers]]
+  for = "/*.{jpg,jpeg,png,gif,svg,webp,ico,woff,woff2,ttf,eot}"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Security Headers - All files
 [[headers]]
   for = "/*"
   [headers.values]
