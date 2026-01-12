@@ -132,43 +132,44 @@ function forceReload(): void {
  * Initialize version checking
  */
 export function initVersionCheck(): void {
-  // Store initial version
+  // Store initial version (only if not already stored)
+  const storedVersion = getStoredVersion();
   const currentVersion = getBuildVersion();
-  storeVersion(currentVersion);
+  
+  // Only store if we don't have a stored version yet (first load)
+  if (!storedVersion) {
+    storeVersion(currentVersion);
+  }
 
-  // Check for new version periodically
-  versionCheckInterval = window.setInterval(async () => {
-    const hasNewVersion = await checkForNewVersion();
-    if (hasNewVersion) {
-      console.log('[Version Check] New version detected, reloading...');
-      clearInterval(versionCheckInterval!);
-      forceReload();
-    }
-  }, VERSION_CHECK_INTERVAL);
+  // Check for new version periodically (but not immediately)
+  // Wait a bit before starting periodic checks to avoid interfering with initial load
+  setTimeout(() => {
+    versionCheckInterval = window.setInterval(async () => {
+      const hasNewVersion = await checkForNewVersion();
+      if (hasNewVersion) {
+        console.log('[Version Check] New version detected, reloading...');
+        clearInterval(versionCheckInterval!);
+        forceReload();
+      }
+    }, VERSION_CHECK_INTERVAL);
+  }, 10000); // Start checking after 10 seconds
 
   // Also check on visibility change (when user returns to tab)
   document.addEventListener('visibilitychange', async () => {
     if (!document.hidden) {
-      const hasNewVersion = await checkForNewVersion();
-      if (hasNewVersion) {
-        console.log('[Version Check] New version detected on tab focus, reloading...');
-        clearInterval(versionCheckInterval!);
-        forceReload();
-      }
+      // Wait a bit before checking to avoid false positives
+      setTimeout(async () => {
+        const hasNewVersion = await checkForNewVersion();
+        if (hasNewVersion) {
+          console.log('[Version Check] New version detected on tab focus, reloading...');
+          if (versionCheckInterval) {
+            clearInterval(versionCheckInterval);
+          }
+          forceReload();
+        }
+      }, 2000);
     }
   });
-
-  // Check on page load (but don't reload immediately - wait a bit to avoid reload loops)
-  // Only reload if we detect a version change after the page has fully loaded
-  setTimeout(() => {
-    checkForNewVersion().then((hasNewVersion) => {
-      if (hasNewVersion) {
-        console.log('[Version Check] New version detected after load, reloading...');
-        clearInterval(versionCheckInterval!);
-        forceReload();
-      }
-    });
-  }, 5000); // Wait 5 seconds after page load before checking
 }
 
 /**
