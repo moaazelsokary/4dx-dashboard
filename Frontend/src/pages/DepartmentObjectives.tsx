@@ -354,8 +354,34 @@ export default function DepartmentObjectives() {
         return;
       }
 
+      let savedObjective: DepartmentObjective;
+
       if (modalMode === 'add') {
-        await createDepartmentObjective({
+        // Optimistically add to UI immediately
+        const tempId = Date.now(); // Temporary ID
+        const optimisticObjective: DepartmentObjective = {
+          id: tempId,
+          department_id: department.id,
+          kpi: data.kpi!,
+          activity: data.activity!,
+          type: data.type!,
+          activity_target: data.activity_target!,
+          target_type: data.target_type || 'number',
+          responsible_person: data.responsible_person!,
+          mov: data.mov!,
+          main_objective_id: data.main_objective_id || null,
+          department_name: department.name,
+          department_code: department.code,
+          sort_order: objectives.length,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        
+        // Add optimistically to UI
+        setObjectives(prev => [...prev, optimisticObjective]);
+        
+        // Save to database
+        savedObjective = await createDepartmentObjective({
           department_id: department.id,
           kpi: data.kpi!,
           activity: data.activity!,
@@ -367,13 +393,31 @@ export default function DepartmentObjectives() {
           main_objective_id: data.main_objective_id || null,
         });
         
+        // Replace optimistic with real data
+        setObjectives(prev => prev.map(obj => 
+          obj.id === tempId ? savedObjective : obj
+        ));
+        
         toast({
           title: 'Success',
           description: 'Objective created successfully',
         });
       } else {
         if (!data.id) return;
-        await updateDepartmentObjective(data.id, data);
+        
+        // Optimistically update in UI immediately
+        setObjectives(prev => prev.map(obj => 
+          obj.id === data.id ? { ...obj, ...data } : obj
+        ));
+        
+        // Save to database
+        savedObjective = await updateDepartmentObjective(data.id, data);
+        
+        // Update with real data from server
+        setObjectives(prev => prev.map(obj => 
+          obj.id === data.id ? savedObjective : obj
+        ));
+        
         toast({
           title: 'Success',
           description: 'Objective updated successfully',
@@ -382,8 +426,14 @@ export default function DepartmentObjectives() {
       
       setIsModalOpen(false);
       setModalInitialData(undefined);
-      loadData(false);
+      
+      // Reload in background to ensure sync (non-blocking)
+      loadData(false).catch(err => {
+        console.warn('[DepartmentObjectives] Background reload failed:', err);
+      });
     } catch (err) {
+      // On error, reload to get correct state
+      loadData(false);
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : `Failed to ${modalMode === 'add' ? 'create' : 'update'} objective`,
@@ -1054,7 +1104,27 @@ export default function DepartmentObjectives() {
       };
       
       console.log('[handleAddMEKPI] Saving M&E KPI with data:', meDataToSave);
+      // Optimistically add to UI immediately
+      const tempId = Date.now();
+      const optimisticObjective: DepartmentObjective = {
+        ...meDataToSave,
+        id: tempId,
+        department_name: selectedDepartment?.name || '',
+        department_code: selectedDepartment?.code || '',
+        sort_order: objectives.length,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as DepartmentObjective;
+      
+      setObjectives(prev => [...prev, optimisticObjective]);
+      
+      // Save to database
       const savedObjective = await createDepartmentObjective(meDataToSave);
+      
+      // Replace optimistic with real data
+      setObjectives(prev => prev.map(obj => 
+        obj.id === tempId ? savedObjective : obj
+      ));
       console.log('[handleAddMEKPI] Saved objective returned:', savedObjective);
       
       toast({
