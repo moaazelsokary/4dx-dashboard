@@ -157,7 +157,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         )}
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <DialogTitle>Monthly Data (1/2026 - 6/2027)</DialogTitle>
         </DialogHeader>
         
@@ -167,7 +167,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
               <div className="space-y-4">
                 <div className="grid grid-cols-4 gap-4 p-2 font-medium border-b sticky top-0 bg-background z-10">
                   <div>Month</div>
@@ -230,7 +230,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
               </div>
             </div>
             
-            <div className="flex justify-end gap-2 pt-4 pb-6 px-6 border-t bg-background sticky bottom-0">
+            <div className="flex justify-end gap-2 pt-4 pb-6 px-6 border-t bg-background flex-shrink-0">
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving} aria-label="Cancel editing monthly data" title="Cancel">
                 Cancel
               </Button>
