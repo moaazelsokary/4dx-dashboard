@@ -80,6 +80,12 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   };
 
   const saveAll = async () => {
+    // Prevent multiple simultaneous saves
+    if (saving) {
+      console.log('[MonthlyDataEditor] Save already in progress, ignoring duplicate call');
+      return;
+    }
+
     // Check if user is authenticated
     if (!isAuthenticated()) {
       console.error('[MonthlyDataEditor] User not authenticated');
@@ -154,16 +160,21 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       
       console.log(`[MonthlyDataEditor] Saving ${promises.length} months:`, monthsToSave);
       
+      // Save all months in parallel
       const savedData = await Promise.all(promises);
       console.log('[MonthlyDataEditor] Saved data response:', savedData);
+      
+      // Update originalData immediately with saved data to prevent re-saving
+      const updatedOriginal = new Map(originalData);
+      savedData.forEach((saved) => {
+        const monthKey = saved.month.substring(0, 7); // YYYY-MM
+        updatedOriginal.set(monthKey, { ...saved });
+      });
+      setOriginalData(updatedOriginal);
       
       // Reload data to ensure we have the latest from the database
       console.log('[MonthlyDataEditor] Reloading data after save...');
       await loadData(); // This will also update originalData
-      
-      // Verify the data was saved
-      const reloadedData = Array.from(data.entries());
-      console.log('[MonthlyDataEditor] Reloaded data:', reloadedData);
       
       toast({
         title: 'Success',
@@ -283,7 +294,17 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving} aria-label="Cancel editing monthly data" title="Cancel">
                 Cancel
               </Button>
-              <Button type="button" onClick={saveAll} disabled={saving} aria-label="Save all monthly data" title="Save all monthly data">
+              <Button 
+                type="button" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  saveAll();
+                }} 
+                disabled={saving} 
+                aria-label="Save all monthly data" 
+                title="Save all monthly data"
+              >
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
