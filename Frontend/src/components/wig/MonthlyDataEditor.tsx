@@ -27,6 +27,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   const [originalData, setOriginalData] = useState<Map<string, MonthlyData>>(new Map()); // Track original data to detect changes
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingMonths, setSavingMonths] = useState<Set<string>>(new Set()); // Track which months are currently saving
 
   useEffect(() => {
     if (open) {
@@ -61,6 +62,56 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     }
   };
 
+  // Auto-save a single month's data
+  const saveMonthData = async (month: string, monthData: MonthlyData) => {
+    // Prevent duplicate saves for the same month
+    if (savingMonths.has(month)) {
+      return;
+    }
+
+    try {
+      setSavingMonths(prev => new Set(prev).add(month));
+      
+      const saveData = {
+        department_objective_id: departmentObjectiveId,
+        month: `${month}-01`,
+        target_value: monthData.target_value,
+        actual_value: monthData.actual_value,
+      };
+      
+      console.log(`[MonthlyDataEditor] Auto-saving month ${month}:`, saveData);
+      
+      const saved = await createOrUpdateMonthlyData(saveData);
+      
+      // Update originalData to mark this month as saved
+      setOriginalData(prev => {
+        const updated = new Map(prev);
+        const monthKey = saved.month.substring(0, 7);
+        updated.set(monthKey, { ...saved });
+        return updated;
+      });
+      
+      // Update data with saved response
+      setData(prev => {
+        const updated = new Map(prev);
+        const monthKey = saved.month.substring(0, 7);
+        updated.set(monthKey, { ...saved });
+        return updated;
+      });
+      
+      console.log(`[MonthlyDataEditor] Auto-saved month ${month} successfully`);
+    } catch (error) {
+      console.error(`[MonthlyDataEditor] Error auto-saving month ${month}:`, error);
+      // Don't show error toast for auto-save to avoid spam
+    } finally {
+      setSavingMonths(prev => {
+        const updated = new Set(prev);
+        updated.delete(month);
+        return updated;
+      });
+    }
+  };
+
   const updateMonthData = (month: string, field: 'target_value' | 'actual_value', value: string) => {
     const updated = new Map(data);
     const existing = updated.get(month) || {
@@ -71,12 +122,37 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       actual_value: null,
     };
     
+    const newValue = value === '' ? null : parseFloat(value) || null;
+    
     updated.set(month, {
       ...existing,
-      [field]: value === '' ? null : parseFloat(value) || null,
+      [field]: newValue,
     });
     
     setData(updated);
+    
+    // Auto-save immediately after a short debounce
+    const monthData = updated.get(month)!;
+    const originalMonthData = originalData.get(month);
+    
+    // Check if value actually changed
+    const hasChanged = !originalMonthData || 
+      monthData.target_value !== originalMonthData.target_value ||
+      monthData.actual_value !== originalMonthData.actual_value;
+    
+    if (hasChanged && (monthData.target_value !== null || monthData.actual_value !== null)) {
+      // Debounce auto-save by 500ms to avoid too many requests
+      setTimeout(() => {
+        // Check if data is still the same (user hasn't changed it again)
+        const currentData = data.get(month);
+        if (currentData && (
+          currentData.target_value === monthData.target_value &&
+          currentData.actual_value === monthData.actual_value
+        )) {
+          saveMonthData(month, monthData);
+        }
+      }, 500);
+    }
   };
 
   const saveAll = async () => {
@@ -259,7 +335,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                   return (
                     <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
                       <div className="font-medium">{monthLabel}</div>
-                      <div>
+                      <div className="relative">
                         <Input
                           type="number"
                           id={`target-${month}`}
@@ -267,12 +343,22 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                           autoComplete="off"
                           value={monthData.target_value?.toString() || ''}
                           onChange={(e) => updateMonthData(month, 'target_value', e.target.value)}
+                          onBlur={() => {
+                            // Save immediately on blur
+                            const currentData = data.get(month);
+                            if (currentData) {
+                              saveMonthData(month, currentData);
+                            }
+                          }}
                           placeholder="Target"
                           className="text-right"
                           aria-label={`Target value for ${monthLabel}`}
                         />
+                        {savingMonths.has(month) && (
+                          <Loader2 className="absolute right-2 top-2 h-3 w-3 animate-spin text-muted-foreground" />
+                        )}
                       </div>
-                      <div>
+                      <div className="relative">
                         <Input
                           type="number"
                           id={`actual-${month}`}
@@ -280,10 +366,20 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                           autoComplete="off"
                           value={monthData.actual_value?.toString() || ''}
                           onChange={(e) => updateMonthData(month, 'actual_value', e.target.value)}
+                          onBlur={() => {
+                            // Save immediately on blur
+                            const currentData = data.get(month);
+                            if (currentData) {
+                              saveMonthData(month, currentData);
+                            }
+                          }}
                           placeholder="Actual"
                           className="text-right"
                           aria-label={`Actual value for ${monthLabel}`}
                         />
+                        {savingMonths.has(month) && (
+                          <Loader2 className="absolute right-2 top-2 h-3 w-3 animate-spin text-muted-foreground" />
+                        )}
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
                         {variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(2) : '-'}
@@ -295,8 +391,16 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
             </div>
             
             <div className="flex justify-end gap-2 pt-4 pb-6 px-6 border-t bg-background flex-shrink-0">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving} aria-label="Cancel editing monthly data" title="Cancel">
-                Cancel
+              <div className="flex-1 text-sm text-muted-foreground">
+                {savingMonths.size > 0 && (
+                  <span>Saving {savingMonths.size} month(s)...</span>
+                )}
+                {savingMonths.size === 0 && data.size > 0 && (
+                  <span className="text-green-600">All changes saved</span>
+                )}
+              </div>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={savingMonths.size > 0} aria-label="Close calendar" title="Close">
+                Close
               </Button>
               <Button 
                 type="button" 
@@ -305,9 +409,10 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                   e.stopPropagation();
                   saveAll();
                 }} 
-                disabled={saving} 
+                disabled={saving || savingMonths.size > 0} 
                 aria-label="Save all monthly data" 
-                title="Save all monthly data"
+                title="Save all monthly data (auto-save is enabled)"
+                variant="secondary"
               >
                 {saving ? (
                   <>
