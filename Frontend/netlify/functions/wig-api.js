@@ -1851,8 +1851,38 @@ async function createOrUpdateMonthlyData(pool, body) {
     `);
 
     if (selectResult.recordset.length === 0) {
-      throw new Error('Failed to retrieve saved monthly data');
+      // If not found by department_objective_id, try by kpi and department_id
+      const fallbackRequest = pool.request();
+      fallbackRequest.input('kpi', sql.NVarChar, kpi);
+      fallbackRequest.input('department_id', sql.Int, department_id);
+      fallbackRequest.input('month', sql.Date, body.month);
+      const fallbackResult = await fallbackRequest.query(`
+        SELECT * FROM department_monthly_data 
+        WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+      `);
+      
+      if (fallbackResult.recordset.length === 0) {
+        console.error('[createOrUpdateMonthlyData] Failed to retrieve saved monthly data');
+        console.error('[createOrUpdateMonthlyData] Searched by:', {
+          department_objective_id: body.department_objective_id,
+          month: body.month,
+          kpi,
+          department_id
+        });
+        throw new Error('Failed to retrieve saved monthly data');
+      }
+      
+      console.log('[createOrUpdateMonthlyData] Found record via fallback query');
+      return fallbackResult.recordset[0];
     }
+
+    console.log('[createOrUpdateMonthlyData] Successfully saved and retrieved:', {
+      id: selectResult.recordset[0].id,
+      department_objective_id: selectResult.recordset[0].department_objective_id,
+      month: selectResult.recordset[0].month,
+      target_value: selectResult.recordset[0].target_value,
+      actual_value: selectResult.recordset[0].actual_value
+    });
 
     return selectResult.recordset[0];
   } catch (error) {

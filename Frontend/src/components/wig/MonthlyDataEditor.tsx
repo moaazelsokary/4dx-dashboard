@@ -90,24 +90,34 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
 
     // Debug: Log authentication status
     console.log('[MonthlyDataEditor] User authenticated, proceeding with save');
+    console.log('[MonthlyDataEditor] Current data map:', Array.from(data.entries()));
 
     try {
       setSaving(true);
       const promises: Promise<MonthlyData>[] = [];
+      const monthsToSave: string[] = [];
       
-      // Only save months that have been edited (have values in the data map)
-      // This prevents overwriting existing data with null values
+      // Save all months that have data (either edited or existing)
+      // Check if month has been edited OR has existing data
       MONTHS.forEach((month) => {
         const monthData = data.get(month);
         
-        // Only save if this month has been edited (exists in data map)
-        if (monthData) {
+        // Save if month has any data (target or actual value)
+        if (monthData && (monthData.target_value !== null || monthData.actual_value !== null)) {
+          const saveData = {
+            department_objective_id: departmentObjectiveId,
+            month: `${month}-01`,
+            target_value: monthData.target_value,
+            actual_value: monthData.actual_value,
+          };
+          
+          console.log(`[MonthlyDataEditor] Saving month ${month}:`, saveData);
+          monthsToSave.push(month);
+          
           promises.push(
-            createOrUpdateMonthlyData({
-              department_objective_id: departmentObjectiveId,
-              month: `${month}-01`,
-              target_value: monthData.target_value,
-              actual_value: monthData.actual_value,
+            createOrUpdateMonthlyData(saveData).catch((error) => {
+              console.error(`[MonthlyDataEditor] Error saving month ${month}:`, error);
+              throw error;
             })
           );
         }
@@ -116,26 +126,34 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       if (promises.length === 0) {
         toast({
           title: 'No changes',
-          description: 'No data to save',
+          description: 'No data to save. Please enter values before saving.',
         });
+        setSaving(false);
         return;
       }
       
+      console.log(`[MonthlyDataEditor] Saving ${promises.length} months:`, monthsToSave);
+      
       const savedData = await Promise.all(promises);
-      console.log('[MonthlyDataEditor] Saved data:', savedData);
+      console.log('[MonthlyDataEditor] Saved data response:', savedData);
       
       // Reload data to ensure we have the latest from the database
+      console.log('[MonthlyDataEditor] Reloading data after save...');
       await loadData();
+      
+      // Verify the data was saved
+      const reloadedData = Array.from(data.entries());
+      console.log('[MonthlyDataEditor] Reloaded data:', reloadedData);
       
       toast({
         title: 'Success',
-        description: 'Monthly data saved successfully',
+        description: `Monthly data saved successfully for ${savedData.length} month(s)`,
       });
       
       // Don't close immediately - let user see the saved data
       // setOpen(false);
     } catch (err) {
-      console.error('Error saving monthly data:', err);
+      console.error('[MonthlyDataEditor] Error saving monthly data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to save monthly data';
       
       // Provide more helpful error messages
