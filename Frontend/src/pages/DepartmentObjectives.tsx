@@ -794,17 +794,18 @@ export default function DepartmentObjectives() {
       
       // Match main objective
       let mainObjLabel = 'Not linked';
-    if (obj.main_objective_id) {
-      const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
-      if (mainObj) {
-        mainObjLabel = `${mainObj.objective} - ${mainObj.kpi}`;
+      if (obj.main_objective_id) {
+        const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
+        if (mainObj) {
+          mainObjLabel = `${mainObj.objective} - ${mainObj.kpi}`;
+        }
       }
-    }
-    const matchesMainObjective = filters.mainObjective.length === 0 || filters.mainObjective.includes(mainObjLabel);
-    
-    return matchesKPI && matchesActivity && matchesType && matchesTarget &&
-           matchesResponsible && matchesMOV && matchesMainObjective;
-  });
+      const matchesMainObjective = filters.mainObjective.length === 0 || filters.mainObjective.includes(mainObjLabel);
+      
+      return matchesKPI && matchesActivity && matchesType && matchesTarget &&
+             matchesResponsible && matchesMOV && matchesMainObjective;
+    });
+  }, [objectives, filters, mainObjectives]);
 
   const toggleFilterValue = (filterKey: keyof typeof filters, value: string) => {
     const currentValues = filters[filterKey];
