@@ -47,6 +47,26 @@ export default defineConfig(({ mode }) => {
             swContent = swContent.replace(/__BUILD_VERSION__/g, buildVersion);
             fs.writeFileSync(distSwPath, swContent);
           }
+          
+          // Also add build version to index.html meta tag
+          const distHtmlPath = path.resolve(__dirname, 'dist/index.html');
+          if (fs.existsSync(distHtmlPath)) {
+            let htmlContent = fs.readFileSync(distHtmlPath, 'utf-8');
+            // Add or update meta tag with build version
+            if (htmlContent.includes('name="build-version"')) {
+              htmlContent = htmlContent.replace(
+                /<meta\s+name="build-version"\s+content="[^"]*"/i,
+                `<meta name="build-version" content="${buildVersion}"`
+              );
+            } else {
+              // Insert meta tag in head
+              htmlContent = htmlContent.replace(
+                /<head>/i,
+                `<head>\n    <meta name="build-version" content="${buildVersion}">`
+              );
+            }
+            fs.writeFileSync(distHtmlPath, htmlContent);
+          }
         },
       },
     ].filter(Boolean),
