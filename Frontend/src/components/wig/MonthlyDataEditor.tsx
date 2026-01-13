@@ -24,6 +24,7 @@ const MONTHS = [
 export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: MonthlyDataEditorProps) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Map<string, MonthlyData>>(new Map());
+  const [originalData, setOriginalData] = useState<Map<string, MonthlyData>>(new Map()); // Track original data to detect changes
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -38,13 +39,17 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       setLoading(true);
       const monthlyData = await getMonthlyData(departmentObjectiveId);
       const dataMap = new Map<string, MonthlyData>();
+      const originalMap = new Map<string, MonthlyData>();
       
       monthlyData.forEach((item) => {
         const monthKey = item.month.substring(0, 7); // YYYY-MM
         dataMap.set(monthKey, item);
+        // Store original data to detect changes
+        originalMap.set(monthKey, { ...item });
       });
       
       setData(dataMap);
+      setOriginalData(originalMap); // Store original for comparison
     } catch (err) {
       toast({
         title: 'Error',
@@ -97,13 +102,24 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       const promises: Promise<MonthlyData>[] = [];
       const monthsToSave: string[] = [];
       
-      // Save all months that have data (either edited or existing)
-      // Check if month has been edited OR has existing data
+      // Only save months that have been CHANGED (edited by user)
+      // Compare current data with original data to detect changes
       MONTHS.forEach((month) => {
         const monthData = data.get(month);
+        const originalMonthData = originalData.get(month);
         
-        // Save if month has any data (target or actual value)
-        if (monthData && (monthData.target_value !== null || monthData.actual_value !== null)) {
+        // Check if this month has been edited (changed from original)
+        const hasChanged = monthData && (
+          // New month (not in original data) with values
+          (!originalMonthData && (monthData.target_value !== null || monthData.actual_value !== null)) ||
+          // Existing month with changed values
+          (originalMonthData && (
+            monthData.target_value !== originalMonthData.target_value ||
+            monthData.actual_value !== originalMonthData.actual_value
+          ))
+        );
+        
+        if (hasChanged) {
           const saveData = {
             department_objective_id: departmentObjectiveId,
             month: `${month}-01`,
@@ -111,7 +127,11 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
             actual_value: monthData.actual_value,
           };
           
-          console.log(`[MonthlyDataEditor] Saving month ${month}:`, saveData);
+          console.log(`[MonthlyDataEditor] Saving CHANGED month ${month}:`, {
+            original: originalMonthData,
+            current: monthData,
+            saveData
+          });
           monthsToSave.push(month);
           
           promises.push(
@@ -139,7 +159,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       
       // Reload data to ensure we have the latest from the database
       console.log('[MonthlyDataEditor] Reloading data after save...');
-      await loadData();
+      await loadData(); // This will also update originalData
       
       // Verify the data was saved
       const reloadedData = Array.from(data.entries());
