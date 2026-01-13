@@ -807,6 +807,15 @@ export default function DepartmentObjectives() {
     });
   }, [objectives, filters, mainObjectives]);
 
+  // Conditional return MUST be after all hooks
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const toggleFilterValue = (filterKey: keyof typeof filters, value: string) => {
     const currentValues = filters[filterKey];
     if (currentValues.includes(value)) {
