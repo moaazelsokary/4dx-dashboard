@@ -52,6 +52,13 @@ function storeVersion(version: string): void {
  */
 async function checkForNewVersion(): Promise<boolean> {
   try {
+    const storedVersion = getStoredVersion();
+    
+    // If we don't have a stored version yet, don't trigger reload
+    if (!storedVersion) {
+      return false;
+    }
+
     // Fetch index.html with cache-busting query parameter
     const response = await fetch(`/?v=${Date.now()}`, {
       method: 'HEAD',
@@ -64,14 +71,21 @@ async function checkForNewVersion(): Promise<boolean> {
 
     if (etag || lastModified) {
       const currentVersion = etag || lastModified;
-      const storedVersion = getStoredVersion();
-
-      if (storedVersion && storedVersion !== currentVersion) {
+      
+      // Only return true if versions are different AND we have a stored version
+      if (storedVersion && currentVersion && storedVersion !== currentVersion) {
+        console.log('[Version Check] Version changed:', { stored: storedVersion, current: currentVersion });
         return true; // New version available
       }
 
-      if (currentVersion) {
+      // Update stored version if we got a new one
+      if (currentVersion && currentVersion !== storedVersion) {
         storeVersion(currentVersion);
+      }
+      
+      // If versions match, definitely no new version
+      if (storedVersion === currentVersion) {
+        return false;
       }
     }
 
@@ -86,20 +100,29 @@ async function checkForNewVersion(): Promise<boolean> {
     if (scriptMatch) {
       const scriptSrc = scriptMatch[1];
       const scriptVersion = scriptSrc.split('/').pop() || '';
-      const storedScriptVersion = getStoredVersion();
-
-      if (storedScriptVersion && storedScriptVersion !== scriptVersion) {
+      
+      // Only compare if we have both versions
+      if (storedVersion && scriptVersion && storedVersion !== scriptVersion) {
+        console.log('[Version Check] Script version changed:', { stored: storedVersion, current: scriptVersion });
         return true; // New version available
       }
+      
+      // If versions match, definitely no new version
+      if (storedVersion === scriptVersion) {
+        return false;
+      }
 
-      if (scriptVersion) {
+      // Update stored version if we got a new one
+      if (scriptVersion && scriptVersion !== storedVersion) {
         storeVersion(scriptVersion);
       }
     }
 
+    // If we couldn't determine version, don't reload (safer to not reload)
     return false;
   } catch (error) {
     console.warn('[Version Check] Error checking for new version:', error);
+    // On error, don't reload (safer to not reload)
     return false;
   }
 }
@@ -157,7 +180,7 @@ export function initVersionCheck(): void {
   // Also check on visibility change (when user returns to tab)
   document.addEventListener('visibilitychange', async () => {
     if (!document.hidden) {
-      // Wait a bit before checking to avoid false positives
+      // Wait 10 seconds before checking to avoid false positives and give time for network
       setTimeout(async () => {
         const hasNewVersion = await checkForNewVersion();
         if (hasNewVersion) {
@@ -166,8 +189,10 @@ export function initVersionCheck(): void {
             clearInterval(versionCheckInterval);
           }
           forceReload();
+        } else {
+          console.log('[Version Check] No new version detected, staying on current version');
         }
-      }, 2000);
+      }, 10000); // Changed from 2000ms to 10000ms (10 seconds)
     }
   });
 }
