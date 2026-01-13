@@ -357,7 +357,7 @@ export default function DepartmentObjectives() {
       let savedObjective: DepartmentObjective;
 
       if (modalMode === 'add') {
-        // Optimistically add to UI immediately
+        // Optimistically add to UI immediately - use functional update for instant UI response
         const tempId = Date.now(); // Temporary ID
         const optimisticObjective: DepartmentObjective = {
           id: tempId,
@@ -377,8 +377,28 @@ export default function DepartmentObjectives() {
           updated_at: new Date().toISOString(),
         };
         
-        // Add optimistically to UI
-        setObjectives(prev => [...prev, optimisticObjective]);
+        // Add optimistically to UI immediately - this triggers instant re-render
+        setObjectives(prev => {
+          const updated = [...prev, optimisticObjective];
+          // Sort to maintain order
+          return updated.sort((a, b) => {
+            if (a.sort_order !== undefined && b.sort_order !== undefined) {
+              return a.sort_order - b.sort_order;
+            }
+            if (a.sort_order !== undefined) return -1;
+            if (b.sort_order !== undefined) return 1;
+            return a.id - b.id;
+          });
+        });
+        
+        // Close modal immediately for better UX
+        setIsModalOpen(false);
+        setModalInitialData(undefined);
+        
+        toast({
+          title: 'Creating...',
+          description: 'Objective is being created',
+        });
         
         // Save to database
         savedObjective = await createDepartmentObjective({
@@ -394,9 +414,20 @@ export default function DepartmentObjectives() {
         });
         
         // Replace optimistic with real data
-        setObjectives(prev => prev.map(obj => 
-          obj.id === tempId ? savedObjective : obj
-        ));
+        setObjectives(prev => {
+          const updated = prev.map(obj => 
+            obj.id === tempId ? savedObjective : obj
+          );
+          // Re-sort after update
+          return updated.sort((a, b) => {
+            if (a.sort_order !== undefined && b.sort_order !== undefined) {
+              return a.sort_order - b.sort_order;
+            }
+            if (a.sort_order !== undefined) return -1;
+            if (b.sort_order !== undefined) return 1;
+            return a.id - b.id;
+          });
+        });
         
         toast({
           title: 'Success',
@@ -405,10 +436,22 @@ export default function DepartmentObjectives() {
       } else {
         if (!data.id) return;
         
-        // Optimistically update in UI immediately
-        setObjectives(prev => prev.map(obj => 
-          obj.id === data.id ? { ...obj, ...data } : obj
-        ));
+        // Optimistically update in UI immediately - use functional update
+        setObjectives(prev => {
+          const updated = prev.map(obj => 
+            obj.id === data.id ? { ...obj, ...data, updated_at: new Date().toISOString() } : obj
+          );
+          return updated;
+        });
+        
+        // Close modal immediately
+        setIsModalOpen(false);
+        setModalInitialData(undefined);
+        
+        toast({
+          title: 'Updating...',
+          description: 'Objective is being updated',
+        });
         
         // Save to database
         savedObjective = await updateDepartmentObjective(data.id, data);
@@ -423,9 +466,6 @@ export default function DepartmentObjectives() {
           description: 'Objective updated successfully',
         });
       }
-      
-      setIsModalOpen(false);
-      setModalInitialData(undefined);
       
       // Reload in background to ensure sync (non-blocking)
       loadData(false).catch(err => {
@@ -540,10 +580,22 @@ export default function DepartmentObjectives() {
       if (updateData.kpi && Array.isArray(updateData.kpi)) {
         updateData.kpi = joinKPIs(updateData.kpi);
       }
-      // Optimistically update in UI immediately
-      setObjectives(prev => prev.map(obj => 
-        obj.id === editingId ? { ...obj, ...updateData } : obj
-      ));
+      // Optimistically update in UI immediately - use functional update for instant response
+      setObjectives(prev => {
+        const updated = prev.map(obj => 
+          obj.id === editingId ? { ...obj, ...updateData, updated_at: new Date().toISOString() } : obj
+        );
+        return updated;
+      });
+      
+      // Exit edit mode immediately for better UX
+      setEditingId(null);
+      setEditData({});
+      
+      toast({
+        title: 'Updating...',
+        description: 'Objective is being updated',
+      });
       
       // Save to database
       const savedObjective = await updateDepartmentObjective(editingId, updateData);
@@ -557,8 +609,6 @@ export default function DepartmentObjectives() {
         title: 'Success',
         description: 'Objective updated successfully',
       });
-      setEditingId(null);
-      setEditData({});
       
       // Reload in background to ensure sync (non-blocking)
       loadData(false).catch(err => {
@@ -577,9 +627,20 @@ export default function DepartmentObjectives() {
     if (!deletingId) return;
 
     try {
-      // Optimistically remove from UI immediately
+      // Optimistically remove from UI immediately - use functional update
       const deletedObjective = objectives.find(obj => obj.id === deletingId);
-      setObjectives(prev => prev.filter(obj => obj.id !== deletingId));
+      setObjectives(prev => {
+        const filtered = prev.filter(obj => obj.id !== deletingId);
+        return filtered;
+      });
+      
+      // Close dialog immediately
+      setDeletingId(null);
+      
+      toast({
+        title: 'Deleting...',
+        description: 'Objective is being deleted',
+      });
       
       // Delete from database
       await deleteDepartmentObjective(deletingId);
@@ -588,7 +649,6 @@ export default function DepartmentObjectives() {
         title: 'Success',
         description: 'Objective deleted successfully',
       });
-      setDeletingId(null);
       
       // Reload in background to ensure sync (non-blocking)
       loadData(false).catch(err => {
