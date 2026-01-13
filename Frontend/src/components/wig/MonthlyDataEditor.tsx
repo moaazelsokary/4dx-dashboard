@@ -156,81 +156,85 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle>Monthly Data (1/2026 - 6/2027)</DialogTitle>
         </DialogHeader>
         
         {loading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-8 flex-1">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-4 p-2 font-medium border-b">
-              <div>Month</div>
-              <div className="text-right">Target</div>
-              <div className="text-right">Actual</div>
-              <div className="text-right">Variance</div>
+          <>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-4 gap-4 p-2 font-medium border-b sticky top-0 bg-background z-10">
+                  <div>Month</div>
+                  <div className="text-right">Target</div>
+                  <div className="text-right">Actual</div>
+                  <div className="text-right">Variance</div>
+                </div>
+                
+                {MONTHS.map((month) => {
+                  const monthData = data.get(month) || {
+                    id: 0,
+                    department_objective_id: departmentObjectiveId,
+                    month: `${month}-01`,
+                    target_value: null,
+                    actual_value: null,
+                  };
+                  
+                  const variance =
+                    monthData.target_value !== null && monthData.actual_value !== null
+                      ? monthData.actual_value - monthData.target_value
+                      : null;
+                  
+                  const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'MMM yyyy');
+                  
+                  return (
+                    <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
+                      <div className="font-medium">{monthLabel}</div>
+                      <div>
+                        <Input
+                          type="number"
+                          id={`target-${month}`}
+                          name={`target-${month}`}
+                          autoComplete="off"
+                          value={monthData.target_value?.toString() || ''}
+                          onChange={(e) => updateMonthData(month, 'target_value', e.target.value)}
+                          placeholder="Target"
+                          className="text-right"
+                          aria-label={`Target value for ${monthLabel}`}
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="number"
+                          id={`actual-${month}`}
+                          name={`actual-${month}`}
+                          autoComplete="off"
+                          value={monthData.actual_value?.toString() || ''}
+                          onChange={(e) => updateMonthData(month, 'actual_value', e.target.value)}
+                          placeholder="Actual"
+                          className="text-right"
+                          aria-label={`Actual value for ${monthLabel}`}
+                        />
+                      </div>
+                      <div className="text-right text-sm text-muted-foreground">
+                        {variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(2) : '-'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             
-            {MONTHS.map((month) => {
-              const monthData = data.get(month) || {
-                id: 0,
-                department_objective_id: departmentObjectiveId,
-                month: `${month}-01`,
-                target_value: null,
-                actual_value: null,
-              };
-              
-              const variance =
-                monthData.target_value !== null && monthData.actual_value !== null
-                  ? monthData.actual_value - monthData.target_value
-                  : null;
-              
-              const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'MMM yyyy');
-              
-              return (
-                <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
-                  <div className="font-medium">{monthLabel}</div>
-                  <div>
-                    <Input
-                      type="number"
-                      id={`target-${month}`}
-                      name={`target-${month}`}
-                      autoComplete="off"
-                      value={monthData.target_value?.toString() || ''}
-                      onChange={(e) => updateMonthData(month, 'target_value', e.target.value)}
-                      placeholder="Target"
-                      className="text-right"
-                      aria-label={`Target value for ${monthLabel}`}
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      type="number"
-                      id={`actual-${month}`}
-                      name={`actual-${month}`}
-                      autoComplete="off"
-                      value={monthData.actual_value?.toString() || ''}
-                      onChange={(e) => updateMonthData(month, 'actual_value', e.target.value)}
-                      placeholder="Actual"
-                      className="text-right"
-                      aria-label={`Actual value for ${monthLabel}`}
-                    />
-                  </div>
-                  <div className="text-right text-sm text-muted-foreground">
-                    {variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(2) : '-'}
-                  </div>
-                </div>
-              );
-            })}
-            
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={true} aria-label="Cancel editing monthly data" title="Cancel">
+            <div className="flex justify-end gap-2 pt-4 pb-6 px-6 border-t bg-background sticky bottom-0">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving} aria-label="Cancel editing monthly data" title="Cancel">
                 Cancel
               </Button>
-              <Button type="button" onClick={saveAll} disabled={true} aria-label="Save all monthly data" title="Save all monthly data">
+              <Button type="button" onClick={saveAll} disabled={saving} aria-label="Save all monthly data" title="Save all monthly data">
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -241,7 +245,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                 )}
               </Button>
             </div>
-          </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
