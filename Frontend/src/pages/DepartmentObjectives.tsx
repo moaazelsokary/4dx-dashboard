@@ -742,43 +742,51 @@ export default function DepartmentObjectives() {
     navigate('/');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
+  // Get unique values for each column (handle multiple KPIs) - memoized for performance
+  const uniqueKPIs = useMemo(() => 
+    Array.from(new Set(
+      objectives.flatMap(o => parseKPIs(o.kpi))
+    )).sort(),
+    [objectives]
+  );
+  const uniqueActivities = useMemo(() => 
+    Array.from(new Set(objectives.map(o => o.activity).filter(Boolean))).sort(),
+    [objectives]
+  );
+  const uniqueTypes = useMemo(() => 
+    Array.from(new Set(objectives.map(o => o.type).filter(Boolean))).sort(),
+    [objectives]
+  );
+  const uniqueTargets = useMemo(() => 
+    Array.from(new Set(objectives.map(o => o.activity_target.toString()).filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b)),
+    [objectives]
+  );
+  const uniqueResponsible = useMemo(() => 
+    Array.from(new Set(objectives.map(o => o.responsible_person).filter(Boolean))).sort(),
+    [objectives]
+  );
+  const uniqueMOVs = useMemo(() => 
+    Array.from(new Set(objectives.map(o => o.mov).filter(Boolean))).sort(),
+    [objectives]
+  );
   
-  // Permission check: Only CEO/admin can modify M&E KPIs
-  const canModifyMEKPIs = user?.role === 'CEO';
-
-  // Get unique values for each column (handle multiple KPIs)
-  const uniqueKPIs = Array.from(new Set(
-    objectives.flatMap(o => parseKPIs(o.kpi))
-  )).sort();
-  const uniqueActivities = Array.from(new Set(objectives.map(o => o.activity).filter(Boolean))).sort();
-  const uniqueTypes = Array.from(new Set(objectives.map(o => o.type).filter(Boolean))).sort();
-  const uniqueTargets = Array.from(new Set(objectives.map(o => o.activity_target.toString()).filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b));
-  const uniqueResponsible = Array.from(new Set(objectives.map(o => o.responsible_person).filter(Boolean))).sort();
-  const uniqueMOVs = Array.from(new Set(objectives.map(o => o.mov).filter(Boolean))).sort();
-  
-  // Get unique main objectives (with labels)
-  const mainObjectiveMap = new Map<string, string>();
-  objectives.forEach(obj => {
-    if (obj.main_objective_id) {
-      const mainObj = mainObjectives.find(o => o.id === obj.main_objective_id);
-      if (mainObj) {
-        const label = `${mainObj.objective} - ${mainObj.kpi}`;
-        mainObjectiveMap.set(label, label);
+  // Get unique main objectives (with labels) - memoized for performance
+  const uniqueMainObjectives = useMemo(() => {
+    const mainObjectiveMap = new Map<string, string>();
+    objectives.forEach(obj => {
+      if (obj.main_objective_id) {
+        const mainObj = mainObjectives.find(o => o.id === obj.main_objective_id);
+        if (mainObj) {
+          const label = `${mainObj.objective} - ${mainObj.kpi}`;
+          mainObjectiveMap.set(label, label);
+        }
+      } else {
+        mainObjectiveMap.set('Not linked', 'Not linked');
       }
-    } else {
-      mainObjectiveMap.set('Not linked', 'Not linked');
-    }
-  });
-  const uniqueMainObjectives = Array.from(mainObjectiveMap.values()).sort();
+    });
+    return Array.from(mainObjectiveMap.values()).sort();
+  }, [objectives, mainObjectives]);
 
   // Filter objectives based on selected filter values
   // Use useMemo to ensure filteredObjectives updates reactively when objectives change
@@ -807,7 +815,7 @@ export default function DepartmentObjectives() {
     });
   }, [objectives, filters, mainObjectives]);
 
-  // Conditional return MUST be after all hooks
+  // NOW we can do conditional returns - AFTER all hooks
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -815,6 +823,11 @@ export default function DepartmentObjectives() {
       </div>
     );
   }
+
+  const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
+  
+  // Permission check: Only CEO/admin can modify M&E KPIs
+  const canModifyMEKPIs = user?.role === 'CEO';
 
   const toggleFilterValue = (filterKey: keyof typeof filters, value: string) => {
     const currentValues = filters[filterKey];
