@@ -540,15 +540,30 @@ export default function DepartmentObjectives() {
       if (updateData.kpi && Array.isArray(updateData.kpi)) {
         updateData.kpi = joinKPIs(updateData.kpi);
       }
-      await updateDepartmentObjective(editingId, updateData);
+      // Optimistically update in UI immediately
+      setObjectives(prev => prev.map(obj => 
+        obj.id === editingId ? { ...obj, ...updateData } : obj
+      ));
+      
+      // Save to database
+      const savedObjective = await updateDepartmentObjective(editingId, updateData);
+      
+      // Update with real data from server
+      setObjectives(prev => prev.map(obj => 
+        obj.id === editingId ? savedObjective : obj
+      ));
+      
       toast({
         title: 'Success',
         description: 'Objective updated successfully',
       });
       setEditingId(null);
       setEditData({});
-      // Refresh data without showing loading spinner
-      loadData(false);
+      
+      // Reload in background to ensure sync (non-blocking)
+      loadData(false).catch(err => {
+        console.warn('[DepartmentObjectives] Background reload failed:', err);
+      });
     } catch (err) {
       toast({
         title: 'Error',
@@ -562,20 +577,35 @@ export default function DepartmentObjectives() {
     if (!deletingId) return;
 
     try {
+      // Optimistically remove from UI immediately
+      const deletedObjective = objectives.find(obj => obj.id === deletingId);
+      setObjectives(prev => prev.filter(obj => obj.id !== deletingId));
+      
+      // Delete from database
       await deleteDepartmentObjective(deletingId);
+      
       toast({
         title: 'Success',
         description: 'Objective deleted successfully',
       });
       setDeletingId(null);
-      // Refresh data without showing loading spinner
-      loadData(false);
+      
+      // Reload in background to ensure sync (non-blocking)
+      loadData(false).catch(err => {
+        console.warn('[DepartmentObjectives] Background reload failed:', err);
+        // Restore on error
+        if (deletedObjective) {
+          setObjectives(prev => [...prev, deletedObjective]);
+        }
+      });
     } catch (err) {
       toast({
         title: 'Error',
         description: 'Failed to delete objective',
         variant: 'destructive',
       });
+      // Reload to get correct state on error
+      loadData(false);
     }
   };
 
