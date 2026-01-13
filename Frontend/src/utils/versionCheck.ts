@@ -56,69 +56,62 @@ async function checkForNewVersion(): Promise<boolean> {
     
     // If we don't have a stored version yet, don't trigger reload
     if (!storedVersion) {
+      console.log('[Version Check] No stored version found, skipping check');
       return false;
     }
 
-    // Fetch index.html with cache-busting query parameter
-    const response = await fetch(`/?v=${Date.now()}`, {
-      method: 'HEAD',
-      cache: 'no-store',
-    });
-
-    // Check ETag or Last-Modified header if available
-    const etag = response.headers.get('etag');
-    const lastModified = response.headers.get('last-modified');
-
-    if (etag || lastModified) {
-      const currentVersion = etag || lastModified;
-      
-      // Only return true if versions are different AND we have a stored version
-      if (storedVersion && currentVersion && storedVersion !== currentVersion) {
-        console.log('[Version Check] Version changed:', { stored: storedVersion, current: currentVersion });
-        return true; // New version available
-      }
-
-      // Update stored version if we got a new one
-      if (currentVersion && currentVersion !== storedVersion) {
-        storeVersion(currentVersion);
-      }
-      
-      // If versions match, definitely no new version
-      if (storedVersion === currentVersion) {
-        return false;
-      }
-    }
-
-    // Fallback: Check if HTML content has changed by fetching a small part
-    const htmlResponse = await fetch(`/?v=${Date.now()}`, {
-      cache: 'no-store',
-    });
-    const htmlText = await htmlResponse.text();
+    // Get the current build version from the embedded code
+    const currentBuildVersion = getBuildVersion();
     
-    // Extract script src to check if assets changed
-    const scriptMatch = htmlText.match(/src="([^"]+\.js)"/);
-    if (scriptMatch) {
-      const scriptSrc = scriptMatch[1];
-      const scriptVersion = scriptSrc.split('/').pop() || '';
-      
-      // Only compare if we have both versions
-      if (storedVersion && scriptVersion && storedVersion !== scriptVersion) {
-        console.log('[Version Check] Script version changed:', { stored: storedVersion, current: scriptVersion });
-        return true; // New version available
-      }
-      
-      // If versions match, definitely no new version
-      if (storedVersion === scriptVersion) {
-        return false;
-      }
-
-      // Update stored version if we got a new one
-      if (scriptVersion && scriptVersion !== storedVersion) {
-        storeVersion(scriptVersion);
-      }
+    // Compare stored version with current build version
+    // This is the most reliable method since both come from the same source
+    if (storedVersion && currentBuildVersion && storedVersion !== currentBuildVersion) {
+      console.log('[Version Check] Version changed:', { 
+        stored: storedVersion, 
+        current: currentBuildVersion,
+        willReload: true 
+      });
+      return true; // New version available
+    }
+    
+    // If versions match, definitely no new version
+    if (storedVersion === currentBuildVersion) {
+      console.log('[Version Check] Versions match, no reload needed:', { 
+        stored: storedVersion, 
+        current: currentBuildVersion 
+      });
+      return false;
     }
 
-    // If we couldn't determine version, don't reload (safer to not reload)
+    // Fallback: Check HTML for meta tag with build version
+    try {
+      const htmlResponse = await fetch(`/?v=${Date.now()}`, {
+        cache: 'no-store',
+      });
+      const htmlText = await htmlResponse.text();
+      
+      // Check for meta tag with build version
+      const metaMatch = htmlText.match(/<meta\s+name="build-version"\s+content="([^"]+)"/i);
+      if (metaMatch) {
+        const metaVersion = metaMatch[1];
+        if (storedVersion && metaVersion && storedVersion !== metaVersion) {
+          console.log('[Version Check] Meta version changed:', { 
+            stored: storedVersion, 
+            current: metaVersion 
+          });
+          return true;
+        }
+        if (storedVersion === metaVersion) {
+          console.log('[Version Check] Meta versions match, no reload needed');
+          return false;
+        }
+      }
+    } catch (htmlError) {
+      console.warn('[Version Check] Could not fetch HTML for version check:', htmlError);
+    }
+
+    // If we couldn't determine version reliably, don't reload (safer to not reload)
+    console.log('[Version Check] Could not reliably determine version, not reloading');
     return false;
   } catch (error) {
     console.warn('[Version Check] Error checking for new version:', error);
