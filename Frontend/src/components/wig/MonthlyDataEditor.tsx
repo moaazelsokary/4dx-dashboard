@@ -166,19 +166,23 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       
       // Update originalData immediately with saved data to prevent re-saving
       const updatedOriginal = new Map(originalData);
+      const updatedData = new Map(data);
       savedData.forEach((saved) => {
         const monthKey = saved.month.substring(0, 7); // YYYY-MM
         updatedOriginal.set(monthKey, { ...saved });
+        updatedData.set(monthKey, { ...saved });
       });
       setOriginalData(updatedOriginal);
-      
-      // Reload data to ensure we have the latest from the database
-      console.log('[MonthlyDataEditor] Reloading data after save...');
-      await loadData(); // This will also update originalData
+      setData(updatedData); // Update current data immediately
       
       toast({
         title: 'Success',
         description: `Monthly data saved successfully for ${savedData.length} month(s)`,
+      });
+      
+      // Reload data in background (non-blocking) to sync with database
+      loadData().catch((err) => {
+        console.warn('[MonthlyDataEditor] Background reload failed:', err);
       });
       
       // Don't close immediately - let user see the saved data
