@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -781,17 +781,19 @@ export default function DepartmentObjectives() {
   const uniqueMainObjectives = Array.from(mainObjectiveMap.values()).sort();
 
   // Filter objectives based on selected filter values
-  const filteredObjectives = objectives.filter((obj) => {
-    const objKPIs = parseKPIs(obj.kpi);
-    const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
-    const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
-    const matchesType = filters.type.length === 0 || filters.type.includes(obj.type || '');
-    const matchesTarget = filters.target.length === 0 || filters.target.includes(obj.activity_target.toString());
-    const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(obj.responsible_person);
-    const matchesMOV = filters.mov.length === 0 || filters.mov.includes(obj.mov);
-    
-    // Match main objective
-    let mainObjLabel = 'Not linked';
+  // Use useMemo to ensure filteredObjectives updates reactively when objectives change
+  const filteredObjectives = useMemo(() => {
+    return objectives.filter((obj) => {
+      const objKPIs = parseKPIs(obj.kpi);
+      const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
+      const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
+      const matchesType = filters.type.length === 0 || filters.type.includes(obj.type || '');
+      const matchesTarget = filters.target.length === 0 || filters.target.includes(obj.activity_target.toString());
+      const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(obj.responsible_person);
+      const matchesMOV = filters.mov.length === 0 || filters.mov.includes(obj.mov);
+      
+      // Match main objective
+      let mainObjLabel = 'Not linked';
     if (obj.main_objective_id) {
       const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
       if (mainObj) {
