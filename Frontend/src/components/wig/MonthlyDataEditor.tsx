@@ -95,34 +95,45 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       setSaving(true);
       const promises: Promise<MonthlyData>[] = [];
       
-      // Save all months, even if they haven't been edited
+      // Only save months that have been edited (have values in the data map)
+      // This prevents overwriting existing data with null values
       MONTHS.forEach((month) => {
-        const monthData = data.get(month) || {
-          id: 0,
-          department_objective_id: departmentObjectiveId,
-          month: `${month}-01`,
-          target_value: null,
-          actual_value: null,
-        };
+        const monthData = data.get(month);
         
-        promises.push(
-          createOrUpdateMonthlyData({
-            department_objective_id: departmentObjectiveId,
-            month: `${month}-01`,
-            target_value: monthData.target_value,
-            actual_value: monthData.actual_value,
-          })
-        );
+        // Only save if this month has been edited (exists in data map)
+        if (monthData) {
+          promises.push(
+            createOrUpdateMonthlyData({
+              department_objective_id: departmentObjectiveId,
+              month: `${month}-01`,
+              target_value: monthData.target_value,
+              actual_value: monthData.actual_value,
+            })
+          );
+        }
       });
       
-      await Promise.all(promises);
+      if (promises.length === 0) {
+        toast({
+          title: 'No changes',
+          description: 'No data to save',
+        });
+        return;
+      }
+      
+      const savedData = await Promise.all(promises);
+      console.log('[MonthlyDataEditor] Saved data:', savedData);
+      
+      // Reload data to ensure we have the latest from the database
+      await loadData();
       
       toast({
         title: 'Success',
         description: 'Monthly data saved successfully',
       });
       
-      setOpen(false);
+      // Don't close immediately - let user see the saved data
+      // setOpen(false);
     } catch (err) {
       console.error('Error saving monthly data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to save monthly data';
