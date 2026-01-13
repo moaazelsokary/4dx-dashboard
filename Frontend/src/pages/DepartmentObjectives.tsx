@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -377,23 +378,23 @@ export default function DepartmentObjectives() {
           updated_at: new Date().toISOString(),
         };
         
-        // Add optimistically to UI immediately - this triggers instant re-render
-        setObjectives(prev => {
-          const updated = [...prev, optimisticObjective];
-          // Sort to maintain order
-          return updated.sort((a, b) => {
-            if (a.sort_order !== undefined && b.sort_order !== undefined) {
-              return a.sort_order - b.sort_order;
-            }
-            if (a.sort_order !== undefined) return -1;
-            if (b.sort_order !== undefined) return 1;
-            return a.id - b.id;
+        // Add optimistically to UI immediately - use flushSync for instant re-render
+        flushSync(() => {
+          setObjectives(prev => {
+            const updated = [...prev, optimisticObjective];
+            // Sort to maintain order
+            return updated.sort((a, b) => {
+              if (a.sort_order !== undefined && b.sort_order !== undefined) {
+                return a.sort_order - b.sort_order;
+              }
+              if (a.sort_order !== undefined) return -1;
+              if (b.sort_order !== undefined) return 1;
+              return a.id - b.id;
+            });
           });
+          setIsModalOpen(false);
+          setModalInitialData(undefined);
         });
-        
-        // Close modal immediately for better UX
-        setIsModalOpen(false);
-        setModalInitialData(undefined);
         
         toast({
           title: 'Creating...',
@@ -436,17 +437,17 @@ export default function DepartmentObjectives() {
       } else {
         if (!data.id) return;
         
-        // Optimistically update in UI immediately - use functional update
-        setObjectives(prev => {
-          const updated = prev.map(obj => 
-            obj.id === data.id ? { ...obj, ...data, updated_at: new Date().toISOString() } : obj
-          );
-          return updated;
+        // Optimistically update in UI immediately - use flushSync for instant re-render
+        flushSync(() => {
+          setObjectives(prev => {
+            const updated = prev.map(obj => 
+              obj.id === data.id ? { ...obj, ...data, updated_at: new Date().toISOString() } : obj
+            );
+            return updated;
+          });
+          setIsModalOpen(false);
+          setModalInitialData(undefined);
         });
-        
-        // Close modal immediately
-        setIsModalOpen(false);
-        setModalInitialData(undefined);
         
         toast({
           title: 'Updating...',
@@ -580,17 +581,17 @@ export default function DepartmentObjectives() {
       if (updateData.kpi && Array.isArray(updateData.kpi)) {
         updateData.kpi = joinKPIs(updateData.kpi);
       }
-      // Optimistically update in UI immediately - use functional update for instant response
-      setObjectives(prev => {
-        const updated = prev.map(obj => 
-          obj.id === editingId ? { ...obj, ...updateData, updated_at: new Date().toISOString() } : obj
-        );
-        return updated;
+      // Optimistically update in UI immediately - use flushSync for instant re-render
+      flushSync(() => {
+        setObjectives(prev => {
+          const updated = prev.map(obj => 
+            obj.id === editingId ? { ...obj, ...updateData, updated_at: new Date().toISOString() } : obj
+          );
+          return updated;
+        });
+        setEditingId(null);
+        setEditData({});
       });
-      
-      // Exit edit mode immediately for better UX
-      setEditingId(null);
-      setEditData({});
       
       toast({
         title: 'Updating...',
@@ -627,15 +628,15 @@ export default function DepartmentObjectives() {
     if (!deletingId) return;
 
     try {
-      // Optimistically remove from UI immediately - use functional update
+      // Optimistically remove from UI immediately - use flushSync for instant re-render
       const deletedObjective = objectives.find(obj => obj.id === deletingId);
-      setObjectives(prev => {
-        const filtered = prev.filter(obj => obj.id !== deletingId);
-        return filtered;
+      flushSync(() => {
+        setObjectives(prev => {
+          const filtered = prev.filter(obj => obj.id !== deletingId);
+          return filtered;
+        });
+        setDeletingId(null);
       });
-      
-      // Close dialog immediately
-      setDeletingId(null);
       
       toast({
         title: 'Deleting...',
@@ -1219,7 +1220,7 @@ export default function DepartmentObjectives() {
       };
       
       console.log('[handleAddMEKPI] Saving M&E KPI with data:', meDataToSave);
-      // Optimistically add to UI immediately
+      // Optimistically add to UI immediately - use flushSync for instant re-render
       const tempId = Date.now();
       const optimisticObjective: DepartmentObjective = {
         ...meDataToSave,
@@ -1231,7 +1232,9 @@ export default function DepartmentObjectives() {
         updated_at: new Date().toISOString(),
       } as DepartmentObjective;
       
-      setObjectives(prev => [...prev, optimisticObjective]);
+      flushSync(() => {
+        setObjectives(prev => [...prev, optimisticObjective]);
+      });
       
       // Save to database
       const savedObjective = await createDepartmentObjective(meDataToSave);
