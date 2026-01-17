@@ -83,19 +83,28 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       
       const saved = await createOrUpdateMonthlyData(saveData);
       
+      console.log(`[MonthlyDataEditor] API returned saved data for ${month}:`, {
+        id: saved.id,
+        target_value: saved.target_value,
+        actual_value: saved.actual_value,
+        month: saved.month,
+      });
+      
       // Update originalData to mark this month as saved
       setOriginalData(prev => {
         const updated = new Map(prev);
         const monthKey = saved.month.substring(0, 7);
         updated.set(monthKey, { ...saved });
+        console.log(`[MonthlyDataEditor] Updated originalData for ${month}`);
         return updated;
       });
       
-      // Update data with saved response
+      // Update data with saved response - ensure it persists
       setData(prev => {
         const updated = new Map(prev);
         const monthKey = saved.month.substring(0, 7);
         updated.set(monthKey, { ...saved });
+        console.log(`[MonthlyDataEditor] Updated data state for ${month}. Total months in state:`, updated.size);
         return updated;
       });
       
@@ -251,15 +260,56 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       setOriginalData(updatedOriginal);
       setData(updatedData); // Update current data immediately
       
+      console.log('[MonthlyDataEditor] Updated state with saved data for', savedData.length, 'months');
+      
       toast({
         title: 'Success',
         description: `Monthly data saved successfully for ${savedData.length} month(s)`,
       });
       
-      // Reload data in background (non-blocking) to sync with database
-      loadData().catch((err) => {
-        console.warn('[MonthlyDataEditor] Background reload failed:', err);
-      });
+      // Delay reload to allow server transaction to commit and avoid race conditions
+      // This ensures the updated data persists even if server response is delayed
+      setTimeout(async () => {
+        console.log('[MonthlyDataEditor] Delayed reload after saveAll starting...');
+        try {
+          const reloadedData = await getMonthlyData(departmentObjectiveId);
+          const reloadedMap = new Map<string, MonthlyData>();
+          reloadedData.forEach((item) => {
+            const monthKey = item.month.substring(0, 7);
+            reloadedMap.set(monthKey, item);
+          });
+          
+          // Merge reloaded data with current data, preserving any unsaved changes
+          setData(prev => {
+            const merged = new Map(prev);
+            // Update with server data, but keep any local changes that haven't been saved yet
+            reloadedMap.forEach((serverItem, monthKey) => {
+              const localItem = prev.get(monthKey);
+              // Only update if server data is newer or if we don't have local changes
+              if (!localItem || 
+                  (serverItem.updated_at && localItem.updated_at && 
+                   new Date(serverItem.updated_at) >= new Date(localItem.updated_at))) {
+                merged.set(monthKey, serverItem);
+              }
+            });
+            return merged;
+          });
+          
+          // Update originalData with server data
+          setOriginalData(prev => {
+            const merged = new Map(prev);
+            reloadedMap.forEach((serverItem, monthKey) => {
+              merged.set(monthKey, { ...serverItem });
+            });
+            return merged;
+          });
+          
+          console.log('[MonthlyDataEditor] Delayed reload after saveAll completed');
+        } catch (err) {
+          console.warn('[MonthlyDataEditor] Delayed reload after saveAll failed:', err);
+          // If reload fails, the saved data should still be in state
+        }
+      }, 500); // 500ms delay to allow server transaction to commit
       
       // Don't close immediately - let user see the saved data
       // setOpen(false);
