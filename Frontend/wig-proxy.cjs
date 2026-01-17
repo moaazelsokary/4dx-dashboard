@@ -1,6 +1,7 @@
 require('dotenv').config({ path: '.env.local' });
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const { getPool, sql } = require('./netlify/functions/db.cjs');
 
 const app = express();
@@ -418,9 +419,64 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
 
 app.delete('/api/wig/department-objectives/:id', async (req, res) => {
   try {
+    // Extract user from Authorization header
+    let user = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+      const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'your-secret-key-change-in-production';
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = {
+          userId: decoded.userId,
+          username: decoded.username,
+          role: decoded.role,
+          departments: decoded.departments || [],
+        };
+      } catch (jwtError) {
+        console.warn('[WIG Proxy] JWT verification failed:', jwtError.message);
+        // Continue without user - will fail permission check in deleteDepartmentObjective
+      }
+    }
+
     const pool = await getPool();
+    const id = parseInt(req.params.id);
+
+    // Use the same deleteDepartmentObjective function logic from netlify function
     const request = pool.request();
-    request.input('id', sql.Int, parseInt(req.params.id));
+    request.input('id', sql.Int, id);
+
+    // If user is a department user, verify they can only delete their own department's objectives
+    if (user && user.role === 'department' && user.departments && user.departments.length > 0) {
+      // First check if the objective belongs to the user's department
+      const checkRequest = pool.request();
+      checkRequest.input('id', sql.Int, id);
+      
+      const checkResult = await checkRequest.query(`
+        SELECT do.id, d.name as department_name, d.code as department_code
+        FROM department_objectives do
+        INNER JOIN departments d ON do.department_id = d.id
+        WHERE do.id = @id
+      `);
+
+      if (checkResult.recordset.length === 0) {
+        return res.status(404).json({ 
+          error: 'Department objective not found',
+          success: false 
+        });
+      }
+
+      // Compare department_code (user.departments contains codes like "case", not names)
+      const objectiveDeptCode = checkResult.recordset[0].department_code?.toLowerCase();
+      const userDeptCode = user.departments[0]?.toLowerCase();
+
+      if (objectiveDeptCode !== userDeptCode) {
+        return res.status(403).json({ 
+          error: 'You can only delete objectives from your own department',
+          success: false 
+        });
+      }
+    }
 
     const result = await request.query('DELETE FROM department_objectives WHERE id = @id');
     res.json({ success: true, deletedRows: result.rowsAffected[0] });
