@@ -12,39 +12,68 @@ const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'you
  * Extract JWT token from Authorization header
  */
 function extractToken(event) {
+  // Debug: Log all headers for troubleshooting
+  const allHeaders = Object.keys(event.headers || {});
+  logger.debug('Extracting token - All headers:', { 
+    headerCount: allHeaders.length,
+    headerKeys: allHeaders,
+    path: event.path,
+    method: event.httpMethod
+  });
+  
   // Check all possible header name variations (case-insensitive)
-  const authHeader = event.headers['authorization'] || 
-                     event.headers['Authorization'] ||
-                     event.headers['AUTHORIZATION'] ||
-                     (() => {
-                       // Check all headers for case-insensitive match
-                       for (const key in event.headers) {
-                         if (key.toLowerCase() === 'authorization') {
-                           return event.headers[key];
-                         }
-                       }
-                       return null;
-                     })();
+  // Netlify Functions lowercase all headers, so 'Authorization' becomes 'authorization'
+  let authHeader = null;
+  
+  // Try lowercase first (most common in Netlify Functions)
+  authHeader = event.headers['authorization'] || 
+               event.headers['Authorization'] ||
+               event.headers['AUTHORIZATION'];
+  
+  // If not found, search case-insensitively
+  if (!authHeader) {
+    for (const key in event.headers) {
+      if (key.toLowerCase() === 'authorization') {
+        authHeader = event.headers[key];
+        logger.debug('Found authorization header with case variation:', key);
+        break;
+      }
+    }
+  }
   
   if (!authHeader) {
     logger.warn('No Authorization header found', { 
-      availableHeaders: Object.keys(event.headers),
-      path: event.path 
+      availableHeaders: allHeaders,
+      path: event.path,
+      method: event.httpMethod
     });
     return null;
   }
   
+  logger.debug('Authorization header found', {
+    headerLength: authHeader.length,
+    headerPrefix: authHeader.substring(0, 30) + '...',
+    path: event.path
+  });
+  
   // Support both "Bearer token" and just "token"
   const parts = authHeader.split(' ');
   if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
-    return parts[1];
+    const token = parts[1];
+    logger.debug('Extracted Bearer token', {
+      tokenLength: token.length,
+      tokenPrefix: token.substring(0, 20) + '...'
+    });
+    return token;
   } else if (parts.length === 1) {
+    logger.debug('Extracted raw token (no Bearer prefix)');
     return parts[0];
   }
   
   logger.warn('Invalid Authorization header format', { 
-    header: authHeader.substring(0, 20) + '...',
-    path: event.path 
+    header: authHeader.substring(0, 50) + '...',
+    path: event.path,
+    partsCount: parts.length
   });
   return null;
 }
