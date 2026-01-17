@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -246,6 +246,9 @@ export default function DepartmentObjectives() {
 
   // State for department filter (CEO/admin only)
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  
+  // Ref to track newly created objectives that should persist through reloads
+  const newlyCreatedObjectivesRef = useRef<Map<number, DepartmentObjective>>(new Map());
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -308,7 +311,29 @@ export default function DepartmentObjectives() {
         return a.id - b.id;
       });
       
-      setObjectives(sortedObjectives);
+      // Merge in any newly created objectives that aren't in the server response yet
+      const newlyCreated = Array.from(newlyCreatedObjectivesRef.current.values());
+      const existingIds = new Set(sortedObjectives.map(obj => obj.id));
+      const toMerge = newlyCreated.filter(obj => !existingIds.has(obj.id));
+      
+      if (toMerge.length > 0) {
+        const merged = [...sortedObjectives, ...toMerge].sort((a, b) => {
+          if (a.sort_order !== undefined && b.sort_order !== undefined) {
+            return a.sort_order - b.sort_order;
+          }
+          if (a.sort_order !== undefined) return -1;
+          if (b.sort_order !== undefined) return 1;
+          return a.id - b.id;
+        });
+        setObjectives(merged);
+      } else {
+        setObjectives(sortedObjectives);
+      }
+      
+      // Clean up newly created objectives that are now in the server response
+      sortedObjectives.forEach(obj => {
+        newlyCreatedObjectivesRef.current.delete(obj.id);
+      });
       setMainObjectives(mainObjs);
       setDepartments(depts);
       setRasciMetrics(rasciData);
@@ -453,19 +478,22 @@ export default function DepartmentObjectives() {
           main_objective_id: data.main_objective_id || null,
         });
         
-        // Replace optimistic with real data - ensure all fields are present
+        // Ensure savedObjective has all required fields
+        const completeObjective: DepartmentObjective = {
+          ...savedObjective,
+          department_name: savedObjective.department_name || department.name,
+          department_code: savedObjective.department_code || department.code,
+        };
+        
+        // Track this newly created objective so it persists through reloads
+        newlyCreatedObjectivesRef.current.set(completeObjective.id, completeObjective);
+        
+        // Replace optimistic with real data and ensure it's in the state
         setObjectives(prev => {
-          const updated = prev.map(obj => {
-            if (obj.id === tempId) {
-              // Ensure savedObjective has all required fields
-              return {
-                ...savedObjective,
-                department_name: savedObjective.department_name || department.name,
-                department_code: savedObjective.department_code || department.code,
-              };
-            }
-            return obj;
-          });
+          // Remove the temp objective and add the real one
+          const withoutTemp = prev.filter(obj => obj.id !== tempId);
+          const updated = [...withoutTemp, completeObjective];
+          
           // Re-sort after update
           return updated.sort((a, b) => {
             if (a.sort_order !== undefined && b.sort_order !== undefined) {
@@ -482,14 +510,12 @@ export default function DepartmentObjectives() {
           description: 'Objective created successfully',
         });
         
-        // Reload data to ensure table is updated with latest data from server
-        // Await the reload to ensure state is properly updated
-        try {
-          await loadData(false);
-        } catch (err) {
+        // Reload data in background to sync with server
+        // The newlyCreatedObjectivesRef will ensure the new objective persists
+        loadData(false).catch(err => {
           console.warn('[DepartmentObjectives] Background reload failed after create:', err);
           // If reload fails, the optimistic update should still show the new objective
-        }
+        });
       } else {
         if (!data.id) return;
         
