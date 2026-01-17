@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMonths, setSavingMonths] = useState<Set<string>>(new Set()); // Track which months are currently saving
+  const recentlySavedRef = useRef<Map<string, MonthlyData>>(new Map()); // Track recently saved data to prevent overwrite
 
   useEffect(() => {
     if (open) {
@@ -35,7 +36,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     }
   }, [open, departmentObjectiveId]);
 
-  const loadData = async () => {
+  const loadData = async (mergeWithExisting = false) => {
     try {
       setLoading(true);
       const monthlyData = await getMonthlyData(departmentObjectiveId);
@@ -49,8 +50,47 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         originalMap.set(monthKey, { ...item });
       });
       
-      setData(dataMap);
-      setOriginalData(originalMap); // Store original for comparison
+      if (mergeWithExisting) {
+        // Merge with existing data, preserving recently saved items
+        setData(prev => {
+          const merged = new Map(prev);
+          dataMap.forEach((serverItem, monthKey) => {
+            const recentlySaved = recentlySavedRef.current.get(monthKey);
+            // If we have a recently saved item, prefer it over server data
+            if (recentlySaved) {
+              merged.set(monthKey, recentlySaved);
+              console.log(`[MonthlyDataEditor] Preserving recently saved data for ${monthKey}`);
+            } else {
+              merged.set(monthKey, serverItem);
+            }
+          });
+          // Also keep any local items not in server response
+          prev.forEach((localItem, monthKey) => {
+            if (!dataMap.has(monthKey)) {
+              merged.set(monthKey, localItem);
+            }
+          });
+          return merged;
+        });
+        
+        setOriginalData(prev => {
+          const merged = new Map(prev);
+          originalMap.forEach((serverItem, monthKey) => {
+            const recentlySaved = recentlySavedRef.current.get(monthKey);
+            if (recentlySaved) {
+              merged.set(monthKey, { ...recentlySaved });
+            } else {
+              merged.set(monthKey, { ...serverItem });
+            }
+          });
+          return merged;
+        });
+      } else {
+        // Initial load - replace everything
+        setData(dataMap);
+        setOriginalData(originalMap); // Store original for comparison
+        recentlySavedRef.current.clear(); // Clear ref on initial load
+      }
     } catch (err) {
       toast({
         title: 'Error',
@@ -90,10 +130,15 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         month: saved.month,
       });
       
+      const monthKey = saved.month.substring(0, 7);
+      
+      // Store in ref to prevent overwrite by loadData
+      recentlySavedRef.current.set(monthKey, { ...saved });
+      console.log(`[MonthlyDataEditor] Stored ${month} in recentlySavedRef`);
+      
       // Update originalData to mark this month as saved
       setOriginalData(prev => {
         const updated = new Map(prev);
-        const monthKey = saved.month.substring(0, 7);
         updated.set(monthKey, { ...saved });
         console.log(`[MonthlyDataEditor] Updated originalData for ${month}`);
         return updated;
@@ -102,7 +147,6 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       // Update data with saved response - ensure it persists
       setData(prev => {
         const updated = new Map(prev);
-        const monthKey = saved.month.substring(0, 7);
         updated.set(monthKey, { ...saved });
         console.log(`[MonthlyDataEditor] Updated data state for ${month}. Total months in state:`, updated.size);
         return updated;
@@ -153,13 +197,18 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       // Debounce auto-save by 500ms to avoid too many requests
       setTimeout(() => {
         // Check if data is still the same (user hasn't changed it again)
-        const currentData = data.get(month);
-        if (currentData && (
-          currentData.target_value === monthData.target_value &&
-          currentData.actual_value === monthData.actual_value
-        )) {
-          saveMonthData(month, monthData);
-        }
+        // Use a closure to capture the current state
+        setData(currentState => {
+          const currentData = currentState.get(month);
+          if (currentData && (
+            currentData.target_value === monthData.target_value &&
+            currentData.actual_value === monthData.actual_value
+          )) {
+            // Data hasn't changed, proceed with save
+            saveMonthData(month, monthData);
+          }
+          return currentState; // Return unchanged state
+        });
       }, 500);
     }
   };
@@ -256,11 +305,14 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         const monthKey = saved.month.substring(0, 7); // YYYY-MM
         updatedOriginal.set(monthKey, { ...saved });
         updatedData.set(monthKey, { ...saved });
+        // Store in ref to prevent overwrite by loadData
+        recentlySavedRef.current.set(monthKey, { ...saved });
       });
       setOriginalData(updatedOriginal);
       setData(updatedData); // Update current data immediately
       
       console.log('[MonthlyDataEditor] Updated state with saved data for', savedData.length, 'months');
+      console.log('[MonthlyDataEditor] Stored', savedData.length, 'months in recentlySavedRef');
       
       toast({
         title: 'Success',
@@ -272,39 +324,16 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       setTimeout(async () => {
         console.log('[MonthlyDataEditor] Delayed reload after saveAll starting...');
         try {
-          const reloadedData = await getMonthlyData(departmentObjectiveId);
-          const reloadedMap = new Map<string, MonthlyData>();
-          reloadedData.forEach((item) => {
-            const monthKey = item.month.substring(0, 7);
-            reloadedMap.set(monthKey, item);
-          });
-          
-          // Merge reloaded data with current data, preserving any unsaved changes
-          setData(prev => {
-            const merged = new Map(prev);
-            // Update with server data, but keep any local changes that haven't been saved yet
-            reloadedMap.forEach((serverItem, monthKey) => {
-              const localItem = prev.get(monthKey);
-              // Only update if server data is newer or if we don't have local changes
-              if (!localItem || 
-                  (serverItem.updated_at && localItem.updated_at && 
-                   new Date(serverItem.updated_at) >= new Date(localItem.updated_at))) {
-                merged.set(monthKey, serverItem);
-              }
-            });
-            return merged;
-          });
-          
-          // Update originalData with server data
-          setOriginalData(prev => {
-            const merged = new Map(prev);
-            reloadedMap.forEach((serverItem, monthKey) => {
-              merged.set(monthKey, { ...serverItem });
-            });
-            return merged;
-          });
-          
+          // Use merge mode to preserve recently saved data
+          await loadData(true);
           console.log('[MonthlyDataEditor] Delayed reload after saveAll completed');
+          
+          // Clear the ref after a delay to allow future reloads to use server data
+          // This ensures the ref doesn't persist forever
+          setTimeout(() => {
+            console.log('[MonthlyDataEditor] Clearing recentlySavedRef after successful reload');
+            recentlySavedRef.current.clear();
+          }, 2000); // Clear after 2 seconds
         } catch (err) {
           console.warn('[MonthlyDataEditor] Delayed reload after saveAll failed:', err);
           // If reload fails, the saved data should still be in state
