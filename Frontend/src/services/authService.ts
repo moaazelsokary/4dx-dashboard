@@ -61,13 +61,37 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
       return { success: false, error: errorData.error || errorData.message || 'Authentication failed' };
     }
 
-    const data = await response.json();
-    console.log('[Auth Service] Response data:', { success: data.success, hasUser: !!data.user, hasToken: !!data.token });
+    const responseText = await response.text();
+    console.log('[Auth Service] Raw response text:', responseText.substring(0, 200));
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('[Auth Service] Failed to parse JSON response:', parseError);
+      return { success: false, error: 'Invalid response from server' };
+    }
+    
+    console.log('[Auth Service] Parsed response data:', { 
+      success: data.success, 
+      hasUser: !!data.user, 
+      hasToken: !!data.token,
+      tokenLength: data.token ? data.token.length : 0,
+      userRole: data.user?.role
+    });
     
     if (data.success && data.user && data.token) {
       // Store token and user info
       localStorage.setItem(AUTH_TOKEN_KEY, data.token);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      
+      // Verify token was stored
+      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      console.log('[Auth Service] Token stored successfully:', {
+        stored: !!storedToken,
+        length: storedToken?.length,
+        matches: storedToken === data.token
+      });
       
       logInfo('User signed in', { username: data.user.username, role: data.user.role });
       
@@ -133,18 +157,30 @@ export const isAuthenticated = (): boolean => {
 export const getAuthHeader = (): Record<string, string> => {
   const token = getAuthToken();
   if (!token) {
-    console.warn('[Auth Service] No token found in localStorage');
+    console.warn('[Auth Service] No token found in localStorage', {
+      localStorageKeys: Object.keys(localStorage),
+      authTokenKey: AUTH_TOKEN_KEY
+    });
     return {};
   }
   
   // Debug: Log token presence (but not the actual token for security)
   console.log('[Auth Service] Token found, creating Authorization header', {
     tokenLength: token.length,
-    tokenPrefix: token.substring(0, 10) + '...',
+    tokenPrefix: token.substring(0, 20) + '...',
+    tokenSuffix: '...' + token.substring(token.length - 10),
   });
   
-  return {
+  const authHeader = {
     'Authorization': `Bearer ${token}`,
   };
+  
+  console.log('[Auth Service] Authorization header created:', {
+    hasHeader: !!authHeader['Authorization'],
+    headerLength: authHeader['Authorization']?.length,
+    headerPrefix: authHeader['Authorization']?.substring(0, 30) + '...'
+  });
+  
+  return authHeader;
 };
 

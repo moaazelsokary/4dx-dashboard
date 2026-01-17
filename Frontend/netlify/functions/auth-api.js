@@ -185,15 +185,34 @@ const handler = rateLimiter('login')(async (event, context) => {
     };
 
     logger.info('User signed in successfully', { username: user.username, role: user.role });
+    
+    // Debug: Log token generation
+    console.log('[Auth API] Token generated:', {
+      hasToken: !!token,
+      tokenLength: token ? token.length : 0,
+      tokenPrefix: token ? token.substring(0, 20) + '...' : 'none',
+      userId: user.id,
+      username: user.username,
+      role: user.role
+    });
+
+    const responseBody = {
+      success: true,
+      user: userData,
+      token,
+    };
+    
+    console.log('[Auth API] Response body:', {
+      success: responseBody.success,
+      hasUser: !!responseBody.user,
+      hasToken: !!responseBody.token,
+      userRole: responseBody.user?.role
+    });
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({
-        success: true,
-        user: userData,
-        token,
-      }),
+      body: JSON.stringify(responseBody),
     };
   } catch (error) {
     logger.error('Authentication error', error);
