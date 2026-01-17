@@ -779,7 +779,58 @@ export default function DepartmentObjectives() {
         return;
       }
 
-      await createDepartmentObjective({
+      // Optimistically add to UI immediately
+      const tempId = Date.now();
+      const optimisticObjective: DepartmentObjective = {
+        id: tempId,
+        department_id: department.id,
+        kpi: joinKPIs(kpiArray),
+        activity: newData.activity!,
+        type: newData.type === 'blank' ? '' : newData.type!,
+        activity_target: parseFloat(newData.activity_target!.toString()),
+        target_type: 'number',
+        responsible_person: newData.responsible_person!,
+        mov: newData.mov!,
+        main_objective_id: newData.main_objective_id || null,
+        department_name: department.name,
+        department_code: department.code,
+        sort_order: objectives.length,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      // Add optimistically to UI immediately
+      flushSync(() => {
+        setObjectives(prev => {
+          const updated = [...prev, optimisticObjective];
+          return updated.sort((a, b) => {
+            if (a.sort_order !== undefined && b.sort_order !== undefined) {
+              return a.sort_order - b.sort_order;
+            }
+            if (a.sort_order !== undefined) return -1;
+            if (b.sort_order !== undefined) return 1;
+            return a.id - b.id;
+          });
+        });
+        setIsAdding(false);
+        setNewData({
+          kpi: [],
+          activity: '',
+          type: 'Direct',
+          activity_target: 0,
+          responsible_person: '',
+          mov: '',
+          main_objective_id: null,
+        });
+      });
+      
+      toast({
+        title: 'Creating...',
+        description: 'Objective is being created',
+      });
+      
+      // Save to database
+      const savedObjective = await createDepartmentObjective({
         department_id: department.id,
         kpi: joinKPIs(kpiArray),
         activity: newData.activity!,
@@ -790,23 +841,30 @@ export default function DepartmentObjectives() {
         main_objective_id: newData.main_objective_id || null,
       });
       
+      // Replace optimistic with real data
+      setObjectives(prev => {
+        const updated = prev.map(obj => 
+          obj.id === tempId ? savedObjective : obj
+        );
+        return updated.sort((a, b) => {
+          if (a.sort_order !== undefined && b.sort_order !== undefined) {
+            return a.sort_order - b.sort_order;
+          }
+          if (a.sort_order !== undefined) return -1;
+          if (b.sort_order !== undefined) return 1;
+          return a.id - b.id;
+        });
+      });
+      
       toast({
         title: 'Success',
         description: 'Objective created successfully',
       });
       
-      setIsAdding(false);
-      setNewData({
-        kpi: [],
-        activity: '',
-        type: 'Direct',
-        activity_target: 0,
-        responsible_person: '',
-        mov: '',
-        main_objective_id: null,
+      // Reload in background to ensure sync (non-blocking)
+      loadData(false).catch(err => {
+        console.warn('[DepartmentObjectives] Background reload failed:', err);
       });
-      // Refresh data without showing loading spinner
-      loadData(false);
     } catch (err) {
       toast({
         title: 'Error',
