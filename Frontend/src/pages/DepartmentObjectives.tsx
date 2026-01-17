@@ -316,7 +316,12 @@ export default function DepartmentObjectives() {
       const existingIds = new Set(sortedObjectives.map(obj => obj.id));
       const toMerge = newlyCreated.filter(obj => !existingIds.has(obj.id));
       
+      console.log('[DepartmentObjectives] loadData - Server returned', sortedObjectives.length, 'objectives');
+      console.log('[DepartmentObjectives] loadData - Ref has', newlyCreated.length, 'newly created objectives');
+      console.log('[DepartmentObjectives] loadData - Will merge', toMerge.length, 'objectives from ref');
+      
       if (toMerge.length > 0) {
+        console.log('[DepartmentObjectives] Merging objectives from ref:', toMerge.map(obj => ({ id: obj.id, kpi: obj.kpi })));
         const merged = [...sortedObjectives, ...toMerge].sort((a, b) => {
           if (a.sort_order !== undefined && b.sort_order !== undefined) {
             return a.sort_order - b.sort_order;
@@ -325,15 +330,23 @@ export default function DepartmentObjectives() {
           if (b.sort_order !== undefined) return 1;
           return a.id - b.id;
         });
+        console.log('[DepartmentObjectives] After merge - total objectives:', merged.length);
         setObjectives(merged);
       } else {
+        console.log('[DepartmentObjectives] No merge needed - all objectives in server response');
         setObjectives(sortedObjectives);
       }
       
       // Clean up newly created objectives that are now in the server response
+      const cleanedCount = sortedObjectives.length;
       sortedObjectives.forEach(obj => {
-        newlyCreatedObjectivesRef.current.delete(obj.id);
+        if (newlyCreatedObjectivesRef.current.has(obj.id)) {
+          newlyCreatedObjectivesRef.current.delete(obj.id);
+        }
       });
+      if (cleanedCount > 0) {
+        console.log('[DepartmentObjectives] Cleaned up', cleanedCount, 'objectives from ref (now in server response)');
+      }
       setMainObjectives(mainObjs);
       setDepartments(depts);
       setRasciMetrics(rasciData);
@@ -466,6 +479,13 @@ export default function DepartmentObjectives() {
         });
         
         // Save to database
+        console.log('[DepartmentObjectives] Creating objective:', {
+          department_id: department.id,
+          kpi: data.kpi,
+          activity: data.activity,
+          type: data.type,
+        });
+        
         savedObjective = await createDepartmentObjective({
           department_id: department.id,
           kpi: data.kpi!,
@@ -478,6 +498,14 @@ export default function DepartmentObjectives() {
           main_objective_id: data.main_objective_id || null,
         });
         
+        console.log('[DepartmentObjectives] API returned saved objective:', {
+          id: savedObjective.id,
+          has_department_name: !!savedObjective.department_name,
+          has_department_code: !!savedObjective.department_code,
+          department_name: savedObjective.department_name,
+          department_code: savedObjective.department_code,
+        });
+        
         // Ensure savedObjective has all required fields
         const completeObjective: DepartmentObjective = {
           ...savedObjective,
@@ -485,14 +513,24 @@ export default function DepartmentObjectives() {
           department_code: savedObjective.department_code || department.code,
         };
         
+        console.log('[DepartmentObjectives] Complete objective after merge:', {
+          id: completeObjective.id,
+          department_name: completeObjective.department_name,
+          department_code: completeObjective.department_code,
+        });
+        
         // Track this newly created objective so it persists through reloads
         newlyCreatedObjectivesRef.current.set(completeObjective.id, completeObjective);
+        console.log('[DepartmentObjectives] Stored in ref. Ref size:', newlyCreatedObjectivesRef.current.size);
         
         // Replace optimistic with real data and ensure it's in the state
         setObjectives(prev => {
+          console.log('[DepartmentObjectives] Updating state. Previous count:', prev.length);
           // Remove the temp objective and add the real one
           const withoutTemp = prev.filter(obj => obj.id !== tempId);
           const updated = [...withoutTemp, completeObjective];
+          
+          console.log('[DepartmentObjectives] After update. New count:', updated.length, 'Has new objective:', updated.some(obj => obj.id === completeObjective.id));
           
           // Re-sort after update
           return updated.sort((a, b) => {
@@ -510,12 +548,45 @@ export default function DepartmentObjectives() {
           description: 'Objective created successfully',
         });
         
-        // Reload data in background to sync with server
-        // The newlyCreatedObjectivesRef will ensure the new objective persists
-        loadData(false).catch(err => {
-          console.warn('[DepartmentObjectives] Background reload failed after create:', err);
-          // If reload fails, the optimistic update should still show the new objective
-        });
+        // Delay reload to allow server transaction to commit and avoid race conditions
+        // This ensures the new objective appears immediately and persists
+        setTimeout(async () => {
+          console.log('[DepartmentObjectives] Delayed reload starting...');
+          try {
+            await loadData(false);
+            console.log('[DepartmentObjectives] Delayed reload completed');
+            
+            // Check if the new objective is still in state after reload
+            setObjectives(prev => {
+              const hasNewObjective = prev.some(obj => obj.id === completeObjective.id);
+              console.log('[DepartmentObjectives] After reload - has new objective in state:', hasNewObjective);
+              
+              if (!hasNewObjective) {
+                console.warn('[DepartmentObjectives] New objective missing after reload! Merging from ref...');
+                const newlyCreated = Array.from(newlyCreatedObjectivesRef.current.values());
+                const existingIds = new Set(prev.map(obj => obj.id));
+                const toMerge = newlyCreated.filter(obj => !existingIds.has(obj.id));
+                
+                if (toMerge.length > 0) {
+                  console.log('[DepartmentObjectives] Merging', toMerge.length, 'objectives from ref');
+                  const merged = [...prev, ...toMerge].sort((a, b) => {
+                    if (a.sort_order !== undefined && b.sort_order !== undefined) {
+                      return a.sort_order - b.sort_order;
+                    }
+                    if (a.sort_order !== undefined) return -1;
+                    if (b.sort_order !== undefined) return 1;
+                    return a.id - b.id;
+                  });
+                  return merged;
+                }
+              }
+              return prev;
+            });
+          } catch (err) {
+            console.error('[DepartmentObjectives] Delayed reload failed:', err);
+            // If reload fails, the optimistic update should still show the new objective
+          }
+        }, 500); // 500ms delay to allow server transaction to commit
       } else {
         if (!data.id) return;
         
@@ -999,7 +1070,13 @@ export default function DepartmentObjectives() {
   // Filter objectives based on selected filter values
   // Use useMemo to ensure filteredObjectives updates reactively when objectives change
   const filteredObjectives = useMemo(() => {
-    return objectives.filter((obj) => {
+    const hasActiveFilters = Object.values(filters).some(filterArray => filterArray.length > 0);
+    if (hasActiveFilters) {
+      console.log('[DepartmentObjectives] Active filters:', filters);
+      console.log('[DepartmentObjectives] Filtering', objectives.length, 'objectives');
+    }
+    
+    const filtered = objectives.filter((obj) => {
       const objKPIs = parseKPIs(obj.kpi);
       const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
       const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
@@ -1018,9 +1095,34 @@ export default function DepartmentObjectives() {
       }
       const matchesMainObjective = filters.mainObjective.length === 0 || filters.mainObjective.includes(mainObjLabel);
       
-      return matchesKPI && matchesActivity && matchesType && matchesTarget &&
+      const matches = matchesKPI && matchesActivity && matchesType && matchesTarget &&
              matchesResponsible && matchesMOV && matchesMainObjective;
+      
+      // Log if a recently created objective is being filtered out
+      if (!matches && newlyCreatedObjectivesRef.current.has(obj.id)) {
+        console.warn('[DepartmentObjectives] Newly created objective filtered out!', {
+          id: obj.id,
+          kpi: obj.kpi,
+          activity: obj.activity,
+          type: obj.type,
+          matchesKPI,
+          matchesActivity,
+          matchesType,
+          matchesTarget,
+          matchesResponsible,
+          matchesMOV,
+          matchesMainObjective,
+        });
+      }
+      
+      return matches;
     });
+    
+    if (hasActiveFilters) {
+      console.log('[DepartmentObjectives] Filtered to', filtered.length, 'objectives');
+    }
+    
+    return filtered;
   }, [objectives, filters, mainObjectives]);
 
   // NOW we can do conditional returns - AFTER all hooks

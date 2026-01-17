@@ -731,7 +731,18 @@ async function createDepartmentObjective(pool, body) {
     }
   }
 
-  return result.recordset[0];
+  // The result from OUTPUT INSERTED.* doesn't include department_name and department_code
+  // So we need to fetch it again with a JOIN to match the GET endpoint format
+  const selectRequest = pool.request();
+  selectRequest.input('id', sql.Int, result.recordset[0].id);
+  const fullResult = await selectRequest.query(`
+    SELECT do.*, d.name as department_name, d.code as department_code
+    FROM department_objectives do
+    INNER JOIN departments d ON do.department_id = d.id
+    WHERE do.id = @id
+  `);
+
+  return fullResult.recordset[0];
 }
 
 async function updateDepartmentObjective(pool, id, body) {
