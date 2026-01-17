@@ -405,16 +405,29 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
 
     const result = await request.query(`
       UPDATE department_objectives
-      SET ${updates.join(', ')}
-      OUTPUT INSERTED.*
+      SET ${updates.join(', ')}, updated_at = GETDATE()
       WHERE id = @id
     `);
 
-    if (result.recordset.length === 0) {
+    if (result.rowsAffected[0] === 0) {
       return res.status(404).json({ error: 'Department objective not found' });
     }
 
-    res.json(result.recordset[0]);
+    // Select the updated record with department info (matching GET endpoint format)
+    const selectRequest = pool.request();
+    selectRequest.input('id', sql.Int, parseInt(req.params.id));
+    const selectResult = await selectRequest.query(`
+      SELECT do.*, d.name as department_name, d.code as department_code
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+      WHERE do.id = @id
+    `);
+
+    if (selectResult.recordset.length === 0) {
+      return res.status(404).json({ error: 'Department objective not found after update' });
+    }
+
+    res.json(selectResult.recordset[0]);
   } catch (error) {
     handleError(res, error, 'Error updating department objective');
   }
