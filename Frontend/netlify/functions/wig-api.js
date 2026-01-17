@@ -847,11 +847,14 @@ async function updateDepartmentObjective(pool, id, body) {
       throw new Error('Department objective not found');
     }
 
-    // Select the updated record
+    // Select the updated record with department info (matching GET endpoint format)
     const selectRequest = pool.request();
     selectRequest.input('id', sql.Int, id);
     const selectResult = await selectRequest.query(`
-      SELECT * FROM department_objectives WHERE id = @id
+      SELECT do.*, d.name as department_name, d.code as department_code
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+      WHERE do.id = @id
     `);
 
     if (selectResult.recordset.length === 0) {
