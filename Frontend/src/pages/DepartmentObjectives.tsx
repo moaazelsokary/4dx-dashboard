@@ -533,7 +533,7 @@ export default function DepartmentObjectives() {
           console.log('[DepartmentObjectives] After update. New count:', updated.length, 'Has new objective:', updated.some(obj => obj.id === completeObjective.id));
           
           // Re-sort after update
-          return updated.sort((a, b) => {
+          const sorted = updated.sort((a, b) => {
             if (a.sort_order !== undefined && b.sort_order !== undefined) {
               return a.sort_order - b.sort_order;
             }
@@ -541,6 +541,44 @@ export default function DepartmentObjectives() {
             if (b.sort_order !== undefined) return 1;
             return a.id - b.id;
           });
+          
+          // Immediately check if the new objective would be filtered out
+          // Use a setTimeout to check after React has processed the state update
+          setTimeout(() => {
+            const currentObjectives = objectives; // This will be stale, but we'll check filteredObjectives
+            // We need to manually check filters here
+            const objKPIs = parseKPIs(completeObjective.kpi);
+            const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
+            const matchesActivity = filters.activity.length === 0 || filters.activity.includes(completeObjective.activity);
+            const matchesType = filters.type.length === 0 || filters.type.includes(completeObjective.type || '');
+            const matchesTarget = filters.target.length === 0 || filters.target.includes(completeObjective.activity_target.toString());
+            const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(completeObjective.responsible_person);
+            const matchesMOV = filters.mov.length === 0 || filters.mov.includes(completeObjective.mov);
+            
+            const wouldBeFiltered = !(matchesKPI && matchesActivity && matchesType && matchesTarget && matchesResponsible && matchesMOV);
+            
+            if (wouldBeFiltered) {
+              console.warn('[DepartmentObjectives] WARNING: New objective would be filtered out by active filters!', {
+                filters,
+                objective: {
+                  kpi: completeObjective.kpi,
+                  activity: completeObjective.activity,
+                  type: completeObjective.type,
+                  target: completeObjective.activity_target,
+                  responsible: completeObjective.responsible_person,
+                  mov: completeObjective.mov,
+                },
+                matches: { matchesKPI, matchesActivity, matchesType, matchesTarget, matchesResponsible, matchesMOV }
+              });
+              toast({
+                title: 'Objective Created',
+                description: 'Objective created successfully, but it may be hidden by active filters. Clear filters to see it.',
+                variant: 'default',
+              });
+            }
+          }, 100);
+          
+          return sorted;
         });
         
         toast({
@@ -1100,11 +1138,15 @@ export default function DepartmentObjectives() {
       
       // Log if a recently created objective is being filtered out
       if (!matches && newlyCreatedObjectivesRef.current.has(obj.id)) {
-        console.warn('[DepartmentObjectives] Newly created objective filtered out!', {
+        console.error('[DepartmentObjectives] CRITICAL: Newly created objective is being filtered out!', {
           id: obj.id,
           kpi: obj.kpi,
           activity: obj.activity,
           type: obj.type,
+          target: obj.activity_target,
+          responsible: obj.responsible_person,
+          mov: obj.mov,
+          filters,
           matchesKPI,
           matchesActivity,
           matchesType,
@@ -1117,6 +1159,34 @@ export default function DepartmentObjectives() {
       
       return matches;
     });
+    
+    // Check if any newly created objectives are missing from filtered results
+    const newlyCreatedIds = Array.from(newlyCreatedObjectivesRef.current.keys());
+    const filteredIds = new Set(filtered.map(obj => obj.id));
+    const missingNewObjectives = newlyCreatedIds.filter(id => !filteredIds.has(id));
+    
+    if (missingNewObjectives.length > 0 && hasActiveFilters) {
+      console.error('[DepartmentObjectives] CRITICAL: Newly created objectives are hidden by filters! Clearing filters...', {
+        missingIds: missingNewObjectives,
+        activeFilters: filters,
+      });
+      // Clear filters to show the new objectives - use setTimeout to avoid state update during render
+      setTimeout(() => {
+        setFilters({
+          kpi: [],
+          activity: [],
+          type: [],
+          target: [],
+          responsible: [],
+          mov: [],
+          mainObjective: [],
+        });
+        toast({
+          title: 'Filters Cleared',
+          description: 'Filters were cleared to show your newly created objective(s)',
+        });
+      }, 0);
+    }
     
     if (hasActiveFilters) {
       console.log('[DepartmentObjectives] Filtered to', filtered.length, 'objectives');
