@@ -153,6 +153,22 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       });
       
       console.log(`[MonthlyDataEditor] Auto-saved month ${month} successfully`);
+      
+      // Schedule a delayed reload to sync with server, but preserve our saved data
+      setTimeout(async () => {
+        try {
+          console.log(`[MonthlyDataEditor] Delayed reload after auto-save for ${month}...`);
+          await loadData(true);
+          
+          // Clear this month from ref after reload confirms it's on server
+          setTimeout(() => {
+            recentlySavedRef.current.delete(monthKey);
+            console.log(`[MonthlyDataEditor] Cleared ${month} from recentlySavedRef`);
+          }, 1000);
+        } catch (err) {
+          console.warn(`[MonthlyDataEditor] Delayed reload after auto-save for ${month} failed:`, err);
+        }
+      }, 500);
     } catch (error) {
       console.error(`[MonthlyDataEditor] Error auto-saving month ${month}:`, error);
       // Don't show error toast for auto-save to avoid spam
