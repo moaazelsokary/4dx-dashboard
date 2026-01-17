@@ -348,11 +348,14 @@ app.post('/api/wig/department-objectives', async (req, res) => {
       }
     }
 
-    // Select the newly inserted record
+    // Select the newly inserted record with department info (matching GET endpoint format)
     const selectRequest = pool.request();
     selectRequest.input('id', sql.Int, newId);
     const result = await selectRequest.query(`
-      SELECT * FROM department_objectives WHERE id = @id
+      SELECT do.*, d.name as department_name, d.code as department_code
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+      WHERE do.id = @id
     `);
 
     res.json(result.recordset[0]);
