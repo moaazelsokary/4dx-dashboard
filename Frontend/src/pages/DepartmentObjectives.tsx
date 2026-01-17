@@ -453,11 +453,19 @@ export default function DepartmentObjectives() {
           main_objective_id: data.main_objective_id || null,
         });
         
-        // Replace optimistic with real data
+        // Replace optimistic with real data - ensure all fields are present
         setObjectives(prev => {
-          const updated = prev.map(obj => 
-            obj.id === tempId ? savedObjective : obj
-          );
+          const updated = prev.map(obj => {
+            if (obj.id === tempId) {
+              // Ensure savedObjective has all required fields
+              return {
+                ...savedObjective,
+                department_name: savedObjective.department_name || department.name,
+                department_code: savedObjective.department_code || department.code,
+              };
+            }
+            return obj;
+          });
           // Re-sort after update
           return updated.sort((a, b) => {
             if (a.sort_order !== undefined && b.sort_order !== undefined) {
@@ -473,6 +481,8 @@ export default function DepartmentObjectives() {
           title: 'Success',
           description: 'Objective created successfully',
         });
+        
+        // Force a re-render - filteredObjectives will update automatically via useMemo
       } else {
         if (!data.id) return;
         
@@ -703,10 +713,15 @@ export default function DepartmentObjectives() {
       // Delete from database
       await deleteDepartmentObjective(deletingId);
       
+      // Ensure deletion is reflected (optimistic update already done, but double-check)
+      setObjectives(prev => prev.filter(obj => obj.id !== deletingId));
+      
       toast({
         title: 'Success',
         description: 'Objective deleted successfully',
       });
+      
+      // Force a re-render - filteredObjectives will update automatically via useMemo
       
       // Reload in background to ensure sync (non-blocking)
       loadData(false).catch(err => {
