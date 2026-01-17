@@ -31,10 +31,19 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     console.log('[WIG Service] Has token:', !!authHeaders['Authorization']);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  // Add cache-busting timestamp to GET requests to prevent browser caching
+  let url = `${API_BASE_URL}${endpoint}`;
+  if (method === 'GET') {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    url += `${separator}_t=${Date.now()}`;
+  }
+
+  const response = await fetch(url, {
     ...options,
+    cache: 'no-store', // Disable browser caching
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
       ...csrfHeaders,
       ...authHeaders,
       ...options?.headers,
