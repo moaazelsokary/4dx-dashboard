@@ -3,7 +3,7 @@
  */
 
 const CACHE_NAME = 'lifemakers-v1';
-const BUILD_VERSION = '__BUILD_VERSION__';
+const BUILD_VERSION = '1768656318862';
 
 // Install event - cache assets
 self.addEventListener('install', (event) => {
