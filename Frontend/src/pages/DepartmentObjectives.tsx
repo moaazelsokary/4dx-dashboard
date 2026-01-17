@@ -341,15 +341,54 @@ export default function DepartmentObjectives() {
   const handleModalSave = async (data: Partial<DepartmentObjective>) => {
     try {
       const userData = localStorage.getItem('user');
-      if (!userData) return;
-      
-      const userObj = JSON.parse(userData);
-      const department = departments.find((d) => d.code === userObj.departments?.[0]);
-      
-      if (!department) {
+      if (!userData) {
         toast({
           title: 'Error',
-          description: 'Department not found',
+          description: 'User not found. Please sign in again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      const userObj = JSON.parse(userData);
+      
+      // Determine which department to use
+      let departmentCode: string | undefined;
+      if (userObj.role === 'CEO') {
+        // CEO users should use selectedDepartment if set
+        departmentCode = selectedDepartment || userObj.departments?.[0];
+      } else {
+        // Department users use their own department
+        departmentCode = userObj.departments?.[0];
+      }
+      
+      if (!departmentCode) {
+        toast({
+          title: 'Error',
+          description: userObj.role === 'CEO' 
+            ? 'Please select a department filter' 
+            : 'Department not found in user profile',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Find department by code (case-insensitive)
+      const department = departments.find((d) => 
+        d.code?.toLowerCase() === departmentCode?.toLowerCase()
+      );
+      
+      if (!department) {
+        console.error('[DepartmentObjectives] Department lookup failed:', {
+          departmentCode,
+          availableDepartments: departments.map(d => ({ code: d.code, name: d.name })),
+          userDepartments: userObj.departments,
+          userRole: userObj.role,
+          selectedDepartment
+        });
+        toast({
+          title: 'Error',
+          description: `Department "${departmentCode}" not found. Available departments: ${departments.map(d => d.code).join(', ')}`,
           variant: 'destructive',
         });
         return;
@@ -687,15 +726,54 @@ export default function DepartmentObjectives() {
 
     try {
       const userData = localStorage.getItem('user');
-      if (!userData) return;
-      
-      const userObj = JSON.parse(userData);
-      const department = departments.find((d) => d.code === userObj.departments?.[0]);
-      
-      if (!department) {
+      if (!userData) {
         toast({
           title: 'Error',
-          description: 'Department not found',
+          description: 'User not found. Please sign in again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      const userObj = JSON.parse(userData);
+      
+      // Determine which department to use
+      let departmentCode: string | undefined;
+      if (userObj.role === 'CEO') {
+        // CEO users should use selectedDepartment if set
+        departmentCode = selectedDepartment || userObj.departments?.[0];
+      } else {
+        // Department users use their own department
+        departmentCode = userObj.departments?.[0];
+      }
+      
+      if (!departmentCode) {
+        toast({
+          title: 'Error',
+          description: userObj.role === 'CEO' 
+            ? 'Please select a department filter' 
+            : 'Department not found in user profile',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Find department by code (case-insensitive)
+      const department = departments.find((d) => 
+        d.code?.toLowerCase() === departmentCode?.toLowerCase()
+      );
+      
+      if (!department) {
+        console.error('[DepartmentObjectives] Department lookup failed:', {
+          departmentCode,
+          availableDepartments: departments.map(d => ({ code: d.code, name: d.name })),
+          userDepartments: userObj.departments,
+          userRole: userObj.role,
+          selectedDepartment
+        });
+        toast({
+          title: 'Error',
+          description: `Department "${departmentCode}" not found. Please refresh the page.`,
           variant: 'destructive',
         });
         return;
