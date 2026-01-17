@@ -629,6 +629,7 @@ export default function DepartmentObjectives() {
         if (!data.id) return;
         
         // Optimistically update in UI immediately - use flushSync for instant re-render
+        const originalObjective = objectives.find(obj => obj.id === data.id);
         flushSync(() => {
           setObjectives(prev => {
             const updated = prev.map(obj => 
@@ -655,38 +656,69 @@ export default function DepartmentObjectives() {
           has_department_code: !!savedObjective.department_code,
         });
         
-      // Update with real data from server - ensure all fields are present
-      setObjectives(prev => {
-        const updated = prev.map(obj => {
-          if (obj.id === data.id) {
-            const completeUpdated = {
-              ...savedObjective,
-              department_name: savedObjective.department_name || obj.department_name,
-              department_code: savedObjective.department_code || obj.department_code,
-            };
-            console.log('[DepartmentObjectives] Updated objective in state:', completeUpdated.id);
-            return completeUpdated;
-          }
-          return obj;
+        // Ensure savedObjective has all required fields
+        const completeUpdated: DepartmentObjective = {
+          ...savedObjective,
+          department_name: savedObjective.department_name || originalObjective?.department_name || '',
+          department_code: savedObjective.department_code || originalObjective?.department_code || '',
+        };
+        
+        console.log('[DepartmentObjectives] Complete updated objective:', {
+          id: completeUpdated.id,
+          department_name: completeUpdated.department_name,
+          department_code: completeUpdated.department_code,
         });
-        return updated;
-      });
-      
-      toast({
-        title: 'Success',
-        description: 'Objective updated successfully',
-      });
-      
-      // Delay reload to allow server transaction to commit and avoid race conditions
-      setTimeout(async () => {
-        console.log('[DepartmentObjectives] Delayed reload after edit starting...');
-        try {
-          await loadData(false);
-          console.log('[DepartmentObjectives] Delayed reload after edit completed');
-        } catch (err) {
-          console.error('[DepartmentObjectives] Delayed reload after edit failed:', err);
-        }
-      }, 500); // 500ms delay to allow server transaction to commit
+        
+        // Update with real data from server - ensure all fields are present
+        setObjectives(prev => {
+          console.log('[DepartmentObjectives] Updating state after edit. Previous count:', prev.length);
+          const updated = prev.map(obj => {
+            if (obj.id === data.id) {
+              console.log('[DepartmentObjectives] Replacing objective in state:', obj.id);
+              return completeUpdated;
+            }
+            return obj;
+          });
+          console.log('[DepartmentObjectives] After edit update. New count:', updated.length, 'Has updated objective:', updated.some(obj => obj.id === completeUpdated.id));
+          return updated;
+        });
+        
+        toast({
+          title: 'Success',
+          description: 'Objective updated successfully',
+        });
+        
+        // Delay reload to allow server transaction to commit and avoid race conditions
+        // This ensures the updated objective appears immediately and persists
+        setTimeout(async () => {
+          console.log('[DepartmentObjectives] Delayed reload after edit starting...');
+          try {
+            await loadData(false);
+            console.log('[DepartmentObjectives] Delayed reload after edit completed');
+            
+            // Check if the updated objective is still in state after reload
+            setObjectives(prev => {
+              const updatedObjective = prev.find(obj => obj.id === completeUpdated.id);
+              if (updatedObjective) {
+                // Check if server returned stale data (older updated_at)
+                const serverIsStale = updatedObjective.updated_at && completeUpdated.updated_at &&
+                  new Date(updatedObjective.updated_at) < new Date(completeUpdated.updated_at);
+                
+                if (serverIsStale) {
+                  console.warn('[DepartmentObjectives] Server returned stale data after edit! Using our updated version.');
+                  return prev.map(obj => obj.id === completeUpdated.id ? completeUpdated : obj);
+                }
+                console.log('[DepartmentObjectives] After reload - updated objective is in state with latest data');
+              } else {
+                console.warn('[DepartmentObjectives] Updated objective missing after reload! This should not happen for edits.');
+              }
+              return prev;
+            });
+          } catch (err) {
+            console.error('[DepartmentObjectives] Delayed reload after edit failed:', err);
+            // If reload fails, the optimistic update should still show the updated objective
+          }
+        }, 500); // 500ms delay to allow server transaction to commit
       }
     } catch (err) {
       // On error, reload to get correct state
@@ -797,6 +829,10 @@ export default function DepartmentObjectives() {
       if (updateData.kpi && Array.isArray(updateData.kpi)) {
         updateData.kpi = joinKPIs(updateData.kpi);
       }
+      
+      // Get original objective before editing
+      const originalObjective = objectives.find(obj => obj.id === editingId);
+      
       // Optimistically update in UI immediately - use flushSync for instant re-render
       flushSync(() => {
         setObjectives(prev => {
@@ -815,7 +851,7 @@ export default function DepartmentObjectives() {
       });
       
       // Save to database
-      console.log('[DepartmentObjectives] Saving edit for objective:', editingId);
+      console.log('[DepartmentObjectives] Saving inline edit for objective:', editingId);
       const savedObjective = await updateDepartmentObjective(editingId, updateData);
       
       console.log('[DepartmentObjectives] API returned updated objective:', {
@@ -824,20 +860,30 @@ export default function DepartmentObjectives() {
         has_department_code: !!savedObjective.department_code,
       });
       
+      // Ensure savedObjective has all required fields
+      const completeUpdated: DepartmentObjective = {
+        ...savedObjective,
+        department_name: savedObjective.department_name || originalObjective?.department_name || '',
+        department_code: savedObjective.department_code || originalObjective?.department_code || '',
+      };
+      
+      console.log('[DepartmentObjectives] Complete updated objective:', {
+        id: completeUpdated.id,
+        department_name: completeUpdated.department_name,
+        department_code: completeUpdated.department_code,
+      });
+      
       // Update with real data from server - ensure all fields are present
       setObjectives(prev => {
+        console.log('[DepartmentObjectives] Updating state after inline edit. Previous count:', prev.length);
         const updated = prev.map(obj => {
           if (obj.id === editingId) {
-            const completeUpdated = {
-              ...savedObjective,
-              department_name: savedObjective.department_name || obj.department_name,
-              department_code: savedObjective.department_code || obj.department_code,
-            };
-            console.log('[DepartmentObjectives] Updated objective in state:', completeUpdated.id);
+            console.log('[DepartmentObjectives] Replacing objective in state:', obj.id);
             return completeUpdated;
           }
           return obj;
         });
+        console.log('[DepartmentObjectives] After inline edit update. New count:', updated.length, 'Has updated objective:', updated.some(obj => obj.id === completeUpdated.id));
         return updated;
       });
       
@@ -847,13 +893,34 @@ export default function DepartmentObjectives() {
       });
       
       // Delay reload to allow server transaction to commit and avoid race conditions
+      // This ensures the updated objective appears immediately and persists
       setTimeout(async () => {
         console.log('[DepartmentObjectives] Delayed reload after inline edit starting...');
         try {
           await loadData(false);
           console.log('[DepartmentObjectives] Delayed reload after inline edit completed');
+          
+          // Check if the updated objective is still in state after reload
+          setObjectives(prev => {
+            const updatedObjective = prev.find(obj => obj.id === completeUpdated.id);
+            if (updatedObjective) {
+              // Check if server returned stale data (older updated_at)
+              const serverIsStale = updatedObjective.updated_at && completeUpdated.updated_at &&
+                new Date(updatedObjective.updated_at) < new Date(completeUpdated.updated_at);
+              
+              if (serverIsStale) {
+                console.warn('[DepartmentObjectives] Server returned stale data after inline edit! Using our updated version.');
+                return prev.map(obj => obj.id === completeUpdated.id ? completeUpdated : obj);
+              }
+              console.log('[DepartmentObjectives] After reload - updated objective is in state with latest data');
+            } else {
+              console.warn('[DepartmentObjectives] Updated objective missing after reload! This should not happen for edits.');
+            }
+            return prev;
+          });
         } catch (err) {
           console.error('[DepartmentObjectives] Delayed reload after inline edit failed:', err);
+          // If reload fails, the optimistic update should still show the updated objective
         }
       }, 500); // 500ms delay to allow server transaction to commit
     } catch (err) {
