@@ -37,12 +37,20 @@ function handleError(res, error, message) {
   });
 }
 
+// Helper to set cache-control headers for GET responses
+function setNoCacheHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
 // Main Plan Objectives Routes
 app.get('/api/wig/main-objectives', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
-    const result = await request.query('SELECT * FROM main_plan_objectives ORDER BY pillar, objective, target, kpi');
+    const result = await request.query('SELECT * FROM main_plan_objectives ORDER BY updated_at DESC, pillar, objective, target, kpi');
     res.json(result.recordset);
   } catch (error) {
     handleError(res, error, 'Error getting main objectives');
@@ -51,11 +59,12 @@ app.get('/api/wig/main-objectives', async (req, res) => {
 
 app.get('/api/wig/main-objectives/hierarchy', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     const objectives = await request.query(`
       SELECT * FROM main_plan_objectives 
-      ORDER BY pillar, objective, target, kpi
+      ORDER BY updated_at DESC, pillar, objective, target, kpi
     `);
 
     // Group by hierarchy
@@ -205,9 +214,10 @@ app.get('/api/wig/department-objectives', async (req, res) => {
       query += ' AND d.code = @department_code';
     }
 
-    // Order by sort_order if available, otherwise by kpi and activity
-    query += ' ORDER BY COALESCE(do.sort_order, do.id), do.kpi, do.activity';
+    // Order by updated_at DESC first to ensure latest edits appear, then by sort_order/kpi/activity
+    query += ' ORDER BY do.updated_at DESC, COALESCE(do.sort_order, do.id), do.kpi, do.activity';
 
+    setNoCacheHeaders(res);
     const result = await request.query(query);
     res.json(result.recordset);
   } catch (error) {
@@ -217,6 +227,7 @@ app.get('/api/wig/department-objectives', async (req, res) => {
 
 app.get('/api/wig/department-objectives/by-kpi/:kpi', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     request.input('kpi', sql.NVarChar, decodeURIComponent(req.params.kpi));
@@ -226,7 +237,7 @@ app.get('/api/wig/department-objectives/by-kpi/:kpi', async (req, res) => {
       FROM department_objectives do
       INNER JOIN departments d ON do.department_id = d.id
       WHERE do.kpi = @kpi AND do.type = 'Direct'
-      ORDER BY d.name
+      ORDER BY do.updated_at DESC, d.name
     `);
 
     res.json(result.recordset);
@@ -580,9 +591,10 @@ app.post('/api/wig/department-objectives/update-order', async (req, res) => {
 // RASCI Routes
 app.get('/api/wig/rasci', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
-    const result = await request.query('SELECT * FROM rasci_metrics ORDER BY kpi, department');
+    const result = await request.query('SELECT * FROM rasci_metrics ORDER BY updated_at DESC, kpi, department');
     res.json(result.recordset);
   } catch (error) {
     handleError(res, error, 'Error getting RASCI');
@@ -591,6 +603,7 @@ app.get('/api/wig/rasci', async (req, res) => {
 
 app.get('/api/wig/rasci/kpi/:kpi', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     
@@ -610,7 +623,7 @@ app.get('/api/wig/rasci/kpi/:kpi', async (req, res) => {
     console.log('[RASCI] Loading RASCI for KPI:', kpi);
     request.input('kpi', sql.NVarChar, kpi);
 
-    const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
+    const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY updated_at DESC, department');
     console.log('[RASCI] Query returned', result.recordset ? result.recordset.length : 0, 'records');
     res.json(result.recordset);
   } catch (error) {
@@ -622,6 +635,7 @@ app.get('/api/wig/rasci/kpi/:kpi', async (req, res) => {
 
 app.get('/api/wig/rasci/department/:departmentCode', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const departmentCode = decodeURIComponent(req.params.departmentCode);
     
@@ -654,7 +668,7 @@ app.get('/api/wig/rasci/department/:departmentCode', async (req, res) => {
       SELECT * FROM rasci_metrics 
       WHERE department = @department 
          OR (department = @oldDepartment AND @department = 'Direct Fundraising / Resource Mobilization')
-      ORDER BY kpi
+      ORDER BY updated_at DESC, kpi
     `);
     
     // Get all department objectives for this department to check existence
@@ -804,6 +818,7 @@ app.delete('/api/wig/rasci/:id', async (req, res) => {
 // KPI Routes
 app.get('/api/wig/kpis-with-rasci', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     const result = await request.query(`
@@ -997,6 +1012,7 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
 // Department Routes
 app.get('/api/wig/departments', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     const result = await request.query('SELECT * FROM departments ORDER BY name');
@@ -1009,6 +1025,7 @@ app.get('/api/wig/departments', async (req, res) => {
 // Plan Checker Routes
 app.get('/api/wig/checkers/:objectiveId', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     request.input('objective_id', sql.Int, parseInt(req.params.objectiveId));
@@ -1110,6 +1127,7 @@ app.post('/api/wig/checkers/calculate', async (req, res) => {
 // Monthly Data Routes
 app.get('/api/wig/monthly-data/:deptObjId', async (req, res) => {
   try {
+    setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     request.input('dept_obj_id', sql.Int, parseInt(req.params.deptObjId));
@@ -1117,7 +1135,7 @@ app.get('/api/wig/monthly-data/:deptObjId', async (req, res) => {
     const result = await request.query(`
       SELECT * FROM department_monthly_data 
       WHERE department_objective_id = @dept_obj_id 
-      ORDER BY month
+      ORDER BY updated_at DESC, month
     `);
 
     res.json(result.recordset);

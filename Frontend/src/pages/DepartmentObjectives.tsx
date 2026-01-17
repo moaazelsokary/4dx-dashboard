@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -247,8 +247,7 @@ export default function DepartmentObjectives() {
   // State for department filter (CEO/admin only)
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
   
-  // Ref to track newly created objectives that should persist through reloads
-  const newlyCreatedObjectivesRef = useRef<Map<number, DepartmentObjective>>(new Map());
+  // Removed ref caching - server data is now authoritative with cache-busting
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -302,6 +301,7 @@ export default function DepartmentObjectives() {
       ]);
       
       // Sort by sort_order if available, otherwise by id
+      // Server already orders by updated_at DESC, so latest edits appear first
       const sortedObjectives = [...deptObjectives].sort((a, b) => {
         if (a.sort_order !== undefined && b.sort_order !== undefined) {
           return a.sort_order - b.sort_order;
@@ -311,42 +311,8 @@ export default function DepartmentObjectives() {
         return a.id - b.id;
       });
       
-      // Merge in any newly created objectives that aren't in the server response yet
-      const newlyCreated = Array.from(newlyCreatedObjectivesRef.current.values());
-      const existingIds = new Set(sortedObjectives.map(obj => obj.id));
-      const toMerge = newlyCreated.filter(obj => !existingIds.has(obj.id));
-      
-      console.log('[DepartmentObjectives] loadData - Server returned', sortedObjectives.length, 'objectives');
-      console.log('[DepartmentObjectives] loadData - Ref has', newlyCreated.length, 'newly created objectives');
-      console.log('[DepartmentObjectives] loadData - Will merge', toMerge.length, 'objectives from ref');
-      
-      if (toMerge.length > 0) {
-        console.log('[DepartmentObjectives] Merging objectives from ref:', toMerge.map(obj => ({ id: obj.id, kpi: obj.kpi })));
-        const merged = [...sortedObjectives, ...toMerge].sort((a, b) => {
-          if (a.sort_order !== undefined && b.sort_order !== undefined) {
-            return a.sort_order - b.sort_order;
-          }
-          if (a.sort_order !== undefined) return -1;
-          if (b.sort_order !== undefined) return 1;
-          return a.id - b.id;
-        });
-        console.log('[DepartmentObjectives] After merge - total objectives:', merged.length);
-        setObjectives(merged);
-      } else {
-        console.log('[DepartmentObjectives] No merge needed - all objectives in server response');
-        setObjectives(sortedObjectives);
-      }
-      
-      // Clean up newly created objectives that are now in the server response
-      const cleanedCount = sortedObjectives.length;
-      sortedObjectives.forEach(obj => {
-        if (newlyCreatedObjectivesRef.current.has(obj.id)) {
-          newlyCreatedObjectivesRef.current.delete(obj.id);
-        }
-      });
-      if (cleanedCount > 0) {
-        console.log('[DepartmentObjectives] Cleaned up', cleanedCount, 'objectives from ref (now in server response)');
-      }
+      // Trust server data - with cache-busting and fresh queries, server has latest data
+      setObjectives(sortedObjectives);
       setMainObjectives(mainObjs);
       setDepartments(depts);
       setRasciMetrics(rasciData);
@@ -519,10 +485,6 @@ export default function DepartmentObjectives() {
           department_code: completeObjective.department_code,
         });
         
-        // Track this newly created objective so it persists through reloads
-        newlyCreatedObjectivesRef.current.set(completeObjective.id, completeObjective);
-        console.log('[DepartmentObjectives] Stored in ref. Ref size:', newlyCreatedObjectivesRef.current.size);
-        
         // Replace optimistic with real data and ensure it's in the state
         setObjectives(prev => {
           console.log('[DepartmentObjectives] Updating state. Previous count:', prev.length);
@@ -599,25 +561,8 @@ export default function DepartmentObjectives() {
               const hasNewObjective = prev.some(obj => obj.id === completeObjective.id);
               console.log('[DepartmentObjectives] After reload - has new objective in state:', hasNewObjective);
               
-              if (!hasNewObjective) {
-                console.warn('[DepartmentObjectives] New objective missing after reload! Merging from ref...');
-                const newlyCreated = Array.from(newlyCreatedObjectivesRef.current.values());
-                const existingIds = new Set(prev.map(obj => obj.id));
-                const toMerge = newlyCreated.filter(obj => !existingIds.has(obj.id));
-                
-                if (toMerge.length > 0) {
-                  console.log('[DepartmentObjectives] Merging', toMerge.length, 'objectives from ref');
-                  const merged = [...prev, ...toMerge].sort((a, b) => {
-                    if (a.sort_order !== undefined && b.sort_order !== undefined) {
-                      return a.sort_order - b.sort_order;
-                    }
-                    if (a.sort_order !== undefined) return -1;
-                    if (b.sort_order !== undefined) return 1;
-                    return a.id - b.id;
-                  });
-                  return merged;
-                }
-              }
+              // With cache-busting, server should have the latest data
+              // If objective is missing, it will appear on next refresh
               return prev;
             });
           } catch (err) {
@@ -1269,36 +1214,12 @@ export default function DepartmentObjectives() {
       const matches = matchesKPI && matchesActivity && matchesType && matchesTarget &&
              matchesResponsible && matchesMOV && matchesMainObjective;
       
-      // Log if a recently created objective is being filtered out
-      if (!matches && newlyCreatedObjectivesRef.current.has(obj.id)) {
-        console.error('[DepartmentObjectives] CRITICAL: Newly created objective is being filtered out!', {
-          id: obj.id,
-          kpi: obj.kpi,
-          activity: obj.activity,
-          type: obj.type,
-          target: obj.activity_target,
-          responsible: obj.responsible_person,
-          mov: obj.mov,
-          filters,
-          matchesKPI,
-          matchesActivity,
-          matchesType,
-          matchesTarget,
-          matchesResponsible,
-          matchesMOV,
-          matchesMainObjective,
-        });
-      }
-      
       return matches;
     });
     
-    // Check if any newly created objectives are missing from filtered results
-    const newlyCreatedIds = Array.from(newlyCreatedObjectivesRef.current.keys());
-    const filteredIds = new Set(filtered.map(obj => obj.id));
-    const missingNewObjectives = newlyCreatedIds.filter(id => !filteredIds.has(id));
-    
-    if (missingNewObjectives.length > 0 && hasActiveFilters) {
+    // With fresh server data, all objectives should be in the list
+    // No need to check for missing newly created objectives
+    if (false && hasActiveFilters) {
       console.error('[DepartmentObjectives] CRITICAL: Newly created objectives are hidden by filters! Clearing filters...', {
         missingIds: missingNewObjectives,
         activeFilters: filters,

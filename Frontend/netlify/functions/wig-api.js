@@ -151,13 +151,21 @@ const handler = rateLimiter('general')(
     resource: 'wig', // Resource name for permission checks
   })(
     async function (event, context) {
-  // CORS headers
+  // CORS headers with cache-control for GET requests
+  const isGetRequest = event.httpMethod === 'GET';
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Content-Type': 'application/json',
   };
+  
+  // Add cache-control headers for GET requests to prevent browser caching
+  if (isGetRequest) {
+    headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+    headers['Pragma'] = 'no-cache';
+    headers['Expires'] = '0';
+  }
 
   // Handle preflight requests
   if (event.httpMethod === 'OPTIONS') {
@@ -420,7 +428,7 @@ exports.handler = handler;
 // Main Plan Objectives Functions
 async function getMainObjectives(pool, queryParams) {
   const request = pool.request();
-  const result = await request.query('SELECT * FROM main_plan_objectives ORDER BY pillar, objective, target, kpi');
+  const result = await request.query('SELECT * FROM main_plan_objectives ORDER BY updated_at DESC, pillar, objective, target, kpi');
   return result.recordset;
 }
 
@@ -428,7 +436,7 @@ async function getHierarchicalPlan(pool) {
   const request = pool.request();
   const objectives = await request.query(`
     SELECT * FROM main_plan_objectives 
-    ORDER BY pillar, objective, target, kpi
+    ORDER BY updated_at DESC, pillar, objective, target, kpi
   `);
 
   // Group by hierarchy
@@ -567,7 +575,7 @@ async function getDepartmentObjectives(pool, queryParams) {
     query += ' AND d.code = @department_code';
   }
 
-  query += ' ORDER BY do.kpi, do.activity';
+  query += ' ORDER BY do.updated_at DESC, do.kpi, do.activity';
 
   try {
     const result = await request.query(query);
@@ -1165,7 +1173,7 @@ async function getRASCIByKPI(pool, kpi) {
     const request = pool.request();
     request.input('kpi', sql.NVarChar, kpi);
 
-    const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY department');
+    const result = await request.query('SELECT * FROM rasci_metrics WHERE kpi = @kpi ORDER BY updated_at DESC, department');
     console.log('[RASCI] Query returned', result.recordset ? result.recordset.length : 0, 'records');
     return result.recordset || [];
   } catch (error) {
@@ -1753,7 +1761,7 @@ async function getMonthlyData(pool, departmentObjectiveId) {
   const result = await request.query(`
     SELECT * FROM department_monthly_data 
     WHERE department_objective_id = @department_objective_id
-    ORDER BY month
+    ORDER BY updated_at DESC, month
   `);
 
   return result.recordset;
