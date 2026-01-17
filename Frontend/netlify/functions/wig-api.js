@@ -866,10 +866,9 @@ async function deleteDepartmentObjective(pool, id, user = null) {
     // First check if the objective belongs to the user's department
     const checkRequest = pool.request();
     checkRequest.input('id', sql.Int, id);
-    checkRequest.input('department_name', sql.NVarChar, user.departments[0]); // Use first department
     
     const checkResult = await checkRequest.query(`
-      SELECT do.id, d.name as department_name
+      SELECT do.id, d.name as department_name, d.code as department_code
       FROM department_objectives do
       INNER JOIN departments d ON do.department_id = d.id
       WHERE do.id = @id
@@ -879,10 +878,11 @@ async function deleteDepartmentObjective(pool, id, user = null) {
       throw new Error('Department objective not found');
     }
 
-    const objectiveDept = checkResult.recordset[0].department_name?.toLowerCase();
-    const userDept = user.departments[0]?.toLowerCase();
+    // Compare department_code (user.departments contains codes like "case", not names)
+    const objectiveDeptCode = checkResult.recordset[0].department_code?.toLowerCase();
+    const userDeptCode = user.departments[0]?.toLowerCase();
 
-    if (objectiveDept !== userDept) {
+    if (objectiveDeptCode !== userDeptCode) {
       throw new Error('You can only delete objectives from your own department');
     }
   }

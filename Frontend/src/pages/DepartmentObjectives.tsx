@@ -482,7 +482,10 @@ export default function DepartmentObjectives() {
           description: 'Objective created successfully',
         });
         
-        // Force a re-render - filteredObjectives will update automatically via useMemo
+        // Reload data to ensure table is updated with latest data from server
+        loadData(false).catch(err => {
+          console.warn('[DepartmentObjectives] Background reload failed after create:', err);
+        });
       } else {
         if (!data.id) return;
         
