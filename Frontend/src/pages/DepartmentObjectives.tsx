@@ -646,32 +646,48 @@ export default function DepartmentObjectives() {
         });
         
         // Save to database
+        console.log('[DepartmentObjectives] Updating objective:', data.id);
         savedObjective = await updateDepartmentObjective(data.id, data);
         
+        console.log('[DepartmentObjectives] API returned updated objective:', {
+          id: savedObjective.id,
+          has_department_name: !!savedObjective.department_name,
+          has_department_code: !!savedObjective.department_code,
+        });
+        
       // Update with real data from server - ensure all fields are present
-      setObjectives(prev => prev.map(obj => {
-        if (obj.id === data.id) {
-          return {
-            ...savedObjective,
-            department_name: savedObjective.department_name || obj.department_name,
-            department_code: savedObjective.department_code || obj.department_code,
-          };
-        }
-        return obj;
-      }));
+      setObjectives(prev => {
+        const updated = prev.map(obj => {
+          if (obj.id === data.id) {
+            const completeUpdated = {
+              ...savedObjective,
+              department_name: savedObjective.department_name || obj.department_name,
+              department_code: savedObjective.department_code || obj.department_code,
+            };
+            console.log('[DepartmentObjectives] Updated objective in state:', completeUpdated.id);
+            return completeUpdated;
+          }
+          return obj;
+        });
+        return updated;
+      });
       
       toast({
         title: 'Success',
         description: 'Objective updated successfully',
       });
       
-      // Force a re-render - filteredObjectives will update automatically via useMemo
+      // Delay reload to allow server transaction to commit and avoid race conditions
+      setTimeout(async () => {
+        console.log('[DepartmentObjectives] Delayed reload after edit starting...');
+        try {
+          await loadData(false);
+          console.log('[DepartmentObjectives] Delayed reload after edit completed');
+        } catch (err) {
+          console.error('[DepartmentObjectives] Delayed reload after edit failed:', err);
+        }
+      }, 500); // 500ms delay to allow server transaction to commit
       }
-      
-      // Reload in background to ensure sync (non-blocking)
-      loadData(false).catch(err => {
-        console.warn('[DepartmentObjectives] Background reload failed:', err);
-      });
     } catch (err) {
       // On error, reload to get correct state
       loadData(false);
@@ -799,31 +815,47 @@ export default function DepartmentObjectives() {
       });
       
       // Save to database
+      console.log('[DepartmentObjectives] Saving edit for objective:', editingId);
       const savedObjective = await updateDepartmentObjective(editingId, updateData);
       
+      console.log('[DepartmentObjectives] API returned updated objective:', {
+        id: savedObjective.id,
+        has_department_name: !!savedObjective.department_name,
+        has_department_code: !!savedObjective.department_code,
+      });
+      
       // Update with real data from server - ensure all fields are present
-      setObjectives(prev => prev.map(obj => {
-        if (obj.id === editingId) {
-          return {
-            ...savedObjective,
-            department_name: savedObjective.department_name || obj.department_name,
-            department_code: savedObjective.department_code || obj.department_code,
-          };
-        }
-        return obj;
-      }));
+      setObjectives(prev => {
+        const updated = prev.map(obj => {
+          if (obj.id === editingId) {
+            const completeUpdated = {
+              ...savedObjective,
+              department_name: savedObjective.department_name || obj.department_name,
+              department_code: savedObjective.department_code || obj.department_code,
+            };
+            console.log('[DepartmentObjectives] Updated objective in state:', completeUpdated.id);
+            return completeUpdated;
+          }
+          return obj;
+        });
+        return updated;
+      });
       
       toast({
         title: 'Success',
         description: 'Objective updated successfully',
       });
       
-      // Force a re-render - filteredObjectives will update automatically via useMemo
-      
-      // Reload in background to ensure sync (non-blocking)
-      loadData(false).catch(err => {
-        console.warn('[DepartmentObjectives] Background reload failed:', err);
-      });
+      // Delay reload to allow server transaction to commit and avoid race conditions
+      setTimeout(async () => {
+        console.log('[DepartmentObjectives] Delayed reload after inline edit starting...');
+        try {
+          await loadData(false);
+          console.log('[DepartmentObjectives] Delayed reload after inline edit completed');
+        } catch (err) {
+          console.error('[DepartmentObjectives] Delayed reload after inline edit failed:', err);
+        }
+      }, 500); // 500ms delay to allow server transaction to commit
     } catch (err) {
       toast({
         title: 'Error',
@@ -839,9 +871,12 @@ export default function DepartmentObjectives() {
     try {
       // Optimistically remove from UI immediately - use flushSync for instant re-render
       const deletedObjective = objectives.find(obj => obj.id === deletingId);
+      console.log('[DepartmentObjectives] Deleting objective:', deletingId);
+      
       flushSync(() => {
         setObjectives(prev => {
           const filtered = prev.filter(obj => obj.id !== deletingId);
+          console.log('[DepartmentObjectives] Removed from state. Previous count:', prev.length, 'New count:', filtered.length);
           return filtered;
         });
         setDeletingId(null);
@@ -854,26 +889,57 @@ export default function DepartmentObjectives() {
       
       // Delete from database
       await deleteDepartmentObjective(deletingId);
+      console.log('[DepartmentObjectives] Delete API call successful');
       
       // Ensure deletion is reflected (optimistic update already done, but double-check)
-      setObjectives(prev => prev.filter(obj => obj.id !== deletingId));
+      setObjectives(prev => {
+        const stillExists = prev.some(obj => obj.id === deletingId);
+        if (stillExists) {
+          console.warn('[DepartmentObjectives] Objective still in state after delete, removing again');
+          return prev.filter(obj => obj.id !== deletingId);
+        }
+        return prev;
+      });
       
       toast({
         title: 'Success',
         description: 'Objective deleted successfully',
       });
       
-      // Force a re-render - filteredObjectives will update automatically via useMemo
-      
-      // Reload in background to ensure sync (non-blocking)
-      loadData(false).catch(err => {
-        console.warn('[DepartmentObjectives] Background reload failed:', err);
-        // Restore on error
-        if (deletedObjective) {
-          setObjectives(prev => [...prev, deletedObjective]);
+      // Delay reload to allow server transaction to commit and avoid race conditions
+      // This ensures the deletion persists even if server response is delayed
+      setTimeout(async () => {
+        console.log('[DepartmentObjectives] Delayed reload after delete starting...');
+        try {
+          await loadData(false);
+          console.log('[DepartmentObjectives] Delayed reload after delete completed');
+          
+          // Double-check that deleted objective is not in state
+          setObjectives(prev => {
+            const stillExists = prev.some(obj => obj.id === deletingId);
+            if (stillExists) {
+              console.warn('[DepartmentObjectives] Deleted objective reappeared after reload! Removing again...');
+              return prev.filter(obj => obj.id !== deletingId);
+            }
+            return prev;
+          });
+        } catch (err) {
+          console.error('[DepartmentObjectives] Delayed reload after delete failed:', err);
+          // Restore on error only if we have the deleted objective
+          if (deletedObjective) {
+            console.log('[DepartmentObjectives] Restoring deleted objective due to reload error');
+            setObjectives(prev => {
+              const exists = prev.some(obj => obj.id === deletingId);
+              if (!exists) {
+                return [...prev, deletedObjective];
+              }
+              return prev;
+            });
+          }
         }
-      });
+      }, 500); // 500ms delay to allow server transaction to commit
     } catch (err) {
+      console.error('[DepartmentObjectives] Delete failed:', err);
       toast({
         title: 'Error',
         description: 'Failed to delete objective',
