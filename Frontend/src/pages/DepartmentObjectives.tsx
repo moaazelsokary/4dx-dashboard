@@ -496,15 +496,24 @@ export default function DepartmentObjectives() {
         // Save to database
         savedObjective = await updateDepartmentObjective(data.id, data);
         
-        // Update with real data from server
-        setObjectives(prev => prev.map(obj => 
-          obj.id === data.id ? savedObjective : obj
-        ));
-        
-        toast({
-          title: 'Success',
-          description: 'Objective updated successfully',
-        });
+      // Update with real data from server - ensure all fields are present
+      setObjectives(prev => prev.map(obj => {
+        if (obj.id === data.id) {
+          return {
+            ...savedObjective,
+            department_name: savedObjective.department_name || obj.department_name,
+            department_code: savedObjective.department_code || obj.department_code,
+          };
+        }
+        return obj;
+      }));
+      
+      toast({
+        title: 'Success',
+        description: 'Objective updated successfully',
+      });
+      
+      // Force a re-render - filteredObjectives will update automatically via useMemo
       }
       
       // Reload in background to ensure sync (non-blocking)
@@ -640,15 +649,24 @@ export default function DepartmentObjectives() {
       // Save to database
       const savedObjective = await updateDepartmentObjective(editingId, updateData);
       
-      // Update with real data from server
-      setObjectives(prev => prev.map(obj => 
-        obj.id === editingId ? savedObjective : obj
-      ));
+      // Update with real data from server - ensure all fields are present
+      setObjectives(prev => prev.map(obj => {
+        if (obj.id === editingId) {
+          return {
+            ...savedObjective,
+            department_name: savedObjective.department_name || obj.department_name,
+            department_code: savedObjective.department_code || obj.department_code,
+          };
+        }
+        return obj;
+      }));
       
       toast({
         title: 'Success',
         description: 'Objective updated successfully',
       });
+      
+      // Force a re-render - filteredObjectives will update automatically via useMemo
       
       // Reload in background to ensure sync (non-blocking)
       loadData(false).catch(err => {
@@ -841,11 +859,19 @@ export default function DepartmentObjectives() {
         main_objective_id: newData.main_objective_id || null,
       });
       
-      // Replace optimistic with real data
+      // Replace optimistic with real data - ensure all fields are present
       setObjectives(prev => {
-        const updated = prev.map(obj => 
-          obj.id === tempId ? savedObjective : obj
-        );
+        const updated = prev.map(obj => {
+          if (obj.id === tempId) {
+            // Ensure savedObjective has all required fields
+            return {
+              ...savedObjective,
+              department_name: savedObjective.department_name || department.name,
+              department_code: savedObjective.department_code || department.code,
+            };
+          }
+          return obj;
+        });
         return updated.sort((a, b) => {
           if (a.sort_order !== undefined && b.sort_order !== undefined) {
             return a.sort_order - b.sort_order;
@@ -861,10 +887,7 @@ export default function DepartmentObjectives() {
         description: 'Objective created successfully',
       });
       
-      // Reload in background to ensure sync (non-blocking)
-      loadData(false).catch(err => {
-        console.warn('[DepartmentObjectives] Background reload failed:', err);
-      });
+      // Force a re-render - filteredObjectives will update automatically via useMemo
     } catch (err) {
       toast({
         title: 'Error',
