@@ -364,6 +364,11 @@ const handler = rateLimiter('general')(
       result = await getMonthlyData(pool, departmentObjectiveId);
     } else if (path === '/monthly-data' && method === 'POST') {
       result = await createOrUpdateMonthlyData(pool, body);
+    }
+    // Combined Dashboard Data
+    else if (path === '/department-dashboard-data' && method === 'GET') {
+      const departmentCode = queryParams.department_code;
+      result = await getDepartmentDashboardData(pool, departmentCode);
     } else {
       return {
         statusCode: 404,
@@ -1658,6 +1663,26 @@ async function getDepartments(pool) {
   const request = pool.request();
   const result = await request.query('SELECT * FROM departments ORDER BY name');
   return result.recordset;
+}
+
+// Combined Dashboard Data Function
+async function getDepartmentDashboardData(pool, departmentCode) {
+  // Call all 5 functions in parallel
+  const [departmentObjectives, mainObjectives, departments, rasci, hierarchicalPlan] = await Promise.all([
+    getDepartmentObjectives(pool, { department_code: departmentCode }),
+    getMainObjectives(pool, {}),
+    getDepartments(pool),
+    departmentCode ? getRASCIByDepartment(pool, departmentCode) : Promise.resolve([]),
+    getHierarchicalPlan(pool),
+  ]);
+
+  return {
+    departmentObjectives,
+    mainObjectives,
+    departments,
+    rasci,
+    hierarchicalPlan,
+  };
 }
 
 // Plan Checker Functions

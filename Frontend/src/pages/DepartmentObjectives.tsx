@@ -29,6 +29,7 @@ import {
   getDepartments,
   getRASCIByDepartment,
   getHierarchicalPlan,
+  getDepartmentDashboardData,
 } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
@@ -285,13 +286,13 @@ export default function DepartmentObjectives() {
         departmentCode = userObj.departments?.[0];
       }
       
-      const [deptObjectives, mainObjs, depts, rasciData, hierarchical] = await Promise.all([
-        getDepartmentObjectives({ department_code: departmentCode }),
-        getMainObjectives(),
-        getDepartments(),
-        departmentCode ? getRASCIByDepartment(departmentCode) : Promise.resolve([]),
-        getHierarchicalPlan(),
-      ]);
+      // Use combined endpoint to reduce 5 requests to 1
+      const dashboardData = await getDepartmentDashboardData(departmentCode);
+      const deptObjectives = dashboardData.departmentObjectives;
+      const mainObjs = dashboardData.mainObjectives;
+      const depts = dashboardData.departments;
+      const rasciData = dashboardData.rasci;
+      const hierarchical = dashboardData.hierarchicalPlan;
       
       // Sort by sort_order if available, otherwise by id
       // Server already orders by updated_at DESC, so latest edits appear first

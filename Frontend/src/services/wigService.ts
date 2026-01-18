@@ -183,6 +183,23 @@ export async function getDepartments(): Promise<Department[]> {
   return fetchAPI<Department[]>('/departments');
 }
 
+// Combined Dashboard Data
+export interface DepartmentDashboardData {
+  departmentObjectives: DepartmentObjective[];
+  mainObjectives: MainPlanObjective[];
+  departments: Department[];
+  rasci: RASCIWithExistence[];
+  hierarchicalPlan: HierarchicalPlan;
+}
+
+export async function getDepartmentDashboardData(departmentCode?: string): Promise<DepartmentDashboardData> {
+  const queryParams = new URLSearchParams();
+  if (departmentCode) queryParams.append('department_code', departmentCode);
+  
+  const query = queryParams.toString();
+  return fetchAPI<DepartmentDashboardData>(`/department-dashboard-data${query ? `?${query}` : ''}`);
+}
+
 // Plan Checkers
 export async function getPlanChecker(objectiveId: number): Promise<PlanChecker | null> {
   return fetchAPI<PlanChecker | null>(`/checkers/${objectiveId}`);
