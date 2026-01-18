@@ -623,8 +623,6 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       }
                     }}
                   >
-                    <>
-                    <>
                       <TableCell className="font-semibold">
                         <Badge variant="outline" className="border-primary/30 bg-primary/5">
                           {obj.pillar}
@@ -682,8 +680,6 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                           </div>
                         )}
                       </TableCell>
-                    </>
-                  )}
                   </TableRow>
                 );
               })}
