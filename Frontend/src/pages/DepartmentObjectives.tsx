@@ -156,6 +156,7 @@ export default function DepartmentObjectives() {
   const [isMEModalOpen, setIsMEModalOpen] = useState(false);
   const [isMEKPIFormModalOpen, setIsMEKPIFormModalOpen] = useState(false);
   const [currentMEKPIObjectiveId, setCurrentMEKPIObjectiveId] = useState<number | null>(null);
+  const [editingMEKPI, setEditingMEKPI] = useState<DepartmentObjective | null>(null);
   const [editData, setEditData] = useState<Partial<DepartmentObjective>>({});
   const [newData, setNewData] = useState<Partial<DepartmentObjective & { kpi: string | string[] }>>({
     kpi: [],
@@ -1570,6 +1571,52 @@ export default function DepartmentObjectives() {
       throw new Error('Access denied');
     }
     
+    // Check if this is an edit operation
+    const isEdit = editingMEKPI !== null && editingMEKPI.id;
+    
+    if (isEdit && editingMEKPI.id) {
+      // Update existing M&E KPI
+      try {
+        const updateData = {
+          kpi: meKpiData.me_kpi,
+          mov: meKpiData.mov,
+          responsible_person: meKpiData.responsible || '',
+          me_target: meKpiData.target || null,
+          me_actual: meKpiData.actual || null,
+          me_frequency: meKpiData.frequency || null,
+          me_start_date: meKpiData.start_date || null,
+          me_end_date: meKpiData.end_date || null,
+          me_tool: meKpiData.tool || null,
+          me_responsible: meKpiData.responsible || null,
+          me_folder_link: meKpiData.folder_link || null,
+        };
+        
+        const savedObjective = await updateDepartmentObjective(editingMEKPI.id, updateData);
+        
+        // Update in state
+        setObjectives(prev => prev.map(obj => 
+          obj.id === editingMEKPI.id ? savedObjective : obj
+        ));
+        
+        toast({
+          title: 'Success',
+          description: 'M&E KPI updated successfully',
+        });
+        
+        setEditingMEKPI(null);
+        loadData(false);
+        return;
+      } catch (err) {
+        toast({
+          title: 'Error',
+          description: err instanceof Error ? err.message : 'Failed to update M&E KPI',
+          variant: 'destructive',
+        });
+        throw err;
+      }
+    }
+    
+    // Add new M&E KPI
     if (!currentMEKPIObjectiveId) {
       toast({
         title: 'Error',
@@ -1681,6 +1728,43 @@ export default function DepartmentObjectives() {
       });
       throw err; // Re-throw to let modal handle it
     }
+  };
+
+  const handleEditMEKPI = (meKPI: DepartmentObjective) => {
+    if (!canModifyMEKPIs) {
+      toast({
+        title: 'Access Denied',
+        description: 'Only CEO and admin users can edit M&E KPIs',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Extract parent objective ID from activity field
+    const parentMatch = meKPI.activity?.match(/\[M&E-PARENT:(\d+)\]/);
+    const parentId = parentMatch ? parseInt(parentMatch[1]) : null;
+    
+    if (parentId) {
+      setCurrentMEKPIObjectiveId(parentId);
+    }
+    
+    // Convert DepartmentObjective to MEEKPI format
+    const meKpiData: MEEKPI = {
+      id: meKPI.id,
+      me_kpi: meKPI.kpi || '',
+      mov: meKPI.mov || '',
+      target: meKPI.me_target ?? null,
+      actual: meKPI.me_actual ?? null,
+      frequency: meKPI.me_frequency || undefined,
+      start_date: meKPI.me_start_date || undefined,
+      end_date: meKPI.me_end_date || undefined,
+      tool: meKPI.me_tool || undefined,
+      responsible: meKPI.me_responsible || undefined,
+      folder_link: meKPI.me_folder_link || undefined,
+    };
+    
+    setEditingMEKPI(meKPI);
+    setIsMEKPIFormModalOpen(true);
   };
 
   // Helper functions for hierarchical view
@@ -2016,7 +2100,7 @@ export default function DepartmentObjectives() {
               <Table style={{ tableLayout: 'fixed', width: '100%' }} className="border-collapse">
                 <TableHeader>
                   <TableRow>
-                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10 border-r border-border/50">
+                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10 border-r-2 border-border">
                       <div className="flex items-center justify-center">
                         <span className="font-semibold text-primary">N</span>
                       </div>
@@ -2025,7 +2109,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('index', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r border-border/50">
+                    <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r-2 border-border">
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
                         <ExcelFilter
@@ -2042,7 +2126,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('kpi', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r border-border/50">
+                    <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r-2 border-border">
                       <div className="flex items-center gap-2">
                         <span>Activity</span>
                         <ExcelFilter
@@ -2059,7 +2143,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('activity', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.type, minWidth: columnWidths.type, position: 'relative' }} className="border-r border-border/50">
+                    <TableHead style={{ width: columnWidths.type, minWidth: columnWidths.type, position: 'relative' }} className="border-r-2 border-border">
                       <div className="flex items-center gap-2">
                         <span>Type</span>
                         <ExcelFilter
@@ -2076,7 +2160,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('type', e)}
                       />
                     </TableHead>
-                    <TableHead className="text-right border-r border-border/50" style={{ width: columnWidths.target, minWidth: columnWidths.target, position: 'relative' }}>
+                    <TableHead className="text-right border-r-2 border-border" style={{ width: columnWidths.target, minWidth: columnWidths.target, position: 'relative' }}>
                       <div className="flex items-center gap-2 justify-end">
                         <span>Target</span>
                         <ExcelFilter
@@ -2093,7 +2177,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('target', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible, position: 'relative' }} className="border-r border-border/50">
+                    <TableHead style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible, position: 'relative' }} className="border-r-2 border-border">
                       <div className="flex items-center gap-2">
                         <span>Responsible</span>
                         <ExcelFilter
@@ -2110,7 +2194,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('responsible', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }} className="border-r border-border/50">
+                    <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }} className="border-r-2 border-border">
                       <div className="flex items-center gap-2">
                         <span>MOV</span>
                         <ExcelFilter
@@ -2165,12 +2249,12 @@ export default function DepartmentObjectives() {
 
                                   return (
                                     <>
-                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10 border-r border-border/50">
+                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10 border-r-2 border-border">
                                         <div className="w-full h-full flex items-center justify-center">
                                           <span className="text-sm font-semibold text-primary">{index + 1}</span>
                                         </div>
                                       </TableCell>
-                                      <TableCell className="font-medium border-r border-border/50" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
+                                      <TableCell className="font-medium border-r-2 border-border" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
                                         <div className="flex flex-wrap gap-1">
                                           {parsedKPIs.map((kpi, idx) => (
                                             <Badge key={idx} variant="outline" className="text-xs">
@@ -2179,10 +2263,10 @@ export default function DepartmentObjectives() {
                                           ))}
                                         </div>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="border-r border-border/50">
+                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="border-r-2 border-border">
                                         <BidirectionalText>{obj.activity}</BidirectionalText>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }} className="border-r border-border/50">
+                                      <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }} className="border-r-2 border-border">
                                         {showTooltip ? (
                                           <TooltipProvider>
                                             <Tooltip>
@@ -2202,13 +2286,13 @@ export default function DepartmentObjectives() {
                                           </Badge>
                                         )}
                                       </TableCell>
-                                      <TableCell className="text-right border-r border-border/50" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
+                                      <TableCell className="text-right border-r-2 border-border" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
                                         {targetDisplay}
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }} className="border-r border-border/50">
+                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }} className="border-r-2 border-border">
                                         <BidirectionalText>{obj.responsible_person}</BidirectionalText>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }} className="border-r border-border/50">
+                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }} className="border-r-2 border-border">
                                         <BidirectionalText>{obj.mov}</BidirectionalText>
                                       </TableCell>
                                       <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
@@ -2636,6 +2720,7 @@ export default function DepartmentObjectives() {
               return filtered;
             })()}
             onDelete={handleDeleteMEKPI}
+            onEdit={handleEditMEKPI}
             canModify={canModifyMEKPIs}
           />
         )}
@@ -2657,9 +2742,23 @@ export default function DepartmentObjectives() {
             setIsMEKPIFormModalOpen(open);
             if (!open) {
               setCurrentMEKPIObjectiveId(null);
+              setEditingMEKPI(null);
             }
           }}
           onSave={handleAddMEKPI}
+          initialData={editingMEKPI ? {
+            id: editingMEKPI.id,
+            me_kpi: editingMEKPI.kpi || '',
+            mov: editingMEKPI.mov || '',
+            target: editingMEKPI.me_target ?? null,
+            actual: editingMEKPI.me_actual ?? null,
+            frequency: editingMEKPI.me_frequency || undefined,
+            start_date: editingMEKPI.me_start_date || undefined,
+            end_date: editingMEKPI.me_end_date || undefined,
+            tool: editingMEKPI.me_tool || undefined,
+            responsible: editingMEKPI.me_responsible || undefined,
+            folder_link: editingMEKPI.me_folder_link || undefined,
+          } : undefined}
         />
       </div>
     </div>

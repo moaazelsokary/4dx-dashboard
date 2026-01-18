@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Folder } from "lucide-react";
+import { Trash2, Folder, Edit2 } from "lucide-react";
 import type { DepartmentObjective } from "@/types/wig";
 
 interface MEKPIsModalProps {
@@ -12,10 +12,11 @@ interface MEKPIsModalProps {
   objectiveActivity?: string;
   meKPIs: DepartmentObjective[];
   onDelete: (id: number) => void;
+  onEdit?: (meKPI: DepartmentObjective) => void;
   canModify?: boolean;
 }
 
-const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs, onDelete, canModify = false }: MEKPIsModalProps) => {
+const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs, onDelete, onEdit, canModify = false }: MEKPIsModalProps) => {
   const formatDate = (dateString: string | null | undefined): string => {
     if (!dateString) return '—';
     try {
@@ -132,16 +133,30 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
                     </TableCell>
                     <TableCell className="text-right">
                       {canModify && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => meObj.id && onDelete(meObj.id)}
-                          aria-label={`Delete M&E KPI ${meObj.id}`}
-                          title="Delete M&E KPI"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          {onEdit && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onEdit(meObj)}
+                              aria-label={`Edit M&E KPI ${meObj.id}`}
+                              title="Edit M&E KPI"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => meObj.id && onDelete(meObj.id)}
+                            aria-label={`Delete M&E KPI ${meObj.id}`}
+                            title="Delete M&E KPI"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
