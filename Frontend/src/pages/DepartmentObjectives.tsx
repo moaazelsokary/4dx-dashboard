@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, startTransition } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +38,7 @@ import MEKPIFormModal from '@/components/wig/MEKPIFormModal';
 import ObjectiveFormModal from '@/components/wig/ObjectiveFormModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence, HierarchicalPlan } from '@/types/wig';
 import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut, Layers, Sparkles, Target, TrendingUp, BarChart3 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -266,10 +267,11 @@ export default function DepartmentObjectives() {
   }, [selectedDepartment]);
 
   const loadData = async (showLoading = true) => {
+    // Set loading state immediately for better UX
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
-      if (showLoading) {
-        setLoading(true);
-      }
       const userData = localStorage.getItem('user');
       if (!userData) return;
       
@@ -302,12 +304,15 @@ export default function DepartmentObjectives() {
         return a.id - b.id;
       });
       
-      // Trust server data - with cache-busting and fresh queries, server has latest data
-      setObjectives(sortedObjectives);
-      setMainObjectives(mainObjs);
-      setDepartments(depts);
-      setRasciMetrics(rasciData);
-      setHierarchicalData(hierarchical);
+      // Use startTransition for non-urgent state updates to prevent blocking
+      startTransition(() => {
+        // Trust server data - with cache-busting and fresh queries, server has latest data
+        setObjectives(sortedObjectives);
+        setMainObjectives(mainObjs);
+        setDepartments(depts);
+        setRasciMetrics(rasciData);
+        setHierarchicalData(hierarchical);
+      });
     } catch (err) {
       toast({
         title: 'Error',
@@ -1241,12 +1246,77 @@ export default function DepartmentObjectives() {
   }, [objectives, filters, mainObjectives]);
 
   // NOW we can do conditional returns - AFTER all hooks
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  // Skeleton loader component
+  const DepartmentObjectivesSkeleton = () => (
+    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
+      {/* Header Skeleton */}
+      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-12 h-12 rounded" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-7 w-20" />
+              </div>
+            </div>
+            <Skeleton className="h-10 w-full max-w-md" />
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 py-4 space-y-4">
+        {/* Department Filter Skeleton */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-[250px]" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tabs Skeleton */}
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full max-w-md" />
+          
+          {/* Table Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Table Header */}
+                <div className="grid grid-cols-7 gap-4 pb-2 border-b">
+                  {[...Array(7)].map((_, i) => (
+                    <Skeleton key={i} className="h-6 w-full" />
+                  ))}
+                </div>
+                {/* Table Rows */}
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="grid grid-cols-7 gap-4 py-3 border-b">
+                    {[...Array(7)].map((_, j) => (
+                      <Skeleton key={j} className="h-5 w-full" />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    );
+    </div>
+  );
+
+  if (loading) {
+    return <DepartmentObjectivesSkeleton />;
   }
 
   const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
