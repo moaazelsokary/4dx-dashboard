@@ -34,6 +34,7 @@ import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import MEKPIsModal from '@/components/wig/MEKPIsModal';
+import MEKPIFormModal from '@/components/wig/MEKPIFormModal';
 import ObjectiveFormModal from '@/components/wig/ObjectiveFormModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence, HierarchicalPlan } from '@/types/wig';
 import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut, Layers, Sparkles, Target, TrendingUp, BarChart3 } from 'lucide-react';
@@ -150,22 +151,11 @@ export default function DepartmentObjectives() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [modalInitialData, setModalInitialData] = useState<Partial<DepartmentObjective> | undefined>(undefined);
-  const [addingMEForObjective, setAddingMEForObjective] = useState<number | null>(null);
   const [meKPIs, setMeKPIs] = useState<MEEKPI[]>([]);
   const [selectedMEObjective, setSelectedMEObjective] = useState<DepartmentObjective | null>(null);
   const [isMEModalOpen, setIsMEModalOpen] = useState(false);
-  const [newMEKPI, setNewMEKPI] = useState<MEEKPI>({ 
-    me_kpi: '', 
-    mov: '',
-    target: null,
-    actual: null,
-    frequency: '',
-    start_date: '',
-    end_date: '',
-    tool: '',
-    responsible: '',
-    folder_link: ''
-  });
+  const [isMEKPIFormModalOpen, setIsMEKPIFormModalOpen] = useState(false);
+  const [currentMEKPIObjectiveId, setCurrentMEKPIObjectiveId] = useState<number | null>(null);
   const [editData, setEditData] = useState<Partial<DepartmentObjective>>({});
   const [newData, setNewData] = useState<Partial<DepartmentObjective & { kpi: string | string[] }>>({
     kpi: [],
@@ -1571,31 +1561,31 @@ export default function DepartmentObjectives() {
     }
   };
 
-  const handleAddMEKPI = async (parentObjectiveId: number) => {
+  const handleAddMEKPI = async (meKpiData: MEEKPI) => {
     if (!canModifyMEKPIs) {
       toast({
         title: 'Access Denied',
         description: 'Only CEO and admin users can add M&E KPIs',
         variant: 'destructive',
       });
-      return;
+      throw new Error('Access denied');
     }
     
-    if (!newMEKPI.me_kpi || !newMEKPI.mov) {
+    if (!currentMEKPIObjectiveId) {
       toast({
         title: 'Error',
-        description: 'Please fill both M&E KPI and MOV fields',
+        description: 'Parent objective not found',
         variant: 'destructive',
       });
-      return;
+      throw new Error('Parent objective not found');
     }
 
     try {
       const userData = localStorage.getItem('user');
-      if (!userData) return;
+      if (!userData) throw new Error('User not authenticated');
       
       // Get the parent objective to link the M&E KPI
-      const parentObjective = objectives.find((o) => o.id === parentObjectiveId);
+      const parentObjective = objectives.find((o) => o.id === currentMEKPIObjectiveId);
       
       if (!parentObjective) {
         toast({
@@ -1603,7 +1593,7 @@ export default function DepartmentObjectives() {
           description: 'Parent objective not found',
           variant: 'destructive',
         });
-        return;
+        throw new Error('Parent objective not found');
       }
 
       // M&E KPIs should belong to the same department as their parent objective
@@ -1629,27 +1619,27 @@ export default function DepartmentObjectives() {
           description: 'Department not found. Please select a department filter if you are CEO/admin.',
           variant: 'destructive',
         });
-        return;
+        throw new Error('Department not found');
       }
       
       // Store M&E KPI as a department objective with parent reference in activity
       const meDataToSave = {
         department_id: department.id,
-        kpi: newMEKPI.me_kpi,
-        activity: `[M&E-PARENT:${parentObjectiveId}] ${newMEKPI.me_kpi}`, // Mark as M&E with parent reference
+        kpi: meKpiData.me_kpi,
+        activity: `[M&E-PARENT:${currentMEKPIObjectiveId}] ${meKpiData.me_kpi}`, // Mark as M&E with parent reference
         type: 'M&E' as any, // Use M&E type
         activity_target: 0,
-        responsible_person: newMEKPI.responsible || '',
-        mov: newMEKPI.mov,
+        responsible_person: meKpiData.responsible || '',
+        mov: meKpiData.mov,
         main_objective_id: parentObjective?.main_objective_id || null, // Link to same main objective as parent
-        me_target: newMEKPI.target || null,
-        me_actual: newMEKPI.actual || null,
-        me_frequency: newMEKPI.frequency || null,
-        me_start_date: newMEKPI.start_date || null,
-        me_end_date: newMEKPI.end_date || null,
-        me_tool: newMEKPI.tool || null,
-        me_responsible: newMEKPI.responsible || null,
-        me_folder_link: newMEKPI.folder_link || null,
+        me_target: meKpiData.target || null,
+        me_actual: meKpiData.actual || null,
+        me_frequency: meKpiData.frequency || null,
+        me_start_date: meKpiData.start_date || null,
+        me_end_date: meKpiData.end_date || null,
+        me_tool: meKpiData.tool || null,
+        me_responsible: meKpiData.responsible || null,
+        me_folder_link: meKpiData.folder_link || null,
       };
       
       console.log('[handleAddMEKPI] Saving M&E KPI with data:', meDataToSave);
@@ -1658,8 +1648,8 @@ export default function DepartmentObjectives() {
       const optimisticObjective: DepartmentObjective = {
         ...meDataToSave,
         id: tempId,
-        department_name: selectedDepartment?.name || '',
-        department_code: selectedDepartment?.code || '',
+        department_name: department.name,
+        department_code: department.code,
         sort_order: objectives.length,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -1683,19 +1673,6 @@ export default function DepartmentObjectives() {
         description: 'M&E KPI created successfully',
       });
       
-      setAddingMEForObjective(null);
-      setNewMEKPI({ 
-        me_kpi: '', 
-        mov: '',
-        target: null,
-        actual: null,
-        frequency: '',
-        start_date: '',
-        end_date: '',
-        tool: '',
-        responsible: '',
-        folder_link: ''
-      });
       loadData(false);
     } catch (err) {
       toast({
@@ -1703,6 +1680,7 @@ export default function DepartmentObjectives() {
         description: err instanceof Error ? err.message : 'Failed to create M&E KPI',
         variant: 'destructive',
       });
+      throw err; // Re-throw to let modal handle it
     }
   };
 
@@ -2271,19 +2249,8 @@ export default function DepartmentObjectives() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
-                                    setAddingMEForObjective(obj.id);
-                                    setNewMEKPI({ 
-                                      me_kpi: '', 
-                                      mov: '',
-                                      target: null,
-                                      actual: null,
-                                      frequency: '',
-                                      start_date: '',
-                                    end_date: '',
-                                    tool: '',
-                                    responsible: '',
-                                    folder_link: ''
-                                    });
+                                    setCurrentMEKPIObjectiveId(obj.id);
+                                    setIsMEKPIFormModalOpen(true);
                                   }}
                                   aria-label={`Add M&E KPI for objective ${obj.id}`}
                                   title="Add M&E KPI"
@@ -2351,132 +2318,6 @@ export default function DepartmentObjectives() {
                                   );
                                 }}
                               </SortableRow>
-                              
-                              {/* Add M&E KPI row for this objective */}
-                              {addingMEForObjective === obj.id && canModifyMEKPIs && (
-                      <>
-                        <TableRow className="bg-muted/30">
-                          <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }}></TableCell>
-                          <TableCell colSpan={2} style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
-                            <Input
-                              value={newMEKPI.me_kpi}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, me_kpi: e.target.value })}
-                              placeholder="M&E KPI"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">M&E</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={newMEKPI.target || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, target: parseFloat(e.target.value) || null })}
-                              placeholder="Target"
-                              className="w-24"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={newMEKPI.actual || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, actual: parseFloat(e.target.value) || null })}
-                              placeholder="Actual"
-                              className="w-24"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={newMEKPI.mov}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, mov: e.target.value })}
-                              placeholder="MOV"
-                            />
-                          </TableCell>
-                          <TableCell></TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button type="button" size="sm" onClick={() => handleAddMEKPI(obj.id)}>
-                                Save
-                              </Button>
-                              <Button type="button" size="sm" variant="outline" onClick={() => {
-                                setAddingMEForObjective(null);
-                                setNewMEKPI({ 
-                                  me_kpi: '', 
-                                  mov: '',
-                                  target: null,
-                                  actual: null,
-                                  frequency: '',
-                                  start_date: '',
-                                  end_date: '',
-                                  tool: '',
-                                  responsible: '',
-                                  folder_link: ''
-                                });
-                              }}>
-                                Cancel
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow className="bg-muted/30">
-                          <TableCell colSpan={2}>
-                            <Select
-                              value={newMEKPI.frequency || ''}
-                              onValueChange={(value) => setNewMEKPI({ ...newMEKPI, frequency: value })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Frequency" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Daily">Daily</SelectItem>
-                                <SelectItem value="Weekly">Weekly</SelectItem>
-                                <SelectItem value="Monthly">Monthly</SelectItem>
-                                <SelectItem value="Quarterly">Quarterly</SelectItem>
-                                <SelectItem value="Annually">Annually</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              value={newMEKPI.start_date || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, start_date: e.target.value })}
-                              placeholder="Start Date"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              value={newMEKPI.end_date || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, end_date: e.target.value })}
-                              placeholder="End Date"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={newMEKPI.tool || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, tool: e.target.value })}
-                              placeholder="Tool"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={newMEKPI.responsible || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, responsible: e.target.value })}
-                              placeholder="Responsible"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={newMEKPI.folder_link || ''}
-                              onChange={(e) => setNewMEKPI({ ...newMEKPI, folder_link: e.target.value })}
-                              placeholder="Folder Link"
-                            />
-                          </TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                      </>
-                    )}
                         </> 
                       );
                     })}
@@ -2808,6 +2649,18 @@ export default function DepartmentObjectives() {
           initialData={modalInitialData}
           onSave={handleModalSave}
           existingResponsiblePersons={uniqueResponsible}
+        />
+
+        {/* M&E KPI Form Modal */}
+        <MEKPIFormModal
+          open={isMEKPIFormModalOpen}
+          onOpenChange={(open) => {
+            setIsMEKPIFormModalOpen(open);
+            if (!open) {
+              setCurrentMEKPIObjectiveId(null);
+            }
+          }}
+          onSave={handleAddMEKPI}
         />
       </div>
     </div>
