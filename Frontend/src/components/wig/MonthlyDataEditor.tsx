@@ -257,21 +257,8 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         description: `Monthly data saved successfully for ${savedData.length} month(s)`,
       });
       
-      // Delay reload to allow server transaction to commit and avoid race conditions
-      // With cache-busting, server will have fresh data
-      setTimeout(async () => {
-        console.log('[MonthlyDataEditor] Delayed reload after saveAll starting...');
-        try {
-          await loadData();
-          console.log('[MonthlyDataEditor] Delayed reload after saveAll completed');
-        } catch (err) {
-          console.warn('[MonthlyDataEditor] Delayed reload after saveAll failed:', err);
-          // If reload fails, the saved data should still be in state
-        }
-      }, 500); // 500ms delay to allow server transaction to commit
-      
-      // Don't close immediately - let user see the saved data
-      // setOpen(false);
+      // Close modal after successful save
+      setOpen(false);
     } catch (err) {
       console.error('[MonthlyDataEditor] Error saving monthly data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to save monthly data';
