@@ -714,6 +714,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
         mode={modalMode}
         initialData={modalInitialData}
         onSave={handleModalSave}
+        uniquePillars={uniquePillars}
         uniqueObjectives={uniqueObjectives}
         uniqueTargets={uniqueTargets}
       />
