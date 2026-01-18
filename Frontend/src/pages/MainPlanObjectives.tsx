@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import MainPlanTable from '@/components/wig/MainPlanTable';
 import RASCIEditor from '@/components/wig/RASCIEditor';
 import type { HierarchicalPlan, MainPlanObjective } from '@/types/wig';
 import { LogOut, RefreshCw, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import NavigationBar from '@/components/shared/NavigationBar';
 import ExportButton from '@/components/shared/ExportButton';
 import OptimizedImage from '@/components/ui/OptimizedImage';
@@ -41,16 +42,20 @@ export default function MainPlanObjectives() {
   }, [navigate]);
 
   const loadData = async (showLoading = true) => {
+    // Set loading state immediately for better UX
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
-      if (showLoading) {
-        setLoading(true);
-      }
       const [hierarchical, table] = await Promise.all([
         getHierarchicalPlan(),
         getMainObjectives(),
       ]);
-      setHierarchicalData(hierarchical);
-      setTableData(table);
+      // Use startTransition for non-urgent state updates to prevent blocking
+      startTransition(() => {
+        setHierarchicalData(hierarchical);
+        setTableData(table);
+      });
     } catch (err) {
       toast({
         title: 'Error',
@@ -69,12 +74,74 @@ export default function MainPlanObjectives() {
     navigate('/');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  // Skeleton loader component
+  const MainPlanObjectivesSkeleton = () => (
+    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
+      {/* Header Skeleton */}
+      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-12 h-12 rounded" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-7 w-20" />
+              </div>
+            </div>
+            <Skeleton className="h-10 w-full max-w-md" />
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 py-4 space-y-4">
+        {/* Tabs Skeleton */}
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full max-w-md" />
+          
+          {/* Content Skeleton - Cards */}
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i} className="p-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                    <Skeleton className="h-6 w-64" />
+                  </div>
+                  <div className="space-y-3 pl-11">
+                    {[...Array(2)].map((_, j) => (
+                      <div key={j} className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-6 w-12 rounded" />
+                          <Skeleton className="h-5 w-96" />
+                        </div>
+                        <div className="space-y-2 pl-4">
+                          {[...Array(2)].map((_, k) => (
+                            <div key={k} className="flex items-center gap-3">
+                              <Skeleton className="h-5 w-16 rounded" />
+                              <Skeleton className="h-4 w-80" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
-    );
+    </div>
+  );
+
+  if (loading) {
+    return <MainPlanObjectivesSkeleton />;
   }
 
   return (
