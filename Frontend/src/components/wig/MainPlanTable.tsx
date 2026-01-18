@@ -600,9 +600,21 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                 const targetNum = extractNumber(obj.target, /^\d+(\.\d+)*(\.\d+)?/) || '';
                 const kpiNum = extractNumber(obj.kpi, /^\d+(\.\d+)*(\.\d+)?/) || '';
                 
+                // Extract objective number - take only the first part (before decimal)
+                // e.g., "1.1" -> "1", "2.1" -> "2"
+                const objNumFull = extractNumber(obj.objective, /^\d+(\.\d+)*/) || '';
+                const objNum = objNumFull ? objNumFull.split('.')[0] : '';
+                
                 // Clean text (remove numbers from start)
-                // Objective doesn't have a number prefix in the database
-                const objText = obj.objective.trim();
+                // For objective: remove the full number prefix (e.g., "1.1") but keep the first number
+                let objText = obj.objective.trim();
+                if (objNumFull) {
+                  // Remove the full number prefix (e.g., "1.1") and replace with just first number (e.g., "1")
+                  objText = objText.replace(/^\d+(\.\d+)*\s*/, '').trim();
+                  // Prepend the first number
+                  objText = objNum ? `${objNum} ${objText}` : objText;
+                }
+                
                 const targetText = obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
                 const kpiText = obj.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
                 
