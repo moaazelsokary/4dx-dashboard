@@ -2100,7 +2100,7 @@ export default function DepartmentObjectives() {
               <Table style={{ tableLayout: 'fixed', width: '100%' }} className="border-collapse">
                 <TableHeader>
                   <TableRow>
-                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10 border-r-2 border-border">
+                    <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10 border-r border-border/50">
                       <div className="flex items-center justify-center">
                         <span className="font-semibold text-primary">N</span>
                       </div>
@@ -2109,7 +2109,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('index', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r-2 border-border">
+                    <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
                         <ExcelFilter
@@ -2126,7 +2126,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('kpi', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r-2 border-border">
+                    <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>Activity</span>
                         <ExcelFilter
@@ -2143,7 +2143,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('activity', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.type, minWidth: columnWidths.type, position: 'relative' }} className="border-r-2 border-border">
+                    <TableHead style={{ width: columnWidths.type, minWidth: columnWidths.type, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>Type</span>
                         <ExcelFilter
@@ -2160,7 +2160,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('type', e)}
                       />
                     </TableHead>
-                    <TableHead className="text-right border-r-2 border-border" style={{ width: columnWidths.target, minWidth: columnWidths.target, position: 'relative' }}>
+                    <TableHead className="text-right border-r border-border/50" style={{ width: columnWidths.target, minWidth: columnWidths.target, position: 'relative' }}>
                       <div className="flex items-center gap-2 justify-end">
                         <span>Target</span>
                         <ExcelFilter
@@ -2177,7 +2177,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('target', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible, position: 'relative' }} className="border-r-2 border-border">
+                    <TableHead style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>Responsible</span>
                         <ExcelFilter
@@ -2194,7 +2194,7 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('responsible', e)}
                       />
                     </TableHead>
-                    <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }} className="border-r-2 border-border">
+                    <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>MOV</span>
                         <ExcelFilter
@@ -2249,12 +2249,12 @@ export default function DepartmentObjectives() {
 
                                   return (
                                     <>
-                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10 border-r-2 border-border">
+                                      <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10 border-r border-border/50">
                                         <div className="w-full h-full flex items-center justify-center">
                                           <span className="text-sm font-semibold text-primary">{index + 1}</span>
                                         </div>
                                       </TableCell>
-                                      <TableCell className="font-medium border-r-2 border-border" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
+                                      <TableCell className="font-medium border-r border-border/50" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
                                         <div className="flex flex-wrap gap-1">
                                           {parsedKPIs.map((kpi, idx) => (
                                             <Badge key={idx} variant="outline" className="text-xs">
@@ -2263,10 +2263,10 @@ export default function DepartmentObjectives() {
                                           ))}
                                         </div>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="border-r-2 border-border">
+                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="border-r border-border/50">
                                         <BidirectionalText>{obj.activity}</BidirectionalText>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }} className="border-r-2 border-border">
+                                      <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }} className="border-r border-border/50">
                                         {showTooltip ? (
                                           <TooltipProvider>
                                             <Tooltip>
@@ -2286,13 +2286,13 @@ export default function DepartmentObjectives() {
                                           </Badge>
                                         )}
                                       </TableCell>
-                                      <TableCell className="text-right border-r-2 border-border" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
+                                      <TableCell className="text-right border-r border-border/50" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
                                         {targetDisplay}
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }} className="border-r-2 border-border">
+                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }} className="border-r border-border/50">
                                         <BidirectionalText>{obj.responsible_person}</BidirectionalText>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }} className="border-r-2 border-border">
+                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }} className="border-r border-border/50">
                                         <BidirectionalText>{obj.mov}</BidirectionalText>
                                       </TableCell>
                                       <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
