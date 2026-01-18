@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ interface MainPlanObjectiveFormModalProps {
   mode: 'add' | 'edit';
   initialData?: Partial<MainPlanObjective>;
   onSave: (data: Partial<MainPlanObjective>) => Promise<void>;
+  uniquePillars?: string[];
   uniqueObjectives?: string[];
   uniqueTargets?: string[];
 }
@@ -31,12 +32,12 @@ export default function MainPlanObjectiveFormModal({
   mode,
   initialData,
   onSave,
+  uniquePillars = [],
   uniqueObjectives = [],
   uniqueTargets = [],
 }: MainPlanObjectiveFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const firstInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [pillar, setPillar] = useState('');
@@ -63,11 +64,6 @@ export default function MainPlanObjectiveFormModal({
         setAnnualTarget(0);
       }
       setErrors({});
-      
-      // Focus first input when modal opens
-      setTimeout(() => {
-        firstInputRef.current?.focus();
-      }, 100);
     }
   }, [open, initialData]);
 
@@ -149,12 +145,11 @@ export default function MainPlanObjectiveFormModal({
               <Label htmlFor="pillar">
                 Pillar <span className="text-destructive">*</span>
               </Label>
-              <Input
-                ref={firstInputRef}
-                id="pillar"
+              <Selector
+                options={uniquePillars}
                 value={pillar}
-                onChange={(e) => {
-                  setPillar(e.target.value);
+                onValueChange={(value) => {
+                  setPillar(value);
                   if (errors.pillar) {
                     setErrors((prev) => {
                       const next = { ...prev };
@@ -163,8 +158,8 @@ export default function MainPlanObjectiveFormModal({
                     });
                   }
                 }}
-                placeholder="Enter pillar"
-                className={errors.pillar ? 'border-destructive' : ''}
+                placeholder="Select or type pillar..."
+                allowCustom={true}
               />
               {errors.pillar && (
                 <p className="text-sm text-destructive">{errors.pillar}</p>
