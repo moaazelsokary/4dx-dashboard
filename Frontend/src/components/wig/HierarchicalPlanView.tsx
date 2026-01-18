@@ -48,18 +48,22 @@ function generateHierarchicalNumbers(data: HierarchicalPlan) {
       const objKey = `${pillar.pillar}|${obj.objective}`;
       
       // Get objective number from first target's number
+      // Extract only the first part (before decimal) - e.g., "1.1" -> "1", "2.1" -> "2"
       let objNum = '';
       if (obj.targets.length > 0) {
         const firstTarget = obj.targets[0];
         const targetNum = extractNumber(firstTarget.target, /^\d+(\.\d+)?/);
         if (targetNum) {
-          objNum = TARGET_TO_OBJECTIVE_MAP[targetNum] || targetNum;
+          const mappedNum = TARGET_TO_OBJECTIVE_MAP[targetNum] || targetNum;
+          // Take only the first part (before decimal)
+          objNum = mappedNum.split('.')[0];
         }
       }
       
       if (!objNum) {
-        // Fallback: extract from objective text
-        objNum = extractNumber(obj.objective, /^\d+(\.\d+)?/);
+        // Fallback: extract from objective text and take only first part
+        const extractedNum = extractNumber(obj.objective, /^\d+(\.\d+)?/);
+        objNum = extractedNum ? extractedNum.split('.')[0] : '';
       }
       
       objNums.set(objKey, objNum || '');
@@ -237,7 +241,21 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                   <div className="space-y-4">
                     {sortedObjectives.map((objective, objIndex) => {
                       const objNum = getObjNum(pillar.pillar, objective.objective);
-                      const objText = objective.objective.replace(/^\d+(\.\d+)?\s*/, '') || objective.objective;
+                      // Extract full number prefix and replace with just first number
+                      // e.g., "1.1 تعزيز..." -> "1 تعزيز..."
+                      let objText = objective.objective.trim();
+                      const fullNumMatch = objText.match(/^(\d+(\.\d+)?)\s*/);
+                      if (fullNumMatch && objNum) {
+                        // Remove the full number prefix and prepend just the first number
+                        objText = objText.replace(/^\d+(\.\d+)?\s*/, '').trim();
+                        objText = `${objNum} ${objText}`;
+                      } else if (!fullNumMatch) {
+                        // No number prefix, use as is
+                        objText = objText;
+                      } else {
+                        // Has number prefix but couldn't extract objNum, just remove prefix
+                        objText = objText.replace(/^\d+(\.\d+)?\s*/, '').trim();
+                      }
                       
                       // Sort targets by their numbers
                       const sortedTargets = [...objective.targets].sort((a, b) => {
