@@ -156,9 +156,11 @@ export default function MEKPIFormModal({
         onKeyDown={handleKeyDown}
       >
         <DialogHeader>
-          <DialogTitle>Add M&E KPI</DialogTitle>
+          <DialogTitle>{initialData?.id ? 'Edit M&E KPI' : 'Add M&E KPI'}</DialogTitle>
           <DialogDescription>
-            Create a new M&E KPI for this objective. Fill in all required fields.
+            {initialData?.id 
+              ? 'Update the M&E KPI. Modify the fields as needed.'
+              : 'Create a new M&E KPI for this objective. Fill in all required fields.'}
           </DialogDescription>
         </DialogHeader>
 

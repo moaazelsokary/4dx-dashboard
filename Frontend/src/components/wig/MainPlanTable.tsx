@@ -14,7 +14,8 @@ import BidirectionalText from '@/components/ui/BidirectionalText';
 import { createMainObjective, updateMainObjective, deleteMainObjective } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import type { MainPlanObjective } from '@/types/wig';
-import { Edit2, Save, X, Trash2, Plus, Table2, Sparkles, Filter, Search } from 'lucide-react';
+import { Edit2, Trash2, Plus, Table2, Sparkles, Filter, Search } from 'lucide-react';
+import MainPlanObjectiveFormModal from '@/components/wig/MainPlanObjectiveFormModal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -99,17 +100,10 @@ function generateNumbers(objectives: MainPlanObjective[]): Map<number, { objNum:
 }
 
 export default function MainPlanTable({ objectives, onUpdate, readOnly = false }: MainPlanTableProps) {
-  const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
-  const [editData, setEditData] = useState<Partial<MainPlanObjective>>({});
-  const [newData, setNewData] = useState<Partial<MainPlanObjective>>({
-    pillar: '',
-    objective: '',
-    target: '',
-    kpi: '',
-    annual_target: 0,
-  });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [modalInitialData, setModalInitialData] = useState<Partial<MainPlanObjective> | undefined>(undefined);
 
   // Filter states for Excel-like filtering
   const [filters, setFilters] = useState<{
@@ -132,39 +126,9 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
   const numbers = generateNumbers(objectives);
 
   const startEdit = (obj: MainPlanObjective) => {
-    setEditingId(obj.id);
-    setEditData({ ...obj });
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditData({});
-  };
-
-  const saveEdit = async (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    if (!editingId) return;
-
-    try {
-      const updated = await updateMainObjective(editingId, editData);
-      toast({
-        title: 'Success',
-        description: 'Objective updated successfully',
-      });
-      setEditingId(null);
-      setEditData({});
-      // Refresh data without showing loading spinner
-      onUpdate();
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: 'Failed to update objective',
-        variant: 'destructive',
-      });
-    }
+    setModalInitialData(obj);
+    setModalMode('edit');
+    setIsModalOpen(true);
   };
 
   const handleDelete = async () => {
@@ -187,45 +151,44 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
     }
   };
 
-  const handleAdd = async () => {
-    if (!newData.pillar || !newData.objective || !newData.target || !newData.kpi || newData.annual_target === undefined || newData.annual_target === null) {
-      toast({
-        title: 'Error',
-        description: 'Please fill all fields',
-        variant: 'destructive',
-      });
-      return;
-    }
+  const handleAdd = () => {
+    setModalInitialData(undefined);
+    setModalMode('add');
+    setIsModalOpen(true);
+  };
 
+  const handleModalSave = async (data: Partial<MainPlanObjective>) => {
     try {
-      await createMainObjective({
-        pillar: newData.pillar!,
-        objective: newData.objective!,
-        target: newData.target!,
-        kpi: newData.kpi!,
-        annual_target: parseFloat(newData.annual_target!.toString()) || 0,
-      });
-      toast({
-        title: 'Success',
-        description: 'Objective created successfully',
-      });
-      setIsAdding(false);
-      setNewData({
-        pillar: '',
-        objective: '',
-        target: '',
-        kpi: '',
-        annual_target: 0,
-      });
+      if (modalMode === 'edit' && modalInitialData?.id) {
+        await updateMainObjective(modalInitialData.id, data);
+        toast({
+          title: 'Success',
+          description: 'Objective updated successfully',
+        });
+      } else {
+        await createMainObjective({
+          pillar: data.pillar!,
+          objective: data.objective!,
+          target: data.target!,
+          kpi: data.kpi!,
+          annual_target: data.annual_target || 0,
+        });
+        toast({
+          title: 'Success',
+          description: 'Objective created successfully',
+        });
+      }
+      setIsModalOpen(false);
+      setModalInitialData(undefined);
       onUpdate();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create objective';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save objective';
       toast({
         title: 'Error',
         description: errorMessage,
         variant: 'destructive',
       });
-      console.error('Error creating objective:', err);
+      throw err; // Re-throw to let modal handle it
     }
   };
 
@@ -506,7 +469,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
         <div className="mb-6">
           <Button 
             type="button"
-            onClick={() => setIsAdding(true)}
+            onClick={handleAdd}
             className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200"
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -593,149 +556,6 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
               </TableRow>
             </TableHeader>
           <TableBody>
-            {isAdding && (
-              <TableRow
-                onKeyDownCapture={(e) => {
-                  // Stop propagation to prevent table navigation when typing dots in number input fields
-                  // Don't prevent default - let the browser type the character naturally
-                  if (e.key === '.' && e.target instanceof HTMLInputElement) {
-                    const input = e.target as HTMLInputElement;
-                    // Only handle if it's a Target # or KPI # input (check by aria-label or placeholder)
-                    if (input.getAttribute('aria-label')?.includes('number') || 
-                        input.placeholder?.match(/^\d+\.\d+/)) {
-                      e.stopPropagation();
-                      e.stopImmediatePropagation();
-                    }
-                  }
-                }}
-              >
-                <TableCell>
-                  <Select
-                    value={newData.pillar || ''}
-                    onValueChange={(value) => setNewData({ ...newData, pillar: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Pillar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Strategic Themes">Strategic Themes</SelectItem>
-                      <SelectItem value="Contributors">Contributors</SelectItem>
-                      <SelectItem value="Strategic Enablers">Strategic Enablers</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Selector
-                    options={uniqueObjectives}
-                    value={newData.objective || ''}
-                    onValueChange={(value) => setNewData({ ...newData, objective: value })}
-                    placeholder="Select or type objective..."
-                    allowCustom={true}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={extractNumber(newData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
-                    onChange={(e) => {
-                      // Allow dots in the number (e.g., 1.2)
-                      const num = e.target.value.replace(/[^\d.]/g, '');
-                      const currentTarget = newData.target || '';
-                      const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                      setNewData({ ...newData, target: num ? `${num} ${targetText}` : targetText });
-                    }}
-                    onKeyDown={(e) => {
-                      // Stop propagation to prevent table navigation, but allow the dot to be typed
-                      if (e.key === '.') {
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
-                        // Don't prevent default - let browser type the dot naturally
-                      }
-                    }}
-                    onBeforeInput={(e) => {
-                      // Prevent table navigation when typing dots
-                      if (e.data === '.') {
-                        e.stopPropagation();
-                      }
-                    }}
-                    placeholder="1.2"
-                    className="w-20"
-                    aria-label="Target number"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Selector
-                    options={uniqueTargets}
-                    value={newData.target?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
-                    onValueChange={(value) => {
-                      const num = extractNumber(newData.target || '', /^\d+(\.\d+)*(\.\d+)?/);
-                      setNewData({ ...newData, target: num ? `${num} ${value}` : value });
-                    }}
-                    placeholder="Select or type target..."
-                    allowCustom={true}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={extractNumber(newData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
-                    onChange={(e) => {
-                      // Allow dots in the number (e.g., 1.1.3)
-                      const num = e.target.value.replace(/[^\d.]/g, '');
-                      const currentKpi = newData.kpi || '';
-                      const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                      setNewData({ ...newData, kpi: num ? `${num} ${kpiText}` : kpiText });
-                    }}
-                    onKeyDown={(e) => {
-                      // Stop propagation to prevent table navigation, but allow the dot to be typed
-                      if (e.key === '.') {
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
-                        // Don't prevent default - let browser type the dot naturally
-                      }
-                    }}
-                    onBeforeInput={(e) => {
-                      // Prevent table navigation when typing dots
-                      if (e.data === '.') {
-                        e.stopPropagation();
-                      }
-                    }}
-                    placeholder="1.1.3"
-                    className="w-20"
-                    aria-label="KPI number"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={newData.kpi?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
-                    onChange={(e) => {
-                      const num = extractNumber(newData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/);
-                      setNewData({ ...newData, kpi: num ? `${num} ${e.target.value}` : e.target.value });
-                    }}
-                    placeholder="KPI"
-                    aria-label="KPI description"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    value={newData.annual_target || ''}
-                    onChange={(e) => setNewData({ ...newData, annual_target: parseFloat(e.target.value) || 0 })}
-                    placeholder="Annual Target"
-                    className="text-right"
-                    aria-label="Annual target"
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" size="sm" onClick={handleAdd} aria-label="Save new objective">
-                      <Save className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => setIsAdding(false)} aria-label="Cancel adding objective">
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
 
             {filteredObjectives
               .map((obj) => {
@@ -803,135 +623,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                       }
                     }}
                   >
-                    {editingId === obj.id ? (
                     <>
-                      <TableCell>
-                        <Select
-                          value={editData.pillar || ''}
-                          onValueChange={(value) => setEditData({ ...editData, pillar: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Pillar" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Strategic Themes">Strategic Themes</SelectItem>
-                            <SelectItem value="Contributors">Contributors</SelectItem>
-                            <SelectItem value="Strategic Enablers">Strategic Enablers</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Selector
-                          options={uniqueObjectives}
-                          value={editData.objective || ''}
-                          onValueChange={(value) => setEditData({ ...editData, objective: value })}
-                          placeholder="Select or type objective..."
-                          allowCustom={true}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={extractNumber(editData.target || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
-                          onChange={(e) => {
-                            // Allow dots in the number (e.g., 1.2)
-                            const num = e.target.value.replace(/[^\d.]/g, '');
-                            const currentTarget = editData.target || '';
-                            const targetText = currentTarget.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                            setEditData({ ...editData, target: num ? `${num} ${targetText}` : targetText });
-                          }}
-                          onKeyDown={(e) => {
-                            // Stop propagation to prevent table navigation, but allow the dot to be typed
-                            if (e.key === '.') {
-                              e.stopPropagation();
-                              e.stopImmediatePropagation();
-                              // Don't prevent default - let browser type the dot naturally
-                            }
-                          }}
-                          onBeforeInput={(e) => {
-                            // Prevent table navigation when typing dots
-                            if (e.data === '.') {
-                              e.stopPropagation();
-                            }
-                          }}
-                          className="w-20"
-                          placeholder="1.2"
-                          aria-label="Edit target number"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Selector
-                          options={uniqueTargets}
-                          value={editData.target?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
-                          onValueChange={(value) => {
-                            const num = extractNumber(editData.target || '', /^\d+(\.\d+)*(\.\d+)?/);
-                            setEditData({ ...editData, target: num ? `${num} ${value}` : value });
-                          }}
-                          placeholder="Select or type target..."
-                          allowCustom={true}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={extractNumber(editData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/) || ''}
-                          onChange={(e) => {
-                            // Allow dots in the number (e.g., 1.1.3)
-                            const num = e.target.value.replace(/[^\d.]/g, '');
-                            const currentKpi = editData.kpi || '';
-                            const kpiText = currentKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '');
-                            setEditData({ ...editData, kpi: num ? `${num} ${kpiText}` : kpiText });
-                          }}
-                          onKeyDown={(e) => {
-                            // Stop propagation to prevent table navigation, but allow the dot to be typed
-                            if (e.key === '.') {
-                              e.stopPropagation();
-                              e.stopImmediatePropagation();
-                              // Don't prevent default - let browser type the dot naturally
-                            }
-                          }}
-                          onBeforeInput={(e) => {
-                            // Prevent table navigation when typing dots
-                            if (e.data === '.') {
-                              e.stopPropagation();
-                            }
-                          }}
-                          className="w-20"
-                          placeholder="1.1.3"
-                          aria-label="Edit KPI number"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={editData.kpi?.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '') || ''}
-                          onChange={(e) => {
-                            const num = extractNumber(editData.kpi || '', /^\d+(\.\d+)*(\.\d+)?/);
-                            setEditData({ ...editData, kpi: num ? `${num} ${e.target.value}` : e.target.value });
-                          }}
-                          placeholder="KPI"
-                          aria-label="Edit KPI description"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={editData.annual_target || ''}
-                          onChange={(e) => setEditData({ ...editData, annual_target: parseFloat(e.target.value) || 0 })}
-                          className="text-right"
-                          placeholder="Annual Target"
-                          aria-label="Edit annual target"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button type="button" size="sm" onClick={saveEdit} aria-label="Save changes">
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={cancelEdit} aria-label="Cancel editing">
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </>
-                  ) : (
                     <>
                       <TableCell className="font-semibold">
                         <Badge variant="outline" className="border-primary/30 bg-primary/5">
@@ -1016,6 +708,15 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Main Plan Objective Form Modal */}
+      <MainPlanObjectiveFormModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        mode={modalMode}
+        initialData={modalInitialData}
+        onSave={handleModalSave}
+      />
     </>
   );
 }
