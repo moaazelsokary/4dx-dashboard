@@ -206,10 +206,12 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
   // Calculate unique values for filters and combobox options
   const uniquePillars = Array.from(new Set(objectives.map(obj => obj.pillar))).sort();
   const uniqueObjectives = Array.from(new Set(objectives.map(obj => obj.objective))).sort();
-  // Updated regex to allow three-level numbering like 7.1.7
-  const uniqueTargets = Array.from(new Set(
+  // For filter: extract text without number prefix
+  const uniqueTargetsForFilter = Array.from(new Set(
     objectives.map(obj => obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim())
   )).filter(Boolean).sort();
+  // For modal selector: use full target values (with number prefixes)
+  const uniqueTargets = Array.from(new Set(objectives.map(obj => obj.target))).filter(Boolean).sort();
   const uniqueKPIs = Array.from(new Set(
     objectives.map(obj => obj.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim())
   )).filter(Boolean).sort();
@@ -516,7 +518,7 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                     <ExcelFilter
                       filterId="main-target"
                       column="Target"
-                      uniqueValues={uniqueTargets}
+                      uniqueValues={uniqueTargetsForFilter}
                       selectedValues={filters.target}
                       onToggle={(value) => toggleFilterValue('target', value)}
                       onClear={() => clearFilter('target')}
@@ -712,6 +714,8 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
         mode={modalMode}
         initialData={modalInitialData}
         onSave={handleModalSave}
+        uniqueObjectives={uniqueObjectives}
+        uniqueTargets={uniqueTargets}
       />
     </>
   );

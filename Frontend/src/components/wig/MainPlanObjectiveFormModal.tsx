@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
+import { Selector } from '@/components/ui/selector';
 import type { MainPlanObjective } from '@/types/wig';
 
 interface MainPlanObjectiveFormModalProps {
@@ -20,6 +21,8 @@ interface MainPlanObjectiveFormModalProps {
   mode: 'add' | 'edit';
   initialData?: Partial<MainPlanObjective>;
   onSave: (data: Partial<MainPlanObjective>) => Promise<void>;
+  uniqueObjectives?: string[];
+  uniqueTargets?: string[];
 }
 
 export default function MainPlanObjectiveFormModal({
@@ -28,6 +31,8 @@ export default function MainPlanObjectiveFormModal({
   mode,
   initialData,
   onSave,
+  uniqueObjectives = [],
+  uniqueTargets = [],
 }: MainPlanObjectiveFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -171,11 +176,11 @@ export default function MainPlanObjectiveFormModal({
               <Label htmlFor="objective">
                 Objective <span className="text-destructive">*</span>
               </Label>
-              <Textarea
-                id="objective"
+              <Selector
+                options={uniqueObjectives}
                 value={objective}
-                onChange={(e) => {
-                  setObjective(e.target.value);
+                onValueChange={(value) => {
+                  setObjective(value);
                   if (errors.objective) {
                     setErrors((prev) => {
                       const next = { ...prev };
@@ -184,9 +189,8 @@ export default function MainPlanObjectiveFormModal({
                     });
                   }
                 }}
-                placeholder="Enter objective"
-                className={errors.objective ? 'border-destructive' : ''}
-                rows={3}
+                placeholder="Select or type objective..."
+                allowCustom={true}
               />
               {errors.objective && (
                 <p className="text-sm text-destructive">{errors.objective}</p>
@@ -198,11 +202,11 @@ export default function MainPlanObjectiveFormModal({
               <Label htmlFor="target">
                 Target <span className="text-destructive">*</span>
               </Label>
-              <Textarea
-                id="target"
+              <Selector
+                options={uniqueTargets}
                 value={target}
-                onChange={(e) => {
-                  setTarget(e.target.value);
+                onValueChange={(value) => {
+                  setTarget(value);
                   if (errors.target) {
                     setErrors((prev) => {
                       const next = { ...prev };
@@ -211,9 +215,8 @@ export default function MainPlanObjectiveFormModal({
                     });
                   }
                 }}
-                placeholder="Enter target"
-                className={errors.target ? 'border-destructive' : ''}
-                rows={2}
+                placeholder="Select or type target..."
+                allowCustom={true}
               />
               {errors.target && (
                 <p className="text-sm text-destructive">{errors.target}</p>
