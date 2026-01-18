@@ -205,7 +205,41 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
 
   // Calculate unique values for filters and combobox options
   const uniquePillars = Array.from(new Set(objectives.map(obj => obj.pillar))).sort();
-  const uniqueObjectives = Array.from(new Set(objectives.map(obj => obj.objective))).sort();
+  
+  // Custom sort for objectives: single digits (1-9) before decimals (1.1, 1.2, etc.)
+  const uniqueObjectives = Array.from(new Set(objectives.map(obj => obj.objective))).sort((a, b) => {
+    // Extract numeric prefix from objective (e.g., "1" from "1 Objective text" or "1.1" from "1.1 Objective text")
+    const extractNum = (text: string): { num: number; isDecimal: boolean; parts: number[] } => {
+      const match = text.match(/^(\d+(?:\.\d+)*)/);
+      if (!match) return { num: 0, isDecimal: false, parts: [] };
+      const numStr = match[1];
+      const parts = numStr.split('.').map(Number);
+      const isDecimal = parts.length > 1;
+      return { num: parts[0], isDecimal, parts };
+    };
+    
+    const aNum = extractNum(a);
+    const bNum = extractNum(b);
+    
+    // Single digits (1-9) come before decimals (1.1, 1.2, etc.)
+    if (!aNum.isDecimal && bNum.isDecimal) return -1;
+    if (aNum.isDecimal && !bNum.isDecimal) return 1;
+    
+    // Both are single digits or both are decimals - sort numerically
+    if (aNum.parts.length === 0 && bNum.parts.length === 0) return a.localeCompare(b);
+    if (aNum.parts.length === 0) return 1;
+    if (bNum.parts.length === 0) return -1;
+    
+    // Compare parts numerically
+    for (let i = 0; i < Math.max(aNum.parts.length, bNum.parts.length); i++) {
+      const aVal = aNum.parts[i] || 0;
+      const bVal = bNum.parts[i] || 0;
+      if (aVal !== bVal) return aVal - bVal;
+    }
+    
+    // If numbers are equal, sort alphabetically by text
+    return a.localeCompare(b);
+  });
   // For filter: extract text without number prefix
   const uniqueTargetsForFilter = Array.from(new Set(
     objectives.map(obj => obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim())
