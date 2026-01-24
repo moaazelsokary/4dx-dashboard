@@ -33,7 +33,8 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [selectedKPI, setSelectedKPI] = useState<string>('');
   const [selectedDepartment, setSelectedDepartment] = useState<number | null>(null);
-  const [excludeMonthly, setExcludeMonthly] = useState(false);
+  const [excludeMonthlyTarget, setExcludeMonthlyTarget] = useState(false);
+  const [excludeMonthlyActual, setExcludeMonthlyActual] = useState(false);
   const [excludeAnnualTarget, setExcludeAnnualTarget] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userSelectOpen, setUserSelectOpen] = useState(false);
@@ -116,7 +117,8 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
       }
       setSelectedKPI(lock.kpi || '');
       setSelectedDepartment(lock.department_id || null);
-      setExcludeMonthly(lock.exclude_monthly || false);
+      setExcludeMonthlyTarget(lock.exclude_monthly_target || false);
+      setExcludeMonthlyActual(lock.exclude_monthly_actual || false);
       setExcludeAnnualTarget(lock.exclude_annual_target || false);
     } else if (open && !lock) {
       // Reset form for new lock
@@ -125,7 +127,8 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
       setSelectedUsers([]);
       setSelectedKPI('');
       setSelectedDepartment(null);
-      setExcludeMonthly(false);
+      setExcludeMonthlyTarget(false);
+      setExcludeMonthlyActual(false);
       setExcludeAnnualTarget(false);
     }
   }, [lock, open]);
@@ -140,7 +143,8 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
         lock_type: 'all_department_objectives',
         scope_type: scopeType,
         user_ids: selectedUsers.length > 0 ? selectedUsers : undefined,
-        exclude_monthly: excludeMonthly,
+        exclude_monthly_target: excludeMonthlyTarget,
+        exclude_monthly_actual: excludeMonthlyActual,
         exclude_annual_target: excludeAnnualTarget,
       };
       if (lock?.id) {
@@ -372,12 +376,22 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      id="exclude-monthly"
-                      checked={excludeMonthly}
-                      onCheckedChange={(checked) => setExcludeMonthly(checked === true)}
+                      id="exclude-monthly-target"
+                      checked={excludeMonthlyTarget}
+                      onCheckedChange={(checked) => setExcludeMonthlyTarget(checked === true)}
                     />
-                    <Label htmlFor="exclude-monthly" className="font-normal cursor-pointer">
-                      Exclude Monthly Table (monthly_target and monthly_actual remain unlocked)
+                    <Label htmlFor="exclude-monthly-target" className="font-normal cursor-pointer">
+                      Exclude Monthly Target (monthly_target remains unlocked for Direct & In direct types)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="exclude-monthly-actual"
+                      checked={excludeMonthlyActual}
+                      onCheckedChange={(checked) => setExcludeMonthlyActual(checked === true)}
+                    />
+                    <Label htmlFor="exclude-monthly-actual" className="font-normal cursor-pointer">
+                      Exclude Monthly Actual (monthly_actual remains unlocked for Direct type only)
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -387,14 +401,14 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                       onCheckedChange={(checked) => setExcludeAnnualTarget(checked === true)}
                     />
                     <Label htmlFor="exclude-annual" className="font-normal cursor-pointer">
-                      Exclude Annual Target (activity_target remains unlocked)
+                      Exclude Annual Target (activity_target remains unlocked for Direct & In direct types)
                     </Label>
                   </div>
                 </div>
-                {(excludeMonthly || excludeAnnualTarget) && (
+                {(excludeMonthlyTarget || excludeMonthlyActual || excludeAnnualTarget) && (
                   <p className="text-sm text-muted-foreground">
                     This will lock other fields in department_objectives (activity, responsible_person, mov, etc.) 
-                    but not the excluded fields.
+                    but not the excluded fields. Note: monthly_actual only applies to Direct type objectives.
                   </p>
                 )}
               </div>

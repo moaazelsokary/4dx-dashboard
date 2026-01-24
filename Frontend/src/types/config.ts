@@ -12,7 +12,8 @@ export interface FieldLock {
   user_ids: number[] | null; // JSON array of user IDs
   kpi: string | null;
   department_id: number | null;
-  exclude_monthly: boolean;
+  exclude_monthly_target: boolean; // Separate control for monthly target
+  exclude_monthly_actual: boolean; // Separate control for monthly actual
   exclude_annual_target: boolean;
   is_active: boolean;
   created_by: number;
@@ -85,8 +86,9 @@ export interface LockRuleFormData {
   user_ids?: number[]; // For specific_users or all_department_objectives
   kpi?: string; // For specific_kpi or department_kpi
   department_id?: number; // For department_kpi
-  exclude_monthly?: boolean; // For all_department_objectives
-  exclude_annual_target?: boolean; // For all_department_objectives
+  exclude_monthly_target?: boolean; // For all_department_objectives - exclude monthly target
+  exclude_monthly_actual?: boolean; // For all_department_objectives - exclude monthly actual
+  exclude_annual_target?: boolean; // For all_department_objectives - exclude annual target
 }
 
 export interface LogFilters {
