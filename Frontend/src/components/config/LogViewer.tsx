@@ -19,14 +19,27 @@ export default function LogViewer() {
   const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['activity-logs', filters],
-    queryFn: () => getLogs(filters),
+    queryFn: async () => {
+      console.log('[LogViewer] Fetching logs with filters:', filters);
+      const result = await getLogs(filters);
+      console.log('[LogViewer] Received logs:', result);
+      return result;
+    },
     refetchInterval: 10000, // Poll every 10 seconds for real-time updates
   });
 
   const logs = data?.data || [];
   const pagination = data?.pagination;
+
+  console.log('[LogViewer] Current state:', {
+    isLoading,
+    hasError: !!error,
+    error: error?.message,
+    logsCount: logs.length,
+    data,
+  });
 
   const handleExport = async () => {
     try {

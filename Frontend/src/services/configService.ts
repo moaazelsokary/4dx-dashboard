@@ -130,7 +130,11 @@ export async function getLogs(filters?: LogFilters): Promise<{ data: ActivityLog
     if (filters.limit) params.append('limit', filters.limit.toString());
   }
   const queryString = params.toString();
-  return fetchAPI<{ data: ActivityLog[]; pagination: any }>(`/logs${queryString ? `?${queryString}` : ''}`);
+  const endpoint = `/logs${queryString ? `?${queryString}` : ''}`;
+  console.log('[configService] Calling logs API:', `${API_BASE_URL}${endpoint}`);
+  const result = await fetchAPI<{ data: ActivityLog[]; pagination: any }>(endpoint);
+  console.log('[configService] Logs API response:', result);
+  return result;
 }
 
 export async function exportLogs(filters?: Omit<LogFilters, 'page' | 'limit'>): Promise<Blob> {
