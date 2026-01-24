@@ -678,6 +678,8 @@ const handler = rateLimiter('general')(
           const limit = parseInt(params.limit || '50');
           const offset = (page - 1) * limit;
 
+          console.log('[Logs API] Request received:', { params, page, limit, offset });
+
           const request = pool.request();
           request.input('user_id', sql.Int, params.user_id ? parseInt(params.user_id) : null);
           request.input('action_type', sql.NVarChar, params.action_type || null);
@@ -700,36 +702,47 @@ const handler = rateLimiter('general')(
             whereClause += ` AND (username LIKE '%' + @search + '%' OR kpi LIKE '%' + @search + '%' OR department_name LIKE '%' + @search + '%')`;
           }
 
-          const result = await request.query(`
+          console.log('[Logs API] Where clause:', whereClause);
+
+          const query = `
             SELECT * FROM activity_logs
             WHERE ${whereClause}
             ORDER BY created_at DESC
             OFFSET @offset ROWS
             FETCH NEXT @limit ROWS ONLY
-          `);
+          `;
+          console.log('[Logs API] Executing query:', query);
+
+          const result = await request.query(query);
+          console.log('[Logs API] Query result:', { rowCount: result.recordset.length });
 
           const countResult = await request.query(`
             SELECT COUNT(*) as total FROM activity_logs WHERE ${whereClause}
           `);
+          console.log('[Logs API] Total count:', countResult.recordset[0].total);
 
           const logs = result.recordset.map(log => ({
             ...log,
             metadata: log.metadata ? JSON.parse(log.metadata) : null
           }));
 
+          const response = {
+            success: true,
+            data: logs,
+            pagination: {
+              page,
+              limit,
+              total: countResult.recordset[0].total,
+              totalPages: Math.ceil(countResult.recordset[0].total / limit)
+            }
+          };
+
+          console.log('[Logs API] Sending response:', { logsCount: logs.length, pagination: response.pagination });
+
           return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({
-              success: true,
-              data: logs,
-              pagination: {
-                page,
-                limit,
-                total: countResult.recordset[0].total,
-                totalPages: Math.ceil(countResult.recordset[0].total / limit)
-              }
-            })
+            body: JSON.stringify(response)
           };
         }
 
