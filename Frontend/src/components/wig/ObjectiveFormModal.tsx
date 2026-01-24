@@ -236,18 +236,11 @@ export default function ObjectiveFormModal({
 
     // Check for locks before saving (for edit mode, applies to both Direct and In direct)
     if (mode === 'edit') {
-      if (isTargetLocked) {
+      if (isTargetLocked || isAllFieldsLocked) {
+        const lockInfo = isTargetLocked ? targetLockInfo : allFieldsLockInfo;
         toast({
           title: 'Cannot Save',
-          description: 'The target field is locked and cannot be modified.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (isAllFieldsLocked) {
-        toast({
-          title: 'Cannot Save',
-          description: 'One or more fields are locked and cannot be modified.',
+          description: lockInfo?.lock_reason || 'One or more fields are locked and cannot be modified.',
           variant: 'destructive',
         });
         return;
@@ -313,12 +306,44 @@ export default function ObjectiveFormModal({
           <div className="space-y-2" data-field="kpi">
             <Label htmlFor="kpi-selector">
               KPI <span className="text-destructive">*</span>
+              {mode === 'edit' && isAllFieldsLocked && (
+                <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+              )}
             </Label>
-            <KPISelector
-              value={kpis}
-              onValueChange={handleKPIChange}
-              placeholder="Select one or more KPIs"
-            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative">
+                    <KPISelector
+                      value={kpis}
+                      onValueChange={(value) => {
+                        if (mode === 'edit' && isAllFieldsLocked) {
+                          toast({
+                            title: 'Field Locked',
+                            description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+                        handleKPIChange(value);
+                      }}
+                      placeholder="Select one or more KPIs"
+                      disabled={mode === 'edit' && isAllFieldsLocked}
+                    />
+                    {mode === 'edit' && isAllFieldsLocked && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+                        <LockIcon className="w-4 h-4 text-orange-600" />
+                      </div>
+                    )}
+                  </div>
+                </TooltipTrigger>
+                {mode === 'edit' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                  <TooltipContent>
+                    <p>{allFieldsLockInfo.lock_reason}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
             {errors.kpi && (
               <p className="text-sm text-destructive">{errors.kpi}</p>
             )}
@@ -327,7 +352,11 @@ export default function ObjectiveFormModal({
           {/* Per-KPI Type Selection */}
           {kpis.length > 1 && (
             <div className="space-y-2">
-              <Label>Type for each KPI <span className="text-destructive">*</span></Label>
+              <Label>Type for each KPI <span className="text-destructive">*</span>
+                {mode === 'edit' && isAllFieldsLocked && (
+                  <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+                )}
+              </Label>
               <div className="space-y-3 p-4 border rounded-md bg-muted/50">
                 {kpis.map((kpi, index) => (
                   <div key={index} className="flex items-center gap-4" data-field={`kpiType_${index}`}>
@@ -336,20 +365,47 @@ export default function ObjectiveFormModal({
                         {kpi}
                       </p>
                     </div>
-                    <Select
-                      value={kpiTypes[index] || 'Direct'}
-                      onValueChange={(value: 'Direct' | 'In direct') => {
-                        setKpiTypes({ ...kpiTypes, [index]: value });
-                      }}
-                    >
-                      <SelectTrigger className="w-[150px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Direct">Direct</SelectItem>
-                        <SelectItem value="In direct">In direct</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="relative">
+                            <Select
+                              value={kpiTypes[index] || 'Direct'}
+                              onValueChange={(value: 'Direct' | 'In direct') => {
+                                if (mode === 'edit' && isAllFieldsLocked) {
+                                  toast({
+                                    title: 'Field Locked',
+                                    description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                                    variant: 'destructive',
+                                  });
+                                  return;
+                                }
+                                setKpiTypes({ ...kpiTypes, [index]: value });
+                              }}
+                              disabled={mode === 'edit' && isAllFieldsLocked}
+                            >
+                              <SelectTrigger className="w-[150px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Direct">Direct</SelectItem>
+                                <SelectItem value="In direct">In direct</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {mode === 'edit' && isAllFieldsLocked && (
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+                                <LockIcon className="w-4 h-4 text-orange-600" />
+                              </div>
+                            )}
+                          </div>
+                        </TooltipTrigger>
+                        {mode === 'edit' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                          <TooltipContent>
+                            <p>{allFieldsLockInfo.lock_reason}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                     {errors[`kpiType_${index}`] && (
                       <p className="text-sm text-destructive">{errors[`kpiType_${index}`]}</p>
                     )}
@@ -364,21 +420,51 @@ export default function ObjectiveFormModal({
             <div className="space-y-2" data-field="type">
               <Label htmlFor="type-selector">
                 Type <span className="text-destructive">*</span>
+                {mode === 'edit' && isAllFieldsLocked && (
+                  <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+                )}
               </Label>
-              <Select
-                value={kpiTypes[0] || 'Direct'}
-                onValueChange={(value: 'Direct' | 'In direct') => {
-                  setKpiTypes({ 0: value });
-                }}
-              >
-                <SelectTrigger id="type-selector">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Direct">Direct</SelectItem>
-                  <SelectItem value="In direct">In direct</SelectItem>
-                </SelectContent>
-              </Select>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative">
+                      <Select
+                        value={kpiTypes[0] || 'Direct'}
+                        onValueChange={(value: 'Direct' | 'In direct') => {
+                          if (mode === 'edit' && isAllFieldsLocked) {
+                            toast({
+                              title: 'Field Locked',
+                              description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          setKpiTypes({ 0: value });
+                        }}
+                        disabled={mode === 'edit' && isAllFieldsLocked}
+                      >
+                        <SelectTrigger id="type-selector">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Direct">Direct</SelectItem>
+                          <SelectItem value="In direct">In direct</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {mode === 'edit' && isAllFieldsLocked && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+                          <LockIcon className="w-4 h-4 text-orange-600" />
+                        </div>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  {mode === 'edit' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                    <TooltipContent>
+                      <p>{allFieldsLockInfo.lock_reason}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             </div>
           )}
 
@@ -442,7 +528,7 @@ export default function ObjectiveFormModal({
             <div className="space-y-2" data-field="activityTarget">
               <Label htmlFor="activity-target">
                 Target <span className="text-destructive">*</span>
-                {mode === 'edit' && isTargetLocked && (
+                {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
                   <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
                 )}
               </Label>
@@ -456,10 +542,12 @@ export default function ObjectiveFormModal({
                         value={activityTarget || ''}
                         onChange={(e) => {
                           // Check if locked before allowing edit (applies to both Direct and In direct)
-                          if (mode === 'edit' && isTargetLocked) {
+                          // Check both target lock and all_fields lock
+                          if (mode === 'edit' && (isTargetLocked || isAllFieldsLocked)) {
+                            const lockInfo = isTargetLocked ? targetLockInfo : allFieldsLockInfo;
                             toast({
                               title: 'Field Locked',
-                              description: targetLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                              description: lockInfo?.lock_reason || 'This field is locked and cannot be edited',
                               variant: 'destructive',
                             });
                             return;
@@ -469,21 +557,21 @@ export default function ObjectiveFormModal({
                         placeholder="Enter target value"
                         className={cn(
                           errors.activityTarget && 'border-destructive',
-                          mode === 'edit' && isTargetLocked && 'pr-10'
+                          mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && 'pr-10'
                         )}
-                        disabled={mode === 'edit' && isTargetLocked}
-                        readOnly={mode === 'edit' && isTargetLocked}
+                        disabled={mode === 'edit' && (isTargetLocked || isAllFieldsLocked)}
+                        readOnly={mode === 'edit' && (isTargetLocked || isAllFieldsLocked)}
                       />
-                      {mode === 'edit' && isTargetLocked && (
+                      {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
                         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
                           <LockIcon className="w-4 h-4 text-orange-600" />
                         </div>
                       )}
                     </div>
                   </TooltipTrigger>
-                  {mode === 'edit' && isTargetLocked && targetLockInfo?.lock_reason && (
+                  {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
                     <TooltipContent>
-                      <p>{targetLockInfo.lock_reason}</p>
+                      <p>{(isTargetLocked ? targetLockInfo : allFieldsLockInfo)?.lock_reason || 'This field is locked and cannot be edited'}</p>
                     </TooltipContent>
                   )}
                 </Tooltip>
