@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -54,33 +54,7 @@ export default function ObjectiveFormModal({
   const [mov, setMov] = useState('');
   const [responsibleSuggestions, setResponsibleSuggestions] = useState<string[]>([]);
   const [showResponsibleSuggestions, setShowResponsibleSuggestions] = useState(false);
-  const [objectiveType, setObjectiveType] = useState<'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '' | null>(null);
-
-  // Check lock status for target field (only if editing and type is Direct)
-  const { isLocked: isTargetLocked, lockInfo: targetLockInfo } = useLockStatus(
-    'target',
-    initialData?.id || null,
-    undefined,
-    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
-  );
-
-  // Check if ANY field is locked by "All Department Objectives" lock
-  // This covers activity, responsible_person, mov, and other fields
-  const { isLocked: isAllFieldsLocked, lockInfo: allFieldsLockInfo } = useLockStatus(
-    'all_fields',
-    initialData?.id || null,
-    undefined,
-    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
-  );
-
-  // Determine objective type from initialData
-  useEffect(() => {
-    if (open && initialData) {
-      const parsedTypes = parseTypes(initialData.type || '');
-      setObjectiveType((parsedTypes[0] || initialData.type || 'Direct') as any);
-    }
-  }, [open, initialData]);
-
+  
   // Parse KPI string to array
   const parseKPIs = (kpiStr: string | undefined): string[] => {
     if (!kpiStr) return [];
@@ -98,6 +72,31 @@ export default function ObjectiveFormModal({
     }
     return [typeStr];
   };
+
+  // Determine objective type directly from initialData using useMemo
+  // This ensures lock checks have the correct type from the start
+  const objectiveType = useMemo(() => {
+    if (!open || !initialData) return null;
+    const parsedTypes = parseTypes(initialData.type || '');
+    return (parsedTypes[0] || initialData.type || 'Direct') as 'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '';
+  }, [open, initialData]);
+
+  // Check lock status for target field (only if editing and type is Direct)
+  const { isLocked: isTargetLocked, lockInfo: targetLockInfo } = useLockStatus(
+    'target',
+    initialData?.id || null,
+    undefined,
+    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
+  );
+
+  // Check if ANY field is locked by "All Department Objectives" lock
+  // This covers activity, responsible_person, mov, and other fields
+  const { isLocked: isAllFieldsLocked, lockInfo: allFieldsLockInfo } = useLockStatus(
+    'all_fields',
+    initialData?.id || null,
+    undefined,
+    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
+  );
 
   // Initialize form data
   useEffect(() => {
