@@ -225,13 +225,19 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
         }
       }
 
+      // Build form data - explicitly set fields to null/undefined based on scope type
+      // This ensures old values are cleared when switching scope types
       const formData: LockRuleFormData = {
         lock_type: lockType.length === 1 ? lockType[0] : lockType,
         scope_type: scopeType,
-        user_ids: scopeType === 'specific_users' ? selectedUsers : undefined,
+        // Only include user_ids for specific_users scope
+        user_ids: scopeType === 'specific_users' ? selectedUsers : (scopeType === 'all_department_objectives' ? (selectedUsers.length > 0 ? selectedUsers : undefined) : undefined),
+        // Only include kpi for specific_kpi or department_kpi scopes
         kpi: (scopeType === 'specific_kpi' || scopeType === 'department_kpi') ? selectedKPI : undefined,
-        department_id: (scopeType === 'department_kpi' || scopeType === 'specific_objective') ? selectedDepartment || undefined : undefined,
-        department_objective_id: scopeType === 'specific_objective' ? selectedDepartmentObjective || undefined : undefined,
+        // Only include department_id for department_kpi or specific_objective scopes
+        department_id: (scopeType === 'department_kpi' || scopeType === 'specific_objective') ? (selectedDepartment || undefined) : undefined,
+        // Only include department_objective_id for specific_objective scope
+        department_objective_id: scopeType === 'specific_objective' ? (selectedDepartmentObjective || undefined) : undefined,
       };
 
       if (lock?.id) {
