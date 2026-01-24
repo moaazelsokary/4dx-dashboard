@@ -132,9 +132,29 @@ export async function getLogs(filters?: LogFilters): Promise<{ data: ActivityLog
   const queryString = params.toString();
   const endpoint = `/logs${queryString ? `?${queryString}` : ''}`;
   console.log('[configService] Calling logs API:', `${API_BASE_URL}${endpoint}`);
-  const result = await fetchAPI<{ data: ActivityLog[]; pagination: any }>(endpoint);
-  console.log('[configService] Logs API response:', result);
-  return result;
+  
+  // Don't use fetchAPI helper because we need the full response with pagination
+  const authHeaders = getAuthHeader();
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || error.message || `HTTP error! status: ${response.status}`);
+  }
+
+  const fullResponse = await response.json();
+  console.log('[configService] Logs API full response:', fullResponse);
+  
+  // Return the entire response structure (which has data and pagination)
+  return {
+    data: fullResponse.data || [],
+    pagination: fullResponse.pagination || {}
+  };
 }
 
 export async function exportLogs(filters?: Omit<LogFilters, 'page' | 'limit'>): Promise<Blob> {
