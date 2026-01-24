@@ -279,7 +279,7 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
 const handler = rateLimiter('general')(
   authMiddleware({
     optional: false, // All config endpoints require auth
-    requiredRoles: ['Admin', 'CEO'], // Only Admin and CEO can access
+    requiredRoles: [], // Role check will be done per-endpoint below
   })(async (event, context) => {
     const headers = {
       'Access-Control-Allow-Origin': '*',
@@ -308,6 +308,24 @@ const handler = rateLimiter('general')(
       const resource = pathParts[0]; // 'locks', 'logs', or 'permissions'
       const action = pathParts[1]; // 'check', 'check-batch', 'export', etc.
       const id = pathParts[2]; // ID parameter
+
+      // Lock checking endpoints are available to ALL authenticated users
+      const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch');
+      
+      // All other endpoints require Admin or CEO role
+      if (!isLockCheckEndpoint) {
+        const isAdmin = user.role === 'Admin' || user.role === 'CEO';
+        if (!isAdmin) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              error: 'Access denied. Admin or CEO role required.'
+            })
+          };
+        }
+      }
 
       // ========== LOCK MANAGEMENT ENDPOINTS ==========
       if (resource === 'locks') {
