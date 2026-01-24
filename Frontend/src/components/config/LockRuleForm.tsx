@@ -68,10 +68,13 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
 
   const createMutation = useMutation({
     mutationFn: (data: LockRuleFormData) => createLock(data),
-    onSuccess: () => {
-      // Invalidate all lock status queries to force immediate refetch
-      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
+    onSuccess: async () => {
+      // Invalidate and refetch all lock status queries immediately for live updates
+      await queryClient.invalidateQueries({ queryKey: ['lockStatus'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['batchLockStatus'], refetchType: 'active' });
+      // Force refetch all active lock status queries
+      await queryClient.refetchQueries({ queryKey: ['lockStatus'], type: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['batchLockStatus'], type: 'active' });
       toast({
         title: 'Success',
         description: 'Lock rule created successfully',
@@ -90,10 +93,13 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<LockRuleFormData> }) => updateLock(id, data),
-    onSuccess: () => {
-      // Invalidate all lock status queries to force immediate refetch for live updates
-      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
+    onSuccess: async () => {
+      // Invalidate and refetch all lock status queries immediately for live updates
+      await queryClient.invalidateQueries({ queryKey: ['lockStatus'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['batchLockStatus'], refetchType: 'active' });
+      // Force refetch all active lock status queries
+      await queryClient.refetchQueries({ queryKey: ['lockStatus'], type: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['batchLockStatus'], type: 'active' });
       toast({
         title: 'Success',
         description: 'Lock rule updated successfully',
@@ -146,13 +152,14 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
     // Validation
     if (scopeType === 'all_department_objectives') {
       // For all_department_objectives, lock_type is automatically set
+      // Always explicitly send exclusion values (even if false) to ensure they update correctly
       const formData: LockRuleFormData = {
         lock_type: 'all_department_objectives',
         scope_type: scopeType,
         user_ids: selectedUsers.length > 0 ? selectedUsers : undefined,
-        exclude_monthly_target: excludeMonthlyTarget,
-        exclude_monthly_actual: excludeMonthlyActual,
-        exclude_annual_target: excludeAnnualTarget,
+        exclude_monthly_target: excludeMonthlyTarget ?? false,
+        exclude_monthly_actual: excludeMonthlyActual ?? false,
+        exclude_annual_target: excludeAnnualTarget ?? false,
       };
       if (lock?.id) {
         updateMutation.mutate({ id: lock.id, data: formData });
