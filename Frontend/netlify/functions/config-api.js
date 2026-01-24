@@ -248,8 +248,12 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
                 matches = true;
                 lockReason = `Locked by All Department Objectives`;
               }
+            } else if (fieldType === 'all_fields') {
+              // all_fields represents other editable fields (activity, responsible_person, mov, etc.)
+              // These are always locked by "All Department Objectives" regardless of exclusions
+              matches = true;
+              lockReason = `Locked by All Department Objectives`;
             }
-            // Note: Other fields in department_objectives table would also be locked, but we only check target/monthly fields here
           }
           break;
       }

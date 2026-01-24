@@ -64,6 +64,15 @@ export default function ObjectiveFormModal({
     open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
   );
 
+  // Check if ANY field is locked by "All Department Objectives" lock
+  // This covers activity, responsible_person, mov, and other fields
+  const { isLocked: isAllFieldsLocked, lockInfo: allFieldsLockInfo } = useLockStatus(
+    'all_fields',
+    initialData?.id || null,
+    undefined,
+    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
+  );
+
   // Determine objective type from initialData
   useEffect(() => {
     if (open && initialData) {
@@ -216,6 +225,26 @@ export default function ObjectiveFormModal({
       return;
     }
 
+    // Check for locks before saving (only for edit mode and Direct type)
+    if (mode === 'edit' && objectiveType === 'Direct') {
+      if (isTargetLocked) {
+        toast({
+          title: 'Cannot Save',
+          description: 'The target field is locked and cannot be modified.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (isAllFieldsLocked) {
+        toast({
+          title: 'Cannot Save',
+          description: 'One or more fields are locked and cannot be modified.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       // Build type string: if multiple KPIs, use delimiter; otherwise single value
@@ -348,16 +377,47 @@ export default function ObjectiveFormModal({
           <div className="space-y-2" data-field="activity">
             <Label htmlFor="activity">
               Activity <span className="text-destructive">*</span>
+              {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+              )}
             </Label>
-            <Textarea
-              id="activity"
-              ref={firstInputRef}
-              value={activity}
-              onChange={(e) => setActivity(e.target.value)}
-              placeholder="Enter activity description"
-              rows={3}
-              className={cn(errors.activity && 'border-destructive')}
-            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative">
+                    <Textarea
+                      id="activity"
+                      ref={firstInputRef}
+                      value={activity}
+                      onChange={(e) => {
+                        if (mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked) {
+                          toast({
+                            title: 'Field Locked',
+                            description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+                        setActivity(e.target.value);
+                      }}
+                      placeholder="Enter activity description"
+                      rows={3}
+                      className={cn(errors.activity && 'border-destructive')}
+                      disabled={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                      readOnly={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                    />
+                    {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                      <LockIcon className="absolute right-2 top-2 w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                </TooltipTrigger>
+                {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                  <TooltipContent>
+                    <p>{allFieldsLockInfo.lock_reason}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
             {errors.activity && (
               <p className="text-sm text-destructive">{errors.activity}</p>
             )}
@@ -433,43 +493,72 @@ export default function ObjectiveFormModal({
           <div className="space-y-2 relative" data-field="responsiblePerson">
             <Label htmlFor="responsible-person">
               Responsible Person <span className="text-destructive">*</span>
-            </Label>
-            <div className="relative">
-              <Input
-                id="responsible-person"
-                value={responsiblePerson}
-                onChange={(e) => handleResponsiblePersonChange(e.target.value)}
-                onFocus={() => {
-                  if (responsiblePerson.trim() && existingResponsiblePersons.length > 0) {
-                    const filtered = existingResponsiblePersons
-                      .filter(p => p.toLowerCase().includes(responsiblePerson.toLowerCase()) && p !== responsiblePerson)
-                      .slice(0, 5);
-                    setResponsibleSuggestions(filtered);
-                    setShowResponsibleSuggestions(filtered.length > 0);
-                  }
-                }}
-                onBlur={() => {
-                  // Delay to allow clicking on suggestions
-                  setTimeout(() => setShowResponsibleSuggestions(false), 200);
-                }}
-                placeholder="Enter responsible person"
-                className={cn(errors.responsiblePerson && 'border-destructive')}
-              />
-              {showResponsibleSuggestions && responsibleSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md">
-                  {responsibleSuggestions.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
-                      onClick={() => handleSelectResponsibleSuggestion(suggestion)}
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
+              {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
-            </div>
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative">
+                    <Input
+                      id="responsible-person"
+                      value={responsiblePerson}
+                      onChange={(e) => {
+                        if (mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked) {
+                          toast({
+                            title: 'Field Locked',
+                            description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+                        handleResponsiblePersonChange(e.target.value);
+                      }}
+                      onFocus={() => {
+                        if (responsiblePerson.trim() && existingResponsiblePersons.length > 0) {
+                          const filtered = existingResponsiblePersons
+                            .filter(p => p.toLowerCase().includes(responsiblePerson.toLowerCase()) && p !== responsiblePerson)
+                            .slice(0, 5);
+                          setResponsibleSuggestions(filtered);
+                          setShowResponsibleSuggestions(filtered.length > 0);
+                        }
+                      }}
+                      onBlur={() => {
+                        // Delay to allow clicking on suggestions
+                        setTimeout(() => setShowResponsibleSuggestions(false), 200);
+                      }}
+                      placeholder="Enter responsible person"
+                      className={cn(errors.responsiblePerson && 'border-destructive')}
+                      disabled={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                      readOnly={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                    />
+                    {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                      <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    )}
+                    {showResponsibleSuggestions && responsibleSuggestions.length > 0 && !isAllFieldsLocked && (
+                      <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md">
+                        {responsibleSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
+                            onClick={() => handleSelectResponsibleSuggestion(suggestion)}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TooltipTrigger>
+                {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                  <TooltipContent>
+                    <p>{allFieldsLockInfo.lock_reason}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
             {errors.responsiblePerson && (
               <p className="text-sm text-destructive">{errors.responsiblePerson}</p>
             )}
@@ -479,15 +568,46 @@ export default function ObjectiveFormModal({
           <div className="space-y-2" data-field="mov">
             <Label htmlFor="mov">
               MOV (Means of Verification) <span className="text-destructive">*</span>
+              {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+              )}
             </Label>
-            <Textarea
-              id="mov"
-              value={mov}
-              onChange={(e) => setMov(e.target.value)}
-              placeholder="Enter means of verification"
-              rows={3}
-              className={cn(errors.mov && 'border-destructive')}
-            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative">
+                    <Textarea
+                      id="mov"
+                      value={mov}
+                      onChange={(e) => {
+                        if (mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked) {
+                          toast({
+                            title: 'Field Locked',
+                            description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+                        setMov(e.target.value);
+                      }}
+                      placeholder="Enter means of verification"
+                      rows={3}
+                      className={cn(errors.mov && 'border-destructive')}
+                      disabled={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                      readOnly={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                    />
+                    {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                      <LockIcon className="absolute right-2 top-2 w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                </TooltipTrigger>
+                {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                  <TooltipContent>
+                    <p>{allFieldsLockInfo.lock_reason}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
             {errors.mov && (
               <p className="text-sm text-destructive">{errors.mov}</p>
             )}

@@ -301,7 +301,7 @@ const handler = rateLimiter('general')(
       result = await createDepartmentObjective(pool, body);
     } else if (path.startsWith('/department-objectives/') && method === 'PUT') {
       const id = parseInt(path.split('/')[2]);
-      result = await updateDepartmentObjective(pool, id, body);
+      result = await updateDepartmentObjective(pool, id, body, event.user);
     } else if (path.startsWith('/department-objectives/') && method === 'DELETE') {
       const id = parseInt(path.split('/')[2]);
       result = await deleteDepartmentObjective(pool, id, event.user);
@@ -758,22 +758,26 @@ async function createDepartmentObjective(pool, body) {
   return fullResult.recordset[0];
 }
 
-async function updateDepartmentObjective(pool, id, body) {
+async function updateDepartmentObjective(pool, id, body, user = null) {
   try {
-    // Get current objective to check if KPI is actually changing
+    // Get current objective to check if KPI is actually changing (and for logging)
     const currentRequest = pool.request();
     currentRequest.input('id', sql.Int, id);
     const currentResult = await currentRequest.query(`
-      SELECT kpi, main_objective_id, type FROM department_objectives WHERE id = @id
+      SELECT do.*, d.name as department_name, d.code as department_code
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+      WHERE do.id = @id
     `);
 
     if (currentResult.recordset.length === 0) {
       throw new Error('Department objective not found');
     }
 
-    const currentKpi = currentResult.recordset[0].kpi;
-    const currentMainObjectiveId = currentResult.recordset[0].main_objective_id;
-    const currentType = currentResult.recordset[0].type;
+    const currentRecord = currentResult.recordset[0];
+    const currentKpi = currentRecord.kpi;
+    const currentMainObjectiveId = currentRecord.main_objective_id;
+    const currentType = currentRecord.type;
     const newKpi = body.kpi;
     const newType = body.type !== undefined ? body.type : currentType;
 
@@ -874,7 +878,45 @@ async function updateDepartmentObjective(pool, id, body) {
       throw new Error('Department objective not found after update');
     }
 
-    return selectResult.recordset[0];
+    const updatedRecord = selectResult.recordset[0];
+
+    // Log changes for tracked fields (if user context is available)
+    if (user && user.id) {
+      const trackedFields = ['activity', 'activity_target', 'responsible_person', 'mov'];
+      
+      for (const field of trackedFields) {
+        if (body[field] !== undefined && currentRecord[field] !== body[field]) {
+          // Map field names to target_field values for activity_logs
+          const fieldMapping = {
+            'activity_target': 'target',
+            'activity': 'activity',
+            'responsible_person': 'responsible_person',
+            'mov': 'mov'
+          };
+
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username || 'Unknown',
+            action_type: 'value_edited',
+            target_field: fieldMapping[field],
+            old_value: field === 'activity_target' ? currentRecord[field] : null,
+            new_value: field === 'activity_target' ? body[field] : null,
+            kpi: updatedRecord.kpi,
+            department_id: updatedRecord.department_id,
+            department_name: currentRecord.department_name,
+            department_objective_id: id,
+            metadata: JSON.stringify({
+              field_name: field,
+              old_text_value: ['activity', 'responsible_person', 'mov'].includes(field) ? currentRecord[field] : undefined,
+              new_text_value: ['activity', 'responsible_person', 'mov'].includes(field) ? body[field] : undefined,
+              objective_type: updatedRecord.type
+            })
+          });
+        }
+      }
+    }
+
+    return updatedRecord;
   } catch (error) {
     console.error('[updateDepartmentObjective] Error:', error.message);
     console.error('[updateDepartmentObjective] Error code:', error.code);
