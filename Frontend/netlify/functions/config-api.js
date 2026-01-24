@@ -556,27 +556,71 @@ const handler = rateLimiter('general')(
           request.input('id', sql.Int, id);
           request.input('lock_type', sql.NVarChar, body.lock_type ? (Array.isArray(body.lock_type) ? JSON.stringify(body.lock_type) : body.lock_type) : null);
           request.input('scope_type', sql.NVarChar, body.scope_type || null);
-          request.input('user_ids', sql.NVarChar, body.user_ids ? JSON.stringify(body.user_ids) : null);
-          request.input('kpi', sql.NVarChar, body.kpi || null);
-          request.input('department_id', sql.Int, body.department_id || null);
-          request.input('department_objective_id', sql.Int, body.department_objective_id !== undefined ? body.department_objective_id : null);
-          request.input('exclude_monthly_target', sql.Bit, body.exclude_monthly_target !== undefined ? body.exclude_monthly_target : null);
-          request.input('exclude_monthly_actual', sql.Bit, body.exclude_monthly_actual !== undefined ? body.exclude_monthly_actual : null);
-          request.input('exclude_annual_target', sql.Bit, body.exclude_annual_target !== undefined ? body.exclude_annual_target : null);
+          
+          // When scope_type changes, we need to clear fields that don't apply to the new scope
+          // Use explicit null values instead of COALESCE to clear old values
+          const scopeType = body.scope_type;
+          
+          // Determine which fields should be null based on scope type
+          let userIdsValue = null;
+          let kpiValue = null;
+          let departmentIdValue = null;
+          let departmentObjectiveIdValue = null;
+          let excludeMonthlyTargetValue = null;
+          let excludeMonthlyActualValue = null;
+          let excludeAnnualTargetValue = null;
+          
+          if (scopeType === 'all_department_objectives') {
+            userIdsValue = body.user_ids ? JSON.stringify(body.user_ids) : null;
+            excludeMonthlyTargetValue = body.exclude_monthly_target !== undefined ? body.exclude_monthly_target : null;
+            excludeMonthlyActualValue = body.exclude_monthly_actual !== undefined ? body.exclude_monthly_actual : null;
+            excludeAnnualTargetValue = body.exclude_annual_target !== undefined ? body.exclude_annual_target : null;
+          } else if (scopeType === 'specific_users') {
+            userIdsValue = body.user_ids ? JSON.stringify(body.user_ids) : null;
+          } else if (scopeType === 'specific_kpi') {
+            kpiValue = body.kpi || null;
+          } else if (scopeType === 'department_kpi') {
+            kpiValue = body.kpi || null;
+            departmentIdValue = body.department_id || null;
+          } else if (scopeType === 'specific_objective') {
+            departmentIdValue = body.department_id || null;
+            departmentObjectiveIdValue = body.department_objective_id || null;
+          }
+          // For 'all_users', all optional fields remain null
+          
+          request.input('user_ids', sql.NVarChar, userIdsValue);
+          request.input('kpi', sql.NVarChar, kpiValue);
+          request.input('department_id', sql.Int, departmentIdValue);
+          request.input('department_objective_id', sql.Int, departmentObjectiveIdValue);
+          request.input('exclude_monthly_target', sql.Bit, excludeMonthlyTargetValue);
+          request.input('exclude_monthly_actual', sql.Bit, excludeMonthlyActualValue);
+          request.input('exclude_annual_target', sql.Bit, excludeAnnualTargetValue);
           request.input('is_active', sql.Bit, body.is_active !== undefined ? body.is_active : null);
+          request.input('scope_type_param', sql.NVarChar, scopeType); // Add scope_type as parameter for CASE statement
 
+          // Build UPDATE query - use direct assignment (not COALESCE) for scope-specific fields
+          // This ensures old values are cleared when switching scope types
           const result = await request.query(`
             UPDATE field_locks
             SET 
               lock_type = COALESCE(@lock_type, lock_type),
               scope_type = COALESCE(@scope_type, scope_type),
-              user_ids = COALESCE(@user_ids, user_ids),
-              kpi = COALESCE(@kpi, kpi),
-              department_id = COALESCE(@department_id, department_id),
-              department_objective_id = COALESCE(@department_objective_id, department_objective_id),
-              exclude_monthly_target = COALESCE(@exclude_monthly_target, exclude_monthly_target),
-              exclude_monthly_actual = COALESCE(@exclude_monthly_actual, exclude_monthly_actual),
-              exclude_annual_target = COALESCE(@exclude_annual_target, exclude_annual_target),
+              user_ids = @user_ids,
+              kpi = @kpi,
+              department_id = @department_id,
+              department_objective_id = @department_objective_id,
+              exclude_monthly_target = CASE 
+                WHEN @scope_type_param = 'all_department_objectives' THEN COALESCE(@exclude_monthly_target, exclude_monthly_target)
+                ELSE 0
+              END,
+              exclude_monthly_actual = CASE 
+                WHEN @scope_type_param = 'all_department_objectives' THEN COALESCE(@exclude_monthly_actual, exclude_monthly_actual)
+                ELSE 0
+              END,
+              exclude_annual_target = CASE 
+                WHEN @scope_type_param = 'all_department_objectives' THEN COALESCE(@exclude_annual_target, exclude_annual_target)
+                ELSE 0
+              END,
               is_active = COALESCE(@is_active, is_active),
               updated_at = GETDATE()
             OUTPUT INSERTED.*
