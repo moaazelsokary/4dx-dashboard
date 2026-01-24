@@ -405,12 +405,28 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                     </Label>
                   </div>
                 </div>
-                {(excludeMonthlyTarget || excludeMonthlyActual || excludeAnnualTarget) && (
-                  <p className="text-sm text-muted-foreground">
-                    This will lock other fields in department_objectives (activity, responsible_person, mov, etc.) 
-                    but not the excluded fields. Note: monthly_actual only applies to Direct type objectives.
-                  </p>
-                )}
+                <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm font-medium mb-2">📋 What gets locked:</p>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    {!excludeMonthlyTarget && (
+                      <li>Monthly Target (Direct & In direct)</li>
+                    )}
+                    {!excludeMonthlyActual && (
+                      <li>Monthly Actual (<span className="text-orange-600 font-medium">Direct only</span>)</li>
+                    )}
+                    {!excludeAnnualTarget && (
+                      <li>Annual Target / activity_target (Direct & In direct)</li>
+                    )}
+                    <li>Activity field (Direct & In direct)</li>
+                    <li>Responsible Person (Direct & In direct)</li>
+                    <li>MOV field (Direct & In direct)</li>
+                  </ul>
+                  {!excludeMonthlyTarget && !excludeMonthlyActual && !excludeAnnualTarget && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      ⚠️ All fields will be locked (no exclusions selected)
+                    </p>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -432,7 +448,9 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                       }
                     }}
                   />
-                  <Label htmlFor="lock-target" className="font-normal cursor-pointer">Target (activity_target)</Label>
+                  <Label htmlFor="lock-target" className="font-normal cursor-pointer">
+                    Target (activity_target) - <span className="text-xs text-muted-foreground">Applies to Direct & In direct</span>
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -446,7 +464,9 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                       }
                     }}
                   />
-                  <Label htmlFor="lock-monthly-target" className="font-normal cursor-pointer">Monthly Target</Label>
+                  <Label htmlFor="lock-monthly-target" className="font-normal cursor-pointer">
+                    Monthly Target - <span className="text-xs text-muted-foreground">Applies to Direct & In direct</span>
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -460,9 +480,15 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                       }
                     }}
                   />
-                  <Label htmlFor="lock-monthly-actual" className="font-normal cursor-pointer">Monthly Actual</Label>
+                  <Label htmlFor="lock-monthly-actual" className="font-normal cursor-pointer">
+                    Monthly Actual - <span className="text-xs text-orange-600 font-medium">Direct type ONLY</span>
+                  </Label>
                 </div>
               </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                💡 <strong>Type Restrictions:</strong> Monthly Actual locks only affect objectives with "Direct" in their type. 
+                All other locks affect both "Direct" and "In direct" objectives.
+              </p>
             </div>
           )}
 
