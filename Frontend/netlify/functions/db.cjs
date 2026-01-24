@@ -13,17 +13,38 @@ if (serverValue.includes(',')) {
   port = 1433;
 }
 
+// Robust password handling (match other APIs)
+let password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PWD;
+if (password && password.startsWith('/')) {
+  password = process.env.DB_PASSWORD || process.env.VITE_PWD;
+}
+if (password && (password.includes('%'))) {
+  try {
+    password = decodeURIComponent(password);
+  } catch (e) {
+    // Keep original if decode fails
+  }
+}
+if ((password && password.startsWith('"') && password.endsWith('"')) || 
+    (password && password.startsWith("'") && password.endsWith("'"))) {
+  password = password.slice(1, -1);
+}
+if (password) {
+  password = password.trim();
+}
+
 const config = {
   server: server,
   port: port,
   database: process.env.DATABASE || process.env.VITE_DATABASE,
-  user: process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
-  password: process.env.PWD || process.env.VITE_PWD,
+  user: process.env.DB_USER || process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
+  password: password,
   options: {
-    encrypt: true, // Use encryption for Azure SQL
-    trustServerCertificate: true, // Set to true for Azure SQL
+    encrypt: true,
+    trustServerCertificate: true,
     enableArithAbort: true,
-    requestTimeout: 30000,
+    requestTimeout: 60000,
+    connectionTimeout: 30000,
   },
   pool: {
     max: 10,

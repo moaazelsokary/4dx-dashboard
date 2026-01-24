@@ -22,18 +22,43 @@ async function getDbPool() {
     port = 1433;
   }
 
-  const password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PWD;
+  // Robust password handling (match wig-api.js and config-api.js)
+  let password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PWD;
+  if (password && password.startsWith('/')) {
+    password = process.env.DB_PASSWORD || process.env.VITE_PWD;
+  }
+  if (password && (password.includes('%'))) {
+    try {
+      password = decodeURIComponent(password);
+    } catch (e) {
+      // Keep original if decode fails
+    }
+  }
+  if ((password && password.startsWith('"') && password.endsWith('"')) || 
+      (password && password.startsWith("'") && password.endsWith("'"))) {
+    password = password.slice(1, -1);
+  }
+  if (password) {
+    password = password.trim();
+  }
   
   const config = {
-    user: process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
+    user: process.env.DB_USER || process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
     password: password,
     server: server,
     port: port,
     database: process.env.DATABASE || process.env.VITE_DATABASE,
     options: {
       encrypt: true,
-      trustServerCertificate: true, // Changed to true for Azure SQL
+      trustServerCertificate: true,
       enableArithAbort: true,
+      requestTimeout: 60000,
+      connectionTimeout: 30000,
+    },
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000,
     },
   };
 
