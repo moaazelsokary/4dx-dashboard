@@ -22,9 +22,10 @@ const API_BASE_URL = isLocalhost
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const method = options?.method || 'GET';
-  const needsAuth = ['POST', 'PUT', 'DELETE'].includes(method.toUpperCase());
-  const csrfHeaders = needsAuth ? getCsrfHeader() : {};
-  const authHeaders = needsAuth ? getAuthHeader() : {};
+  const needsCsrf = ['POST', 'PUT', 'DELETE'].includes(method.toUpperCase());
+  const csrfHeaders = needsCsrf ? getCsrfHeader() : {};
+  // Config API requires authentication for ALL requests (GET, POST, PUT, DELETE)
+  const authHeaders = getAuthHeader();
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
