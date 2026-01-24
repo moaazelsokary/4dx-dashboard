@@ -147,14 +147,14 @@ export default function PermissionForm({ open, onOpenChange, permission, onSucce
           <div className="space-y-3">
             <Label htmlFor="department">Department (optional - leave empty for all departments)</Label>
             <Select
-              value={departmentId?.toString() || ''}
-              onValueChange={(value) => setDepartmentId(value ? parseInt(value) : null)}
+              value={departmentId?.toString() || 'all'}
+              onValueChange={(value) => setDepartmentId(value !== 'all' ? parseInt(value) : null)}
             >
               <SelectTrigger id="department">
                 <SelectValue placeholder="All departments" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All departments</SelectItem>
+                <SelectItem value="all">All departments</SelectItem>
                 {departments.map((dept) => (
                   <SelectItem key={dept.id} value={dept.id.toString()}>
                     {dept.name}
@@ -167,14 +167,14 @@ export default function PermissionForm({ open, onOpenChange, permission, onSucce
           <div className="space-y-3">
             <Label htmlFor="kpi">KPI (optional - leave empty for all KPIs)</Label>
             <Select
-              value={kpi || ''}
-              onValueChange={(value) => setKpi(value || '')}
+              value={kpi || 'all'}
+              onValueChange={(value) => setKpi(value !== 'all' ? value : '')}
             >
               <SelectTrigger id="kpi">
                 <SelectValue placeholder="All KPIs" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All KPIs</SelectItem>
+                <SelectItem value="all">All KPIs</SelectItem>
                 {kpis.slice(0, 100).map((kpiOption) => (
                   <SelectItem key={kpiOption} value={kpiOption}>
                     {kpiOption}

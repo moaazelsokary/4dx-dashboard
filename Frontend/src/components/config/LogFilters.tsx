@@ -78,14 +78,14 @@ export default function LogFilters({ filters, onFiltersChange }: LogFiltersProps
           <div className="space-y-2">
             <Label>User</Label>
             <Select
-              value={localFilters.user_id?.toString() || ''}
-              onValueChange={(value) => handleFilterChange('user_id', value ? parseInt(value) : undefined)}
+              value={localFilters.user_id?.toString() || 'all'}
+              onValueChange={(value) => handleFilterChange('user_id', value !== 'all' ? parseInt(value) : undefined)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="All users" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All users</SelectItem>
+                <SelectItem value="all">All users</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id.toString()}>
                     {user.username}
@@ -98,14 +98,14 @@ export default function LogFilters({ filters, onFiltersChange }: LogFiltersProps
           <div className="space-y-2">
             <Label>Action Type</Label>
             <Select
-              value={localFilters.action_type || ''}
-              onValueChange={(value) => handleFilterChange('action_type', value || undefined)}
+              value={localFilters.action_type || 'all'}
+              onValueChange={(value) => handleFilterChange('action_type', value !== 'all' ? value : undefined)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="All actions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All actions</SelectItem>
+                <SelectItem value="all">All actions</SelectItem>
                 {ACTION_TYPES.map((action) => (
                   <SelectItem key={action} value={action}>
                     {action.replace('_', ' ')}
@@ -118,14 +118,14 @@ export default function LogFilters({ filters, onFiltersChange }: LogFiltersProps
           <div className="space-y-2">
             <Label>Department</Label>
             <Select
-              value={localFilters.department_id?.toString() || ''}
-              onValueChange={(value) => handleFilterChange('department_id', value ? parseInt(value) : undefined)}
+              value={localFilters.department_id?.toString() || 'all'}
+              onValueChange={(value) => handleFilterChange('department_id', value !== 'all' ? parseInt(value) : undefined)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="All departments" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All departments</SelectItem>
+                <SelectItem value="all">All departments</SelectItem>
                 {departments.map((dept) => (
                   <SelectItem key={dept.id} value={dept.id.toString()}>
                     {dept.name}
@@ -138,14 +138,14 @@ export default function LogFilters({ filters, onFiltersChange }: LogFiltersProps
           <div className="space-y-2">
             <Label>KPI</Label>
             <Select
-              value={localFilters.kpi || ''}
-              onValueChange={(value) => handleFilterChange('kpi', value || undefined)}
+              value={localFilters.kpi || 'all'}
+              onValueChange={(value) => handleFilterChange('kpi', value !== 'all' ? value : undefined)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="All KPIs" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All KPIs</SelectItem>
+                <SelectItem value="all">All KPIs</SelectItem>
                 {kpis.slice(0, 100).map((kpi) => (
                   <SelectItem key={kpi} value={kpi}>
                     {kpi}
