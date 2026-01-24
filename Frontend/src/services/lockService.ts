@@ -11,7 +11,7 @@ import { checkLockStatus, checkLockStatusBatch } from './configService';
  * Check if a single field is locked
  */
 export async function isFieldLocked(
-  fieldType: 'target' | 'monthly_target' | 'monthly_actual',
+  fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
   month?: string
 ): Promise<boolean> {
@@ -28,7 +28,7 @@ export async function isFieldLocked(
  * Get detailed lock information for a field
  */
 export async function getLockInfo(
-  fieldType: 'target' | 'monthly_target' | 'monthly_actual',
+  fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
   month?: string
 ): Promise<LockCheckResponse> {
@@ -72,7 +72,7 @@ export async function batchCheckLocks(
  * Create a lock check request object
  */
 export function createLockCheckRequest(
-  fieldType: 'target' | 'monthly_target' | 'monthly_actual',
+  fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
   month?: string
 ): LockCheckRequest {

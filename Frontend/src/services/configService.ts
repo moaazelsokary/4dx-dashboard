@@ -77,7 +77,7 @@ export async function deleteLock(id: number): Promise<void> {
 }
 
 export async function checkLockStatus(
-  fieldType: 'target' | 'monthly_target' | 'monthly_actual',
+  fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
   month?: string
 ): Promise<LockCheckResponse> {

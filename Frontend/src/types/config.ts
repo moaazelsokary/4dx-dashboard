@@ -3,7 +3,7 @@
 export type LockType = 'target' | 'monthly_target' | 'monthly_actual' | 'all_department_objectives';
 export type ScopeType = 'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives';
 export type ActionType = 'lock_created' | 'lock_deleted' | 'lock_updated' | 'value_edited' | 'permission_created' | 'permission_updated' | 'permission_deleted';
-export type TargetField = 'target' | 'monthly_target' | 'monthly_actual';
+export type TargetField = 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields';
 
 export interface FieldLock {
   id: number;

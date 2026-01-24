@@ -9,7 +9,7 @@ import type { LockCheckRequest } from '@/types/config';
  * Hook to check if a single field is locked
  */
 export function useLockStatus(
-  fieldType: 'target' | 'monthly_target' | 'monthly_actual',
+  fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number | null,
   month?: string,
   enabled: boolean = true
