@@ -89,21 +89,23 @@ export default function ObjectiveFormModal({
     return type;
   }, [open, initialData]);
 
-  // Check lock status for target field (only if editing and type is Direct)
+  // Check lock status for target field (applies to both Direct and In direct types)
+  // Note: Target field locks work for both Direct and In direct objectives
   const { isLocked: isTargetLocked, lockInfo: targetLockInfo } = useLockStatus(
     'target',
     initialData?.id || null,
     undefined,
-    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
+    open && mode === 'edit' && !!initialData?.id && !!objectiveType
   );
 
   // Check if ANY field is locked by "All Department Objectives" lock
   // This covers activity, responsible_person, mov, and other fields
+  // Note: all_fields locks work for both Direct and In direct objectives
   const { isLocked: isAllFieldsLocked, lockInfo: allFieldsLockInfo } = useLockStatus(
     'all_fields',
     initialData?.id || null,
     undefined,
-    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
+    open && mode === 'edit' && !!initialData?.id && !!objectiveType
   );
 
   // Initialize form data
