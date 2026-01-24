@@ -293,6 +293,11 @@ const handler = rateLimiter('general')(
       const path = event.path.replace('/.netlify/functions/config-api', '');
       const method = event.httpMethod;
       const user = event.user;
+      
+      // Normalize user ID field (JWT uses userId, but we need id for database)
+      if (user && user.userId && !user.id) {
+        user.id = user.userId;
+      }
 
       // Parse path segments
       const pathParts = path.split('/').filter(p => p);
