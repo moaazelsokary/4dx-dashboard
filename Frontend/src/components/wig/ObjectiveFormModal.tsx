@@ -411,12 +411,17 @@ export default function ObjectiveFormModal({
                       }}
                       placeholder="Enter activity description"
                       rows={3}
-                      className={cn(errors.activity && 'border-destructive')}
+                      className={cn(
+                        errors.activity && 'border-destructive',
+                        mode === 'edit' && isAllFieldsLocked && 'pr-10'
+                      )}
                       disabled={mode === 'edit' && isAllFieldsLocked}
                       readOnly={mode === 'edit' && isAllFieldsLocked}
                     />
                     {mode === 'edit' && isAllFieldsLocked && (
-                      <LockIcon className="absolute right-2 top-2 w-4 h-4 text-muted-foreground" />
+                      <div className="absolute right-3 top-3 flex items-center gap-1">
+                        <LockIcon className="w-4 h-4 text-orange-600" />
+                      </div>
                     )}
                   </div>
                 </TooltipTrigger>
@@ -437,6 +442,9 @@ export default function ObjectiveFormModal({
             <div className="space-y-2" data-field="activityTarget">
               <Label htmlFor="activity-target">
                 Target <span className="text-destructive">*</span>
+                {mode === 'edit' && isTargetLocked && (
+                  <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+                )}
               </Label>
               <TooltipProvider>
                 <Tooltip>
@@ -459,12 +467,17 @@ export default function ObjectiveFormModal({
                           setActivityTarget(parseFloat(e.target.value) || 0);
                         }}
                         placeholder="Enter target value"
-                        className={cn(errors.activityTarget && 'border-destructive')}
+                        className={cn(
+                          errors.activityTarget && 'border-destructive',
+                          mode === 'edit' && isTargetLocked && 'pr-10'
+                        )}
                         disabled={mode === 'edit' && isTargetLocked}
                         readOnly={mode === 'edit' && isTargetLocked}
                       />
                       {mode === 'edit' && isTargetLocked && (
-                        <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          <LockIcon className="w-4 h-4 text-orange-600" />
+                        </div>
                       )}
                     </div>
                   </TooltipTrigger>
@@ -538,12 +551,17 @@ export default function ObjectiveFormModal({
                         setTimeout(() => setShowResponsibleSuggestions(false), 200);
                       }}
                       placeholder="Enter responsible person"
-                      className={cn(errors.responsiblePerson && 'border-destructive')}
+                      className={cn(
+                        errors.responsiblePerson && 'border-destructive',
+                        mode === 'edit' && isAllFieldsLocked && 'pr-10'
+                      )}
                       disabled={mode === 'edit' && isAllFieldsLocked}
                       readOnly={mode === 'edit' && isAllFieldsLocked}
                     />
                     {mode === 'edit' && isAllFieldsLocked && (
-                      <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <LockIcon className="w-4 h-4 text-orange-600" />
+                      </div>
                     )}
                     {showResponsibleSuggestions && responsibleSuggestions.length > 0 && !isAllFieldsLocked && (
                       <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md">
@@ -601,12 +619,17 @@ export default function ObjectiveFormModal({
                       }}
                       placeholder="Enter means of verification"
                       rows={3}
-                      className={cn(errors.mov && 'border-destructive')}
+                      className={cn(
+                        errors.mov && 'border-destructive',
+                        mode === 'edit' && isAllFieldsLocked && 'pr-10'
+                      )}
                       disabled={mode === 'edit' && isAllFieldsLocked}
                       readOnly={mode === 'edit' && isAllFieldsLocked}
                     />
                     {mode === 'edit' && isAllFieldsLocked && (
-                      <LockIcon className="absolute right-2 top-2 w-4 h-4 text-muted-foreground" />
+                      <div className="absolute right-3 top-3 flex items-center gap-1">
+                        <LockIcon className="w-4 h-4 text-orange-600" />
+                      </div>
                     )}
                   </div>
                 </TooltipTrigger>
