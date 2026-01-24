@@ -38,6 +38,9 @@ export default function LockRuleList() {
     mutationFn: (id: number) => deleteLock(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['field-locks'] });
+      // Invalidate all lock status queries to force immediate refetch for live updates
+      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
       toast({
         title: 'Success',
         description: 'Lock deleted successfully',
@@ -209,6 +212,7 @@ export default function LockRuleList() {
           setFormOpen(false);
           setEditingLock(null);
           queryClient.invalidateQueries({ queryKey: ['field-locks'] });
+          // Lock status queries are already invalidated in LockRuleForm
         }}
       />
 

@@ -19,6 +19,9 @@ export default function BulkLockOperations() {
         description: `${data.length} lock rules created successfully`,
       });
       queryClient.invalidateQueries({ queryKey: ['field-locks'] });
+      // Invalidate all lock status queries to force immediate refetch for live updates
+      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
       setFormOpen(false);
     },
     onError: (error: Error) => {
@@ -38,6 +41,9 @@ export default function BulkLockOperations() {
         description: 'Locks deleted successfully',
       });
       queryClient.invalidateQueries({ queryKey: ['field-locks'] });
+      // Invalidate all lock status queries to force immediate refetch for live updates
+      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
     },
     onError: (error: Error) => {
       toast({

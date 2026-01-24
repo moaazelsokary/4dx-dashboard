@@ -583,19 +583,53 @@ export default function ObjectiveFormModal({
             <div className="space-y-2" data-field="targetType">
               <Label htmlFor="target-type">
                 Target Type <span className="text-destructive">*</span>
+                {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                  <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
+                )}
               </Label>
-              <Select
-                value={targetType}
-                onValueChange={(value: 'number' | 'percentage') => setTargetType(value)}
-              >
-                <SelectTrigger id="target-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="number">Number</SelectItem>
-                  <SelectItem value="percentage">Percentage</SelectItem>
-                </SelectContent>
-              </Select>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative">
+                      <Select
+                        value={targetType}
+                        onValueChange={(value: 'number' | 'percentage') => {
+                          // Check if locked before allowing edit
+                          if (mode === 'edit' && (isTargetLocked || isAllFieldsLocked)) {
+                            const lockInfo = isTargetLocked ? targetLockInfo : allFieldsLockInfo;
+                            toast({
+                              title: 'Field Locked',
+                              description: lockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          setTargetType(value);
+                        }}
+                        disabled={mode === 'edit' && (isTargetLocked || isAllFieldsLocked)}
+                      >
+                        <SelectTrigger id="target-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="percentage">Percentage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+                          <LockIcon className="w-4 h-4 text-orange-600" />
+                        </div>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                    <TooltipContent>
+                      <p>{(isTargetLocked ? targetLockInfo : allFieldsLockInfo)?.lock_reason || 'This field is locked and cannot be edited'}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
 

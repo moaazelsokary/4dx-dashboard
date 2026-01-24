@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -28,6 +28,7 @@ interface LockRuleFormProps {
 }
 
 export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: LockRuleFormProps) {
+  const queryClient = useQueryClient();
   const [scopeType, setScopeType] = useState<'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives'>('all_users');
   const [lockType, setLockType] = useState<string[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
@@ -68,6 +69,9 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   const createMutation = useMutation({
     mutationFn: (data: LockRuleFormData) => createLock(data),
     onSuccess: () => {
+      // Invalidate all lock status queries to force immediate refetch
+      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
       toast({
         title: 'Success',
         description: 'Lock rule created successfully',
@@ -87,6 +91,9 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<LockRuleFormData> }) => updateLock(id, data),
     onSuccess: () => {
+      // Invalidate all lock status queries to force immediate refetch for live updates
+      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
       toast({
         title: 'Success',
         description: 'Lock rule updated successfully',
