@@ -234,8 +234,8 @@ export default function ObjectiveFormModal({
       return;
     }
 
-    // Check for locks before saving (only for edit mode and Direct type)
-    if (mode === 'edit' && objectiveType === 'Direct') {
+    // Check for locks before saving (for edit mode, applies to both Direct and In direct)
+    if (mode === 'edit') {
       if (isTargetLocked) {
         toast({
           title: 'Cannot Save',
@@ -386,7 +386,7 @@ export default function ObjectiveFormModal({
           <div className="space-y-2" data-field="activity">
             <Label htmlFor="activity">
               Activity <span className="text-destructive">*</span>
-              {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+              {mode === 'edit' && isAllFieldsLocked && (
                 <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
             </Label>
@@ -399,7 +399,7 @@ export default function ObjectiveFormModal({
                       ref={firstInputRef}
                       value={activity}
                       onChange={(e) => {
-                        if (mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked) {
+                        if (mode === 'edit' && isAllFieldsLocked) {
                           toast({
                             title: 'Field Locked',
                             description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
@@ -412,15 +412,15 @@ export default function ObjectiveFormModal({
                       placeholder="Enter activity description"
                       rows={3}
                       className={cn(errors.activity && 'border-destructive')}
-                      disabled={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
-                      readOnly={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                      disabled={mode === 'edit' && isAllFieldsLocked}
+                      readOnly={mode === 'edit' && isAllFieldsLocked}
                     />
-                    {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                    {mode === 'edit' && isAllFieldsLocked && (
                       <LockIcon className="absolute right-2 top-2 w-4 h-4 text-muted-foreground" />
                     )}
                   </div>
                 </TooltipTrigger>
-                {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                {mode === 'edit' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
                   <TooltipContent>
                     <p>{allFieldsLockInfo.lock_reason}</p>
                   </TooltipContent>
@@ -447,8 +447,8 @@ export default function ObjectiveFormModal({
                         type="number"
                         value={activityTarget || ''}
                         onChange={(e) => {
-                          // Check if locked before allowing edit (only for Direct type when editing)
-                          if (mode === 'edit' && objectiveType === 'Direct' && isTargetLocked) {
+                          // Check if locked before allowing edit (applies to both Direct and In direct)
+                          if (mode === 'edit' && isTargetLocked) {
                             toast({
                               title: 'Field Locked',
                               description: targetLockInfo?.lock_reason || 'This field is locked and cannot be edited',
@@ -460,15 +460,15 @@ export default function ObjectiveFormModal({
                         }}
                         placeholder="Enter target value"
                         className={cn(errors.activityTarget && 'border-destructive')}
-                        disabled={mode === 'edit' && objectiveType === 'Direct' && isTargetLocked}
-                        readOnly={mode === 'edit' && objectiveType === 'Direct' && isTargetLocked}
+                        disabled={mode === 'edit' && isTargetLocked}
+                        readOnly={mode === 'edit' && isTargetLocked}
                       />
-                      {mode === 'edit' && objectiveType === 'Direct' && isTargetLocked && (
+                      {mode === 'edit' && isTargetLocked && (
                         <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       )}
                     </div>
                   </TooltipTrigger>
-                  {mode === 'edit' && objectiveType === 'Direct' && isTargetLocked && targetLockInfo?.lock_reason && (
+                  {mode === 'edit' && isTargetLocked && targetLockInfo?.lock_reason && (
                     <TooltipContent>
                       <p>{targetLockInfo.lock_reason}</p>
                     </TooltipContent>
@@ -502,7 +502,7 @@ export default function ObjectiveFormModal({
           <div className="space-y-2 relative" data-field="responsiblePerson">
             <Label htmlFor="responsible-person">
               Responsible Person <span className="text-destructive">*</span>
-              {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+              {mode === 'edit' && isAllFieldsLocked && (
                 <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
             </Label>
@@ -514,7 +514,7 @@ export default function ObjectiveFormModal({
                       id="responsible-person"
                       value={responsiblePerson}
                       onChange={(e) => {
-                        if (mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked) {
+                        if (mode === 'edit' && isAllFieldsLocked) {
                           toast({
                             title: 'Field Locked',
                             description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
@@ -539,10 +539,10 @@ export default function ObjectiveFormModal({
                       }}
                       placeholder="Enter responsible person"
                       className={cn(errors.responsiblePerson && 'border-destructive')}
-                      disabled={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
-                      readOnly={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                      disabled={mode === 'edit' && isAllFieldsLocked}
+                      readOnly={mode === 'edit' && isAllFieldsLocked}
                     />
-                    {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                    {mode === 'edit' && isAllFieldsLocked && (
                       <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     )}
                     {showResponsibleSuggestions && responsibleSuggestions.length > 0 && !isAllFieldsLocked && (
@@ -561,7 +561,7 @@ export default function ObjectiveFormModal({
                     )}
                   </div>
                 </TooltipTrigger>
-                {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                {mode === 'edit' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
                   <TooltipContent>
                     <p>{allFieldsLockInfo.lock_reason}</p>
                   </TooltipContent>
@@ -577,7 +577,7 @@ export default function ObjectiveFormModal({
           <div className="space-y-2" data-field="mov">
             <Label htmlFor="mov">
               MOV (Means of Verification) <span className="text-destructive">*</span>
-              {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+              {mode === 'edit' && isAllFieldsLocked && (
                 <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
             </Label>
@@ -589,7 +589,7 @@ export default function ObjectiveFormModal({
                       id="mov"
                       value={mov}
                       onChange={(e) => {
-                        if (mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked) {
+                        if (mode === 'edit' && isAllFieldsLocked) {
                           toast({
                             title: 'Field Locked',
                             description: allFieldsLockInfo?.lock_reason || 'This field is locked and cannot be edited',
@@ -602,15 +602,15 @@ export default function ObjectiveFormModal({
                       placeholder="Enter means of verification"
                       rows={3}
                       className={cn(errors.mov && 'border-destructive')}
-                      disabled={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
-                      readOnly={mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked}
+                      disabled={mode === 'edit' && isAllFieldsLocked}
+                      readOnly={mode === 'edit' && isAllFieldsLocked}
                     />
-                    {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && (
+                    {mode === 'edit' && isAllFieldsLocked && (
                       <LockIcon className="absolute right-2 top-2 w-4 h-4 text-muted-foreground" />
                     )}
                   </div>
                 </TooltipTrigger>
-                {mode === 'edit' && objectiveType === 'Direct' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
+                {mode === 'edit' && isAllFieldsLocked && allFieldsLockInfo?.lock_reason && (
                   <TooltipContent>
                     <p>{allFieldsLockInfo.lock_reason}</p>
                   </TooltipContent>
