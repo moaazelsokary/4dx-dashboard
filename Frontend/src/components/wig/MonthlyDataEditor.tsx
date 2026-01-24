@@ -3,11 +3,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getMonthlyData, createOrUpdateMonthlyData } from '@/services/wigService';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getMonthlyData, createOrUpdateMonthlyData, getDepartmentObjectives } from '@/services/wigService';
+import { useBatchLockStatus } from '@/hooks/useLockStatus';
+import { createLockCheckRequest } from '@/services/lockService';
 import { toast } from '@/hooks/use-toast';
 import { isAuthenticated } from '@/services/authService';
 import type { MonthlyData } from '@/types/wig';
-import { Calendar, Loader2 } from 'lucide-react';
+import { Calendar, Loader2, Lock as LockIcon } from 'lucide-react';
 import { format, parse, addMonths, startOfMonth } from 'date-fns';
 
 interface MonthlyDataEditorProps {
@@ -28,9 +31,29 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMonths, setSavingMonths] = useState<Set<string>>(new Set()); // Track which months are currently saving
+  const [objectiveType, setObjectiveType] = useState<'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '' | null>(null);
 
+  // Prepare batch lock checks for all 36 fields (18 months × 2 fields)
+  const lockChecks = MONTHS.flatMap(month => [
+    createLockCheckRequest('monthly_target', departmentObjectiveId, month),
+    createLockCheckRequest('monthly_actual', departmentObjectiveId, month),
+  ]);
+
+  const { getLockStatus, isLoading: locksLoading } = useBatchLockStatus(lockChecks, open && objectiveType === 'Direct');
+
+  // Load department objective to check type
   useEffect(() => {
     if (open) {
+      const loadObjective = async () => {
+        try {
+          const objectives = await getDepartmentObjectives();
+          const objective = objectives.find(obj => obj.id === departmentObjectiveId);
+          setObjectiveType(objective?.type || null);
+        } catch (error) {
+          console.error('Error loading department objective:', error);
+        }
+      };
+      loadObjective();
       loadData();
     }
   }, [open, departmentObjectiveId]);
@@ -135,6 +158,20 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   };
 
   const updateMonthData = (month: string, field: 'target_value' | 'actual_value', value: string) => {
+    // Check if field is locked (only for Direct type)
+    if (objectiveType === 'Direct') {
+      const fieldType = field === 'target_value' ? 'monthly_target' : 'monthly_actual';
+      const lockInfo = getLockStatus(fieldType, departmentObjectiveId, month);
+      if (lockInfo.is_locked) {
+        toast({
+          title: 'Field Locked',
+          description: lockInfo.lock_reason || 'This field is locked and cannot be edited',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     const updated = new Map(data);
     const existing = updated.get(month) || {
       id: 0,
@@ -172,6 +209,44 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         variant: 'destructive',
       });
       return;
+    }
+
+    // Check for locked fields before saving (only for Direct type)
+    if (objectiveType === 'Direct') {
+      const lockedFields: string[] = [];
+      MONTHS.forEach((month) => {
+        const targetLocked = getLockStatus('monthly_target', departmentObjectiveId, month).is_locked;
+        const actualLocked = getLockStatus('monthly_actual', departmentObjectiveId, month).is_locked;
+        const monthData = data.get(month);
+        const originalMonthData = originalData.get(month);
+        
+        // Check if field was changed and is locked
+        if (monthData && originalMonthData) {
+          if (monthData.target_value !== originalMonthData.target_value && targetLocked) {
+            lockedFields.push(`${month} target`);
+          }
+          if (monthData.actual_value !== originalMonthData.actual_value && actualLocked) {
+            lockedFields.push(`${month} actual`);
+          }
+        } else if (monthData) {
+          // New data
+          if (monthData.target_value !== null && targetLocked) {
+            lockedFields.push(`${month} target`);
+          }
+          if (monthData.actual_value !== null && actualLocked) {
+            lockedFields.push(`${month} actual`);
+          }
+        }
+      });
+
+      if (lockedFields.length > 0) {
+        toast({
+          title: 'Cannot Save',
+          description: `The following fields are locked and cannot be edited: ${lockedFields.join(', ')}`,
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     // Debug: Log authentication status
@@ -328,34 +403,85 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                   
                   const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'MMM yyyy');
                   
+                  // Check lock status for this month's fields (only if Direct type)
+                  const isTargetLocked = objectiveType === 'Direct' 
+                    ? getLockStatus('monthly_target', departmentObjectiveId, month).is_locked 
+                    : false;
+                  const isActualLocked = objectiveType === 'Direct'
+                    ? getLockStatus('monthly_actual', departmentObjectiveId, month).is_locked
+                    : false;
+                  
+                  const targetLockInfo = objectiveType === 'Direct'
+                    ? getLockStatus('monthly_target', departmentObjectiveId, month)
+                    : { is_locked: false };
+                  const actualLockInfo = objectiveType === 'Direct'
+                    ? getLockStatus('monthly_actual', departmentObjectiveId, month)
+                    : { is_locked: false };
+
                   return (
                     <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
                       <div className="font-medium">{monthLabel}</div>
                       <div className="relative">
-                        <Input
-                          type="number"
-                          id={`target-${month}`}
-                          name={`target-${month}`}
-                          autoComplete="off"
-                          value={monthData.target_value?.toString() || ''}
-                          onChange={(e) => updateMonthData(month, 'target_value', e.target.value)}
-                          placeholder="Target"
-                          className="text-right"
-                          aria-label={`Target value for ${monthLabel}`}
-                        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  id={`target-${month}`}
+                                  name={`target-${month}`}
+                                  autoComplete="off"
+                                  value={monthData.target_value?.toString() || ''}
+                                  onChange={(e) => updateMonthData(month, 'target_value', e.target.value)}
+                                  placeholder="Target"
+                                  className="text-right"
+                                  disabled={isTargetLocked}
+                                  readOnly={isTargetLocked}
+                                  aria-label={`Target value for ${monthLabel}`}
+                                />
+                                {isTargetLocked && (
+                                  <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            {isTargetLocked && targetLockInfo.lock_reason && (
+                              <TooltipContent>
+                                <p>{targetLockInfo.lock_reason}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                       <div className="relative">
-                        <Input
-                          type="number"
-                          id={`actual-${month}`}
-                          name={`actual-${month}`}
-                          autoComplete="off"
-                          value={monthData.actual_value?.toString() || ''}
-                          onChange={(e) => updateMonthData(month, 'actual_value', e.target.value)}
-                          placeholder="Actual"
-                          className="text-right"
-                          aria-label={`Actual value for ${monthLabel}`}
-                        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  id={`actual-${month}`}
+                                  name={`actual-${month}`}
+                                  autoComplete="off"
+                                  value={monthData.actual_value?.toString() || ''}
+                                  onChange={(e) => updateMonthData(month, 'actual_value', e.target.value)}
+                                  placeholder="Actual"
+                                  className="text-right"
+                                  disabled={isActualLocked}
+                                  readOnly={isActualLocked}
+                                  aria-label={`Actual value for ${monthLabel}`}
+                                />
+                                {isActualLocked && (
+                                  <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            {isActualLocked && actualLockInfo.lock_reason && (
+                              <TooltipContent>
+                                <p>{actualLockInfo.lock_reason}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
                         {variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(2) : '-'}
