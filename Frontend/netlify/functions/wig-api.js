@@ -363,7 +363,7 @@ const handler = rateLimiter('general')(
       const departmentObjectiveId = parseInt(parts[0]);
       result = await getMonthlyData(pool, departmentObjectiveId);
     } else if (path === '/monthly-data' && method === 'POST') {
-      result = await createOrUpdateMonthlyData(pool, body);
+      result = await createOrUpdateMonthlyData(pool, body, event);
     }
     // Combined Dashboard Data
     else if (path === '/department-dashboard-data' && method === 'GET') {
@@ -1792,7 +1792,36 @@ async function getMonthlyData(pool, departmentObjectiveId) {
   return result.recordset;
 }
 
-async function createOrUpdateMonthlyData(pool, body) {
+// Helper function to log activity (shared with config-api.js pattern)
+async function logActivity(pool, logData) {
+  try {
+    const request = pool.request();
+    request.input('user_id', sql.Int, logData.user_id);
+    request.input('username', sql.NVarChar, logData.username);
+    request.input('action_type', sql.NVarChar, logData.action_type);
+    request.input('target_field', sql.NVarChar, logData.target_field || null);
+    request.input('old_value', sql.Decimal(18, 2), logData.old_value || null);
+    request.input('new_value', sql.Decimal(18, 2), logData.new_value || null);
+    request.input('kpi', sql.NVarChar, logData.kpi || null);
+    request.input('department_id', sql.Int, logData.department_id || null);
+    request.input('department_name', sql.NVarChar, logData.department_name || null);
+    request.input('department_objective_id', sql.Int, logData.department_objective_id || null);
+    request.input('month', sql.Date, logData.month || null);
+    request.input('metadata', sql.NVarChar, logData.metadata ? JSON.stringify(logData.metadata) : null);
+
+    await request.query(`
+      INSERT INTO activity_logs 
+      (user_id, username, action_type, target_field, old_value, new_value, kpi, department_id, department_name, department_objective_id, month, metadata)
+      VALUES 
+      (@user_id, @username, @action_type, @target_field, @old_value, @new_value, @kpi, @department_id, @department_name, @department_objective_id, @month, @metadata)
+    `);
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+    // Don't throw - logging failures shouldn't break the main operation
+  }
+}
+
+async function createOrUpdateMonthlyData(pool, body, event = null) {
   try {
     // Validate required fields
     if (!body.department_objective_id || !body.month) {
@@ -1803,7 +1832,7 @@ async function createOrUpdateMonthlyData(pool, body) {
     const deptObjRequest = pool.request();
     deptObjRequest.input('department_objective_id', sql.Int, body.department_objective_id);
     const deptObjResult = await deptObjRequest.query(`
-      SELECT kpi, department_id 
+      SELECT kpi, department_id, type
       FROM department_objectives 
       WHERE id = @department_objective_id
     `);
@@ -1814,10 +1843,31 @@ async function createOrUpdateMonthlyData(pool, body) {
 
     const kpi = deptObjResult.recordset[0].kpi;
     const department_id = deptObjResult.recordset[0].department_id;
+    const objectiveType = deptObjResult.recordset[0].type;
 
     if (!kpi || !department_id) {
       throw new Error(`Department objective ${body.department_objective_id} is missing kpi or department_id`);
     }
+
+    // Get old values before updating (for logging)
+    const oldValueRequest = pool.request();
+    oldValueRequest.input('department_objective_id', sql.Int, body.department_objective_id);
+    oldValueRequest.input('month', sql.Date, body.month);
+    const oldValueResult = await oldValueRequest.query(`
+      SELECT target_value, actual_value 
+      FROM department_monthly_data 
+      WHERE department_objective_id = @department_objective_id AND month = @month
+    `);
+    const oldTargetValue = oldValueResult.recordset.length > 0 ? oldValueResult.recordset[0].target_value : null;
+    const oldActualValue = oldValueResult.recordset.length > 0 ? oldValueResult.recordset[0].actual_value : null;
+
+    // Get department name for logging
+    const deptNameRequest = pool.request();
+    deptNameRequest.input('department_id', sql.Int, department_id);
+    const deptNameResult = await deptNameRequest.query(`
+      SELECT name FROM departments WHERE id = @department_id
+    `);
+    const department_name = deptNameResult.recordset.length > 0 ? deptNameResult.recordset[0].name : null;
 
     const request = pool.request();
     request.input('kpi', sql.NVarChar, kpi);
@@ -1931,7 +1981,48 @@ async function createOrUpdateMonthlyData(pool, body) {
       actual_value: selectResult.recordset[0].actual_value
     });
 
-    return selectResult.recordset[0];
+    const savedData = selectResult.recordset[0];
+
+    // Log activity for value edits (only if values changed and user is authenticated)
+    if (event && event.user && (oldTargetValue !== savedData.target_value || oldActualValue !== savedData.actual_value)) {
+      // Log target_value change
+      if (oldTargetValue !== savedData.target_value) {
+        await logActivity(pool, {
+          user_id: event.user.id || event.user.userId,
+          username: event.user.username || 'Unknown',
+          action_type: 'value_edited',
+          target_field: 'monthly_target',
+          old_value: oldTargetValue,
+          new_value: savedData.target_value,
+          kpi: kpi,
+          department_id: department_id,
+          department_name: department_name,
+          department_objective_id: body.department_objective_id,
+          month: body.month,
+          metadata: { objective_type: objectiveType }
+        });
+      }
+
+      // Log actual_value change
+      if (oldActualValue !== savedData.actual_value) {
+        await logActivity(pool, {
+          user_id: event.user.id || event.user.userId,
+          username: event.user.username || 'Unknown',
+          action_type: 'value_edited',
+          target_field: 'monthly_actual',
+          old_value: oldActualValue,
+          new_value: savedData.actual_value,
+          kpi: kpi,
+          department_id: department_id,
+          department_name: department_name,
+          department_objective_id: body.department_objective_id,
+          month: body.month,
+          metadata: { objective_type: objectiveType }
+        });
+      }
+    }
+
+    return savedData;
   } catch (error) {
     console.error('[createOrUpdateMonthlyData] Error:', error.message);
     console.error('[createOrUpdateMonthlyData] Body:', JSON.stringify(body));

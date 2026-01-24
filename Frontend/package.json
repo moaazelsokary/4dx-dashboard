@@ -25,6 +25,7 @@
     "init-all-kpis-rasci": "node scripts/init-all-kpis-rasci.cjs",
     "migrate-type-constraint": "node scripts/run-type-constraint-migration.cjs",
     "migrate-order-column": "node scripts/run-order-migration.cjs",
+    "init-config-schema": "node scripts/run-config-schema.cjs",
     "proxy": "node proxy-server.cjs",
     "onedrive-proxy": "node onedrive-proxy.cjs",
     "wig-proxy": "node wig-proxy.cjs",

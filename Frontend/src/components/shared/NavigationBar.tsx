@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight } from 'lucide-react';
+import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight, Settings } from 'lucide-react';
 import { hasPowerBIAccess } from '@/config/powerbi';
 
 interface NavigationBarProps {
@@ -20,9 +20,11 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
   if (!user) return null;
 
   const isCEO = user.role === 'CEO';
+  const isAdmin = user.role === 'Admin';
   const isDepartment = user.role === 'department';
   const isOperations = isDepartment && user.departments?.includes('operations');
   const hasPowerBI = hasPowerBIAccess(user.role, user.departments || []);
+  const canAccessAdmin = isCEO || isAdmin;
 
   // Determine which pages user can access
   const canAccessWIGPlan = isCEO || isDepartment;
@@ -132,6 +134,32 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         >
           <BarChart3 className="w-3 h-3 mr-1" />
           Projects Website
+        </Button>
+      )}
+
+      {/* Configuration (Admin/CEO only) */}
+      {canAccessAdmin && shouldShowButton('/admin/configuration') && (
+        <Button
+          variant={location.pathname === '/admin/configuration' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => navigate('/admin/configuration')}
+          className="h-7 px-2 text-xs whitespace-nowrap"
+        >
+          <Settings className="w-3 h-3 mr-1" />
+          Configuration
+        </Button>
+      )}
+
+      {/* CMS Admin (Admin/CEO/Editor) */}
+      {(isCEO || isAdmin || user.role === 'Editor') && shouldShowButton('/admin/cms') && (
+        <Button
+          variant={location.pathname === '/admin/cms' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => navigate('/admin/cms')}
+          className="h-7 px-2 text-xs whitespace-nowrap"
+        >
+          <Table2 className="w-3 h-3 mr-1" />
+          CMS Admin
         </Button>
       )}
     </div>

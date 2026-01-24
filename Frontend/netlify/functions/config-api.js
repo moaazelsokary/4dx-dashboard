@@ -1,0 +1,1112 @@
+// Configuration API - Lock management, activity logs, and user permissions
+const sql = require('mssql');
+const rateLimiter = require('./utils/rate-limiter');
+const authMiddleware = require('./utils/auth-middleware');
+const logger = require('./utils/logger');
+
+let pool = null;
+
+// Database connection setup (same as wig-api.js)
+function getDbConfig() {
+  const serverValue = process.env.SERVER || process.env.VITE_SERVER || '';
+  let server, port;
+  if (serverValue.includes(',')) {
+    [server, port] = serverValue.split(',').map(s => s.trim());
+    port = parseInt(port) || 1433;
+  } else {
+    server = serverValue;
+    port = 1433;
+  }
+
+  let password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PWD;
+  if (password && password.startsWith('/')) {
+    password = process.env.DB_PASSWORD || process.env.VITE_PWD;
+  }
+  if (password && (password.includes('%'))) {
+    try {
+      password = decodeURIComponent(password);
+    } catch (e) {
+      // Keep original if decode fails
+    }
+  }
+  if ((password && password.startsWith('"') && password.endsWith('"')) || 
+      (password && password.startsWith("'") && password.endsWith("'"))) {
+    password = password.slice(1, -1);
+  }
+  if (password) {
+    password = password.trim();
+  }
+
+  return {
+    server: server,
+    port: port,
+    database: process.env.DATABASE || process.env.VITE_DATABASE,
+    user: process.env.DB_USER || process.env.UID || process.env.VITE_UID || process.env.VIE_UID,
+    password: password,
+    options: {
+      encrypt: true,
+      trustServerCertificate: true,
+      enableArithAbort: true,
+      requestTimeout: 60000,
+      connectionTimeout: 30000,
+    },
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000,
+    },
+  };
+}
+
+async function getPool() {
+  if (!pool) {
+    try {
+      const config = getDbConfig();
+      pool = await sql.connect(config);
+      logger.info('Database connection established for config-api');
+    } catch (error) {
+      logger.error('Database connection failed', error);
+      throw error;
+    }
+  }
+  return pool;
+}
+
+// Helper function to log activity
+async function logActivity(pool, logData) {
+  try {
+    const request = pool.request();
+    request.input('user_id', sql.Int, logData.user_id);
+    request.input('username', sql.NVarChar, logData.username);
+    request.input('action_type', sql.NVarChar, logData.action_type);
+    request.input('target_field', sql.NVarChar, logData.target_field || null);
+    request.input('old_value', sql.Decimal(18, 2), logData.old_value || null);
+    request.input('new_value', sql.Decimal(18, 2), logData.new_value || null);
+    request.input('kpi', sql.NVarChar, logData.kpi || null);
+    request.input('department_id', sql.Int, logData.department_id || null);
+    request.input('department_name', sql.NVarChar, logData.department_name || null);
+    request.input('department_objective_id', sql.Int, logData.department_objective_id || null);
+    request.input('month', sql.Date, logData.month || null);
+    request.input('metadata', sql.NVarChar, logData.metadata ? JSON.stringify(logData.metadata) : null);
+
+    await request.query(`
+      INSERT INTO activity_logs 
+      (user_id, username, action_type, target_field, old_value, new_value, kpi, department_id, department_name, department_objective_id, month, metadata)
+      VALUES 
+      (@user_id, @username, @action_type, @target_field, @old_value, @new_value, @kpi, @department_id, @department_name, @department_objective_id, @month, @metadata)
+    `);
+  } catch (error) {
+    logger.error('Failed to log activity', error);
+    // Don't throw - logging failures shouldn't break the main operation
+  }
+}
+
+// Helper function to check if department objective is Direct type
+async function isDirectType(pool, department_objective_id) {
+  try {
+    const request = pool.request();
+    request.input('id', sql.Int, department_objective_id);
+    const result = await request.query(`
+      SELECT type FROM department_objectives WHERE id = @id
+    `);
+    return result.recordset.length > 0 && result.recordset[0].type === 'Direct';
+  } catch (error) {
+    logger.error('Error checking department objective type', error);
+    return false;
+  }
+}
+
+// Helper function to check lock status for a single field
+async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month = null) {
+  try {
+    // First check if department objective is Direct type
+    const isDirect = await isDirectType(pool, departmentObjectiveId);
+    if (!isDirect) {
+      return { is_locked: false };
+    }
+
+    // Get department objective details
+    const deptObjRequest = pool.request();
+    deptObjRequest.input('id', sql.Int, departmentObjectiveId);
+    const deptObjResult = await deptObjRequest.query(`
+      SELECT kpi, department_id FROM department_objectives WHERE id = @id
+    `);
+    
+    if (deptObjResult.recordset.length === 0) {
+      return { is_locked: false };
+    }
+
+    const kpi = deptObjResult.recordset[0].kpi;
+    const departmentId = deptObjResult.recordset[0].department_id;
+
+    // Get all active locks, ordered by priority (most specific first)
+    const lockRequest = pool.request();
+    lockRequest.input('field_type', sql.NVarChar, fieldType);
+    lockRequest.input('department_objective_id', sql.Int, departmentObjectiveId);
+    lockRequest.input('kpi', sql.NVarChar, kpi);
+    lockRequest.input('department_id', sql.Int, departmentId);
+    lockRequest.input('user_id', sql.Int, userId);
+
+    const locks = await lockRequest.query(`
+      SELECT * FROM field_locks 
+      WHERE is_active = 1
+      ORDER BY 
+        CASE scope_type 
+          WHEN 'specific_users' THEN 1
+          WHEN 'department_kpi' THEN 2
+          WHEN 'specific_kpi' THEN 3
+          WHEN 'all_users' THEN 4
+          WHEN 'all_department_objectives' THEN 5
+        END
+    `);
+
+    // Check locks in priority order
+    for (const lock of locks.recordset) {
+      let matches = false;
+      let lockReason = '';
+
+      switch (lock.scope_type) {
+        case 'specific_users':
+          if (lock.user_ids) {
+            const userIds = JSON.parse(lock.user_ids);
+            if (Array.isArray(userIds) && userIds.includes(userId)) {
+              // Check if lock_type matches field_type
+              let lockTypes = [];
+              try {
+                lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
+              } catch {
+                lockTypes = [lock.lock_type];
+              }
+              if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
+                matches = true;
+                lockReason = `Locked for specific users`;
+              }
+            }
+          }
+          break;
+
+        case 'department_kpi':
+          if (lock.department_id === departmentId && lock.kpi === kpi) {
+            let lockTypes = [];
+            try {
+              lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
+            } catch {
+              lockTypes = [lock.lock_type];
+            }
+            if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
+              matches = true;
+              lockReason = `Locked for department KPI`;
+            }
+          }
+          break;
+
+        case 'specific_kpi':
+          if (lock.kpi === kpi) {
+            let lockTypes = [];
+            try {
+              lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
+            } catch {
+              lockTypes = [lock.lock_type];
+            }
+            if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
+              matches = true;
+              lockReason = `Locked for KPI`;
+            }
+          }
+          break;
+
+        case 'all_users':
+          let lockTypes = [];
+          try {
+            lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
+          } catch {
+            lockTypes = [lock.lock_type];
+          }
+          if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
+            matches = true;
+            lockReason = `Locked for all users`;
+          }
+          break;
+
+        case 'all_department_objectives':
+          // Check user scope
+          let userMatches = true;
+          if (lock.user_ids) {
+            const userIds = JSON.parse(lock.user_ids);
+            userMatches = Array.isArray(userIds) && userIds.includes(userId);
+          }
+
+          if (userMatches) {
+            // Check exclusions
+            if (fieldType === 'monthly_target' || fieldType === 'monthly_actual') {
+              if (lock.exclude_monthly === 0) {
+                matches = true;
+                lockReason = `Locked by All Department Objectives`;
+              }
+            } else if (fieldType === 'target') {
+              if (lock.exclude_annual_target === 0) {
+                matches = true;
+                lockReason = `Locked by All Department Objectives`;
+              }
+            }
+            // Note: Other fields in department_objectives table would also be locked, but we only check target/monthly fields here
+          }
+          break;
+      }
+
+      if (matches) {
+        return {
+          is_locked: true,
+          lock_reason: lockReason,
+          lock_id: lock.id,
+          scope_type: lock.scope_type
+        };
+      }
+    }
+
+    return { is_locked: false };
+  } catch (error) {
+    logger.error('Error checking lock status', error);
+    return { is_locked: false, error: error.message };
+  }
+}
+
+// Main handler
+const handler = rateLimiter('general')(
+  authMiddleware({
+    optional: false, // All config endpoints require auth
+    requiredRoles: ['Admin', 'CEO'], // Only Admin and CEO can access
+  })(async (event, context) => {
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Content-Type': 'application/json',
+    };
+
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 200, headers, body: '' };
+    }
+
+    try {
+      const pool = await getPool();
+      const path = event.path.replace('/.netlify/functions/config-api', '');
+      const method = event.httpMethod;
+      const user = event.user;
+
+      // Parse path segments
+      const pathParts = path.split('/').filter(p => p);
+      const resource = pathParts[0]; // 'locks', 'logs', or 'permissions'
+      const action = pathParts[1]; // 'check', 'check-batch', 'export', etc.
+      const id = pathParts[2]; // ID parameter
+
+      // ========== LOCK MANAGEMENT ENDPOINTS ==========
+      if (resource === 'locks') {
+        // GET /api/config/locks - Get all locks
+        if (method === 'GET' && !action) {
+          const request = pool.request();
+          const result = await request.query(`
+            SELECT 
+              fl.*,
+              u.username as created_by_username,
+              d.name as department_name
+            FROM field_locks fl
+            LEFT JOIN users u ON fl.created_by = u.id
+            LEFT JOIN departments d ON fl.department_id = d.id
+            WHERE fl.is_active = 1
+            ORDER BY fl.created_at DESC
+          `);
+
+          const locks = result.recordset.map(lock => ({
+            ...lock,
+            user_ids: lock.user_ids ? JSON.parse(lock.user_ids) : null,
+            lock_type: lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type
+          }));
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: locks })
+          };
+        }
+
+        // GET /api/config/locks/:id - Get specific lock
+        if (method === 'GET' && id) {
+          const request = pool.request();
+          request.input('id', sql.Int, id);
+          const result = await request.query(`
+            SELECT 
+              fl.*,
+              u.username as created_by_username,
+              d.name as department_name
+            FROM field_locks fl
+            LEFT JOIN users u ON fl.created_by = u.id
+            LEFT JOIN departments d ON fl.department_id = d.id
+            WHERE fl.id = @id
+          `);
+
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Lock not found' })
+            };
+          }
+
+          const lock = result.recordset[0];
+          lock.user_ids = lock.user_ids ? JSON.parse(lock.user_ids) : null;
+          lock.lock_type = lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type;
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: lock })
+          };
+        }
+
+        // GET /api/config/locks/check - Check if field is locked
+        if (method === 'GET' && action === 'check') {
+          const params = event.queryStringParameters || {};
+          const fieldType = params.field_type;
+          const departmentObjectiveId = parseInt(params.department_objective_id);
+          const userId = user.id;
+          const month = params.month || null;
+
+          if (!fieldType || !departmentObjectiveId) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'field_type and department_objective_id are required' })
+            };
+          }
+
+          const lockStatus = await checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month);
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: lockStatus })
+          };
+        }
+
+        // POST /api/config/locks/check-batch - Batch check locks
+        if (method === 'POST' && action === 'check-batch') {
+          const body = JSON.parse(event.body || '{}');
+          const { checks } = body;
+
+          if (!Array.isArray(checks)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'checks must be an array' })
+            };
+          }
+
+          const results = await Promise.all(
+            checks.map(check => 
+              checkLockStatus(
+                pool, 
+                check.field_type, 
+                check.department_objective_id, 
+                user.id, 
+                check.month
+              ).then(status => ({
+                ...status,
+                field_type: check.field_type,
+                department_objective_id: check.department_objective_id,
+                month: check.month
+              }))
+            )
+          );
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: { results } })
+          };
+        }
+
+        // POST /api/config/locks - Create lock
+        if (method === 'POST' && !action) {
+          const body = JSON.parse(event.body || '{}');
+          const {
+            lock_type,
+            scope_type,
+            user_ids,
+            kpi,
+            department_id,
+            exclude_monthly,
+            exclude_annual_target
+          } = body;
+
+          if (!lock_type || !scope_type) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'lock_type and scope_type are required' })
+            };
+          }
+
+          const request = pool.request();
+          request.input('lock_type', sql.NVarChar, Array.isArray(lock_type) ? JSON.stringify(lock_type) : lock_type);
+          request.input('scope_type', sql.NVarChar, scope_type);
+          request.input('user_ids', sql.NVarChar, user_ids ? JSON.stringify(user_ids) : null);
+          request.input('kpi', sql.NVarChar, kpi || null);
+          request.input('department_id', sql.Int, department_id || null);
+          request.input('exclude_monthly', sql.Bit, exclude_monthly || false);
+          request.input('exclude_annual_target', sql.Bit, exclude_annual_target || false);
+          request.input('created_by', sql.Int, user.id);
+
+          const result = await request.query(`
+            INSERT INTO field_locks 
+            (lock_type, scope_type, user_ids, kpi, department_id, exclude_monthly, exclude_annual_target, created_by)
+            OUTPUT INSERTED.*
+            VALUES 
+            (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @exclude_monthly, @exclude_annual_target, @created_by)
+          `);
+
+          const newLock = result.recordset[0];
+          newLock.user_ids = newLock.user_ids ? JSON.parse(newLock.user_ids) : null;
+          newLock.lock_type = newLock.lock_type.includes('[') ? JSON.parse(newLock.lock_type) : newLock.lock_type;
+
+          // Log activity
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: 'lock_created',
+            metadata: { lock_id: newLock.id, scope_type, lock_type }
+          });
+
+          return {
+            statusCode: 201,
+            headers,
+            body: JSON.stringify({ success: true, data: newLock })
+          };
+        }
+
+        // PUT /api/config/locks/:id - Update lock
+        if (method === 'PUT' && id) {
+          const body = JSON.parse(event.body || '{}');
+          const request = pool.request();
+          request.input('id', sql.Int, id);
+          request.input('lock_type', sql.NVarChar, body.lock_type ? (Array.isArray(body.lock_type) ? JSON.stringify(body.lock_type) : body.lock_type) : null);
+          request.input('scope_type', sql.NVarChar, body.scope_type || null);
+          request.input('user_ids', sql.NVarChar, body.user_ids ? JSON.stringify(body.user_ids) : null);
+          request.input('kpi', sql.NVarChar, body.kpi || null);
+          request.input('department_id', sql.Int, body.department_id || null);
+          request.input('exclude_monthly', sql.Bit, body.exclude_monthly !== undefined ? body.exclude_monthly : null);
+          request.input('exclude_annual_target', sql.Bit, body.exclude_annual_target !== undefined ? body.exclude_annual_target : null);
+          request.input('is_active', sql.Bit, body.is_active !== undefined ? body.is_active : null);
+
+          const result = await request.query(`
+            UPDATE field_locks
+            SET 
+              lock_type = COALESCE(@lock_type, lock_type),
+              scope_type = COALESCE(@scope_type, scope_type),
+              user_ids = COALESCE(@user_ids, user_ids),
+              kpi = COALESCE(@kpi, kpi),
+              department_id = COALESCE(@department_id, department_id),
+              exclude_monthly = COALESCE(@exclude_monthly, exclude_monthly),
+              exclude_annual_target = COALESCE(@exclude_annual_target, exclude_annual_target),
+              is_active = COALESCE(@is_active, is_active),
+              updated_at = GETDATE()
+            OUTPUT INSERTED.*
+            WHERE id = @id
+          `);
+
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Lock not found' })
+            };
+          }
+
+          const updatedLock = result.recordset[0];
+          updatedLock.user_ids = updatedLock.user_ids ? JSON.parse(updatedLock.user_ids) : null;
+          updatedLock.lock_type = updatedLock.lock_type.includes('[') ? JSON.parse(updatedLock.lock_type) : updatedLock.lock_type;
+
+          // Log activity
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: 'lock_updated',
+            metadata: { lock_id: id }
+          });
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: updatedLock })
+          };
+        }
+
+        // DELETE /api/config/locks/:id - Delete/deactivate lock
+        if (method === 'DELETE' && id) {
+          const request = pool.request();
+          request.input('id', sql.Int, id);
+
+          const result = await request.query(`
+            UPDATE field_locks
+            SET is_active = 0, updated_at = GETDATE()
+            OUTPUT INSERTED.*
+            WHERE id = @id
+          `);
+
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Lock not found' })
+            };
+          }
+
+          // Log activity
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: 'lock_deleted',
+            metadata: { lock_id: id }
+          });
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, message: 'Lock deactivated' })
+          };
+        }
+
+        // POST /api/config/locks/bulk - Bulk operations
+        if (method === 'POST' && action === 'bulk') {
+          const body = JSON.parse(event.body || '{}');
+          const { operation, locks } = body; // operation: 'create' or 'delete', locks: array of lock data or IDs
+
+          if (!operation || !Array.isArray(locks)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'operation and locks array are required' })
+            };
+          }
+
+          if (operation === 'create') {
+            const results = [];
+            for (const lockData of locks) {
+              const request = pool.request();
+              request.input('lock_type', sql.NVarChar, Array.isArray(lockData.lock_type) ? JSON.stringify(lockData.lock_type) : lockData.lock_type);
+              request.input('scope_type', sql.NVarChar, lockData.scope_type);
+              request.input('user_ids', sql.NVarChar, lockData.user_ids ? JSON.stringify(lockData.user_ids) : null);
+              request.input('kpi', sql.NVarChar, lockData.kpi || null);
+              request.input('department_id', sql.Int, lockData.department_id || null);
+              request.input('exclude_monthly', sql.Bit, lockData.exclude_monthly || false);
+              request.input('exclude_annual_target', sql.Bit, lockData.exclude_annual_target || false);
+              request.input('created_by', sql.Int, user.id);
+
+              const result = await request.query(`
+                INSERT INTO field_locks 
+                (lock_type, scope_type, user_ids, kpi, department_id, exclude_monthly, exclude_annual_target, created_by)
+                OUTPUT INSERTED.*
+                VALUES 
+                (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @exclude_monthly, @exclude_annual_target, @created_by)
+              `);
+              results.push(result.recordset[0]);
+            }
+
+            // Log bulk creation
+            await logActivity(pool, {
+              user_id: user.id,
+              username: user.username,
+              action_type: 'lock_created',
+              metadata: { bulk: true, count: results.length }
+            });
+
+            return {
+              statusCode: 201,
+              headers,
+              body: JSON.stringify({ success: true, data: results })
+            };
+          } else if (operation === 'delete') {
+            const ids = locks.map(id => parseInt(id)).filter(id => !isNaN(id));
+            if (ids.length === 0) {
+              return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ success: false, error: 'No valid IDs provided' })
+              };
+            }
+
+            const request = pool.request();
+            request.input('ids', sql.NVarChar, JSON.stringify(ids));
+
+            await request.query(`
+              UPDATE field_locks
+              SET is_active = 0, updated_at = GETDATE()
+              WHERE id IN (SELECT value FROM OPENJSON(@ids))
+            `);
+
+            // Log bulk deletion
+            await logActivity(pool, {
+              user_id: user.id,
+              username: user.username,
+              action_type: 'lock_deleted',
+              metadata: { bulk: true, count: ids.length }
+            });
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, message: `${ids.length} locks deactivated` })
+            };
+          }
+        }
+      }
+
+      // ========== ACTIVITY LOGS ENDPOINTS ==========
+      if (resource === 'logs') {
+        // GET /api/config/logs - Get logs with filters
+        if (method === 'GET' && !action) {
+          const params = event.queryStringParameters || {};
+          const page = parseInt(params.page || '1');
+          const limit = parseInt(params.limit || '50');
+          const offset = (page - 1) * limit;
+
+          const request = pool.request();
+          request.input('user_id', sql.Int, params.user_id ? parseInt(params.user_id) : null);
+          request.input('action_type', sql.NVarChar, params.action_type || null);
+          request.input('date_from', sql.Date, params.date_from || null);
+          request.input('date_to', sql.Date, params.date_to || null);
+          request.input('kpi', sql.NVarChar, params.kpi || null);
+          request.input('department_id', sql.Int, params.department_id ? parseInt(params.department_id) : null);
+          request.input('search', sql.NVarChar, params.search || null);
+          request.input('offset', sql.Int, offset);
+          request.input('limit', sql.Int, limit);
+
+          let whereClause = '1=1';
+          if (params.user_id) whereClause += ' AND user_id = @user_id';
+          if (params.action_type) whereClause += ' AND action_type = @action_type';
+          if (params.date_from) whereClause += ' AND created_at >= @date_from';
+          if (params.date_to) whereClause += ' AND created_at <= @date_to';
+          if (params.kpi) whereClause += ' AND kpi LIKE @kpi';
+          if (params.department_id) whereClause += ' AND department_id = @department_id';
+          if (params.search) {
+            whereClause += ` AND (username LIKE '%' + @search + '%' OR kpi LIKE '%' + @search + '%' OR department_name LIKE '%' + @search + '%')`;
+          }
+
+          const result = await request.query(`
+            SELECT * FROM activity_logs
+            WHERE ${whereClause}
+            ORDER BY created_at DESC
+            OFFSET @offset ROWS
+            FETCH NEXT @limit ROWS ONLY
+          `);
+
+          const countResult = await request.query(`
+            SELECT COUNT(*) as total FROM activity_logs WHERE ${whereClause}
+          `);
+
+          const logs = result.recordset.map(log => ({
+            ...log,
+            metadata: log.metadata ? JSON.parse(log.metadata) : null
+          }));
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              success: true,
+              data: logs,
+              pagination: {
+                page,
+                limit,
+                total: countResult.recordset[0].total,
+                totalPages: Math.ceil(countResult.recordset[0].total / limit)
+              }
+            })
+          };
+        }
+
+        // GET /api/config/logs/export - Export logs to CSV
+        if (method === 'GET' && action === 'export') {
+          const params = event.queryStringParameters || {};
+          const request = pool.request();
+          request.input('user_id', sql.Int, params.user_id ? parseInt(params.user_id) : null);
+          request.input('action_type', sql.NVarChar, params.action_type || null);
+          request.input('date_from', sql.Date, params.date_from || null);
+          request.input('date_to', sql.Date, params.date_to || null);
+          request.input('kpi', sql.NVarChar, params.kpi || null);
+          request.input('department_id', sql.Int, params.department_id ? parseInt(params.department_id) : null);
+
+          let whereClause = '1=1';
+          if (params.user_id) whereClause += ' AND user_id = @user_id';
+          if (params.action_type) whereClause += ' AND action_type = @action_type';
+          if (params.date_from) whereClause += ' AND created_at >= @date_from';
+          if (params.date_to) whereClause += ' AND created_at <= @date_to';
+          if (params.kpi) whereClause += ' AND kpi LIKE @kpi';
+          if (params.department_id) whereClause += ' AND department_id = @department_id';
+
+          const result = await request.query(`
+            SELECT * FROM activity_logs
+            WHERE ${whereClause}
+            ORDER BY created_at DESC
+          `);
+
+          // Convert to CSV format
+          const csvHeaders = 'ID,User,Username,Action,Target Field,Old Value,New Value,KPI,Department,Department Objective,Month,Created At\n';
+          const csvRows = result.recordset.map(log => {
+            return [
+              log.id,
+              log.user_id,
+              `"${log.username}"`,
+              log.action_type,
+              log.target_field || '',
+              log.old_value || '',
+              log.new_value || '',
+              `"${log.kpi || ''}"`,
+              `"${log.department_name || ''}"`,
+              log.department_objective_id || '',
+              log.month || '',
+              log.created_at
+            ].join(',');
+          }).join('\n');
+
+          return {
+            statusCode: 200,
+            headers: {
+              ...headers,
+              'Content-Type': 'text/csv',
+              'Content-Disposition': 'attachment; filename="activity_logs.csv"'
+            },
+            body: csvHeaders + csvRows
+          };
+        }
+
+        // GET /api/config/logs/stats - Get log statistics
+        if (method === 'GET' && action === 'stats') {
+          const request = pool.request();
+          
+          const totalResult = await request.query('SELECT COUNT(*) as total FROM activity_logs');
+          const byActionResult = await request.query(`
+            SELECT action_type, COUNT(*) as count
+            FROM activity_logs
+            GROUP BY action_type
+          `);
+          const byUserResult = await request.query(`
+            SELECT user_id, username, COUNT(*) as count
+            FROM activity_logs
+            GROUP BY user_id, username
+            ORDER BY count DESC
+            OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY
+          `);
+          const recentResult = await request.query(`
+            SELECT TOP 10 * FROM activity_logs
+            ORDER BY created_at DESC
+          `);
+
+          const stats = {
+            total_logs: totalResult.recordset[0].total,
+            by_action_type: {},
+            by_user: byUserResult.recordset.map(r => ({
+              user_id: r.user_id,
+              username: r.username,
+              count: r.count
+            })),
+            recent_activity: recentResult.recordset.map(log => ({
+              ...log,
+              metadata: log.metadata ? JSON.parse(log.metadata) : null
+            }))
+          };
+
+          byActionResult.recordset.forEach(r => {
+            stats.by_action_type[r.action_type] = r.count;
+          });
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: stats })
+          };
+        }
+      }
+
+      // ========== USERS ENDPOINT (for dropdowns) ==========
+      if (resource === 'users' && method === 'GET') {
+        const request = pool.request();
+        const result = await request.query(`
+          SELECT id, username, role, is_active
+          FROM users
+          WHERE is_active = 1
+          ORDER BY username
+        `);
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ success: true, data: result.recordset })
+        };
+      }
+
+      // ========== USER PERMISSIONS ENDPOINTS ==========
+      if (resource === 'permissions') {
+        // GET /api/config/permissions - Get all permissions
+        if (method === 'GET' && !action) {
+          const request = pool.request();
+          const result = await request.query(`
+            SELECT 
+              up.*,
+              u.username,
+              d.name as department_name
+            FROM user_permissions up
+            LEFT JOIN users u ON up.user_id = u.id
+            LEFT JOIN departments d ON up.department_id = d.id
+            ORDER BY up.user_id, up.department_id, up.kpi
+          `);
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset })
+          };
+        }
+
+        // GET /api/config/permissions/user/:userId - Get permissions for specific user
+        if (method === 'GET' && action === 'user' && id) {
+          const request = pool.request();
+          request.input('user_id', sql.Int, parseInt(id));
+          const result = await request.query(`
+            SELECT 
+              up.*,
+              u.username,
+              d.name as department_name
+            FROM user_permissions up
+            LEFT JOIN users u ON up.user_id = u.id
+            LEFT JOIN departments d ON up.department_id = d.id
+            WHERE up.user_id = @user_id
+            ORDER BY up.department_id, up.kpi
+          `);
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset })
+          };
+        }
+
+        // POST /api/config/permissions - Create/update permission
+        if (method === 'POST' && !action) {
+          const body = JSON.parse(event.body || '{}');
+          const {
+            user_id,
+            department_id,
+            kpi,
+            can_view,
+            can_edit_target,
+            can_edit_monthly_target,
+            can_edit_monthly_actual,
+            can_view_reports
+          } = body;
+
+          if (!user_id) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'user_id is required' })
+            };
+          }
+
+          const request = pool.request();
+          request.input('user_id', sql.Int, user_id);
+          request.input('department_id', sql.Int, department_id || null);
+          request.input('kpi', sql.NVarChar, kpi || null);
+          request.input('can_view', sql.Bit, can_view !== undefined ? can_view : true);
+          request.input('can_edit_target', sql.Bit, can_edit_target || false);
+          request.input('can_edit_monthly_target', sql.Bit, can_edit_monthly_target || false);
+          request.input('can_edit_monthly_actual', sql.Bit, can_edit_monthly_actual || false);
+          request.input('can_view_reports', sql.Bit, can_view_reports || false);
+
+          // Check if permission already exists
+          const checkRequest = pool.request();
+          checkRequest.input('user_id', sql.Int, user_id);
+          checkRequest.input('department_id', sql.Int, department_id || null);
+          checkRequest.input('kpi', sql.NVarChar, kpi || null);
+          const existing = await checkRequest.query(`
+            SELECT id FROM user_permissions
+            WHERE user_id = @user_id 
+              AND (department_id = @department_id OR (department_id IS NULL AND @department_id IS NULL))
+              AND (kpi = @kpi OR (kpi IS NULL AND @kpi IS NULL))
+          `);
+
+          let result;
+          if (existing.recordset.length > 0) {
+            // Update existing
+            request.input('id', sql.Int, existing.recordset[0].id);
+            result = await request.query(`
+              UPDATE user_permissions
+              SET 
+                can_view = @can_view,
+                can_edit_target = @can_edit_target,
+                can_edit_monthly_target = @can_edit_monthly_target,
+                can_edit_monthly_actual = @can_edit_monthly_actual,
+                can_view_reports = @can_view_reports,
+                updated_at = GETDATE()
+              OUTPUT INSERTED.*
+              WHERE id = @id
+            `);
+          } else {
+            // Insert new
+            result = await request.query(`
+              INSERT INTO user_permissions
+              (user_id, department_id, kpi, can_view, can_edit_target, can_edit_monthly_target, can_edit_monthly_actual, can_view_reports)
+              OUTPUT INSERTED.*
+              VALUES
+              (@user_id, @department_id, @kpi, @can_view, @can_edit_target, @can_edit_monthly_target, @can_edit_monthly_actual, @can_view_reports)
+            `);
+          }
+
+          // Log activity
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: existing.recordset.length > 0 ? 'permission_updated' : 'permission_created',
+            metadata: { permission_id: result.recordset[0].id, target_user_id: user_id }
+          });
+
+          return {
+            statusCode: existing.recordset.length > 0 ? 200 : 201,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset[0] })
+          };
+        }
+
+        // DELETE /api/config/permissions/:id - Delete permission
+        if (method === 'DELETE' && id) {
+          const request = pool.request();
+          request.input('id', sql.Int, id);
+
+          const result = await request.query(`
+            DELETE FROM user_permissions
+            OUTPUT DELETED.*
+            WHERE id = @id
+          `);
+
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Permission not found' })
+            };
+          }
+
+          // Log activity
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: 'permission_deleted',
+            metadata: { permission_id: id }
+          });
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, message: 'Permission deleted' })
+          };
+        }
+
+        // POST /api/config/permissions/bulk - Bulk update permissions
+        if (method === 'POST' && action === 'bulk') {
+          const body = JSON.parse(event.body || '{}');
+          const { permissions } = body; // Array of permission objects
+
+          if (!Array.isArray(permissions)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'permissions must be an array' })
+            };
+          }
+
+          const results = [];
+          for (const perm of permissions) {
+            const request = pool.request();
+            request.input('user_id', sql.Int, perm.user_id);
+            request.input('department_id', sql.Int, perm.department_id || null);
+            request.input('kpi', sql.NVarChar, perm.kpi || null);
+            request.input('can_view', sql.Bit, perm.can_view !== undefined ? perm.can_view : true);
+            request.input('can_edit_target', sql.Bit, perm.can_edit_target || false);
+            request.input('can_edit_monthly_target', sql.Bit, perm.can_edit_monthly_target || false);
+            request.input('can_edit_monthly_actual', sql.Bit, perm.can_edit_monthly_actual || false);
+            request.input('can_view_reports', sql.Bit, perm.can_view_reports || false);
+
+            // Check if exists
+            const checkRequest = pool.request();
+            checkRequest.input('user_id', sql.Int, perm.user_id);
+            checkRequest.input('department_id', sql.Int, perm.department_id || null);
+            checkRequest.input('kpi', sql.NVarChar, perm.kpi || null);
+            const existing = await checkRequest.query(`
+              SELECT id FROM user_permissions
+              WHERE user_id = @user_id 
+                AND (department_id = @department_id OR (department_id IS NULL AND @department_id IS NULL))
+                AND (kpi = @kpi OR (kpi IS NULL AND @kpi IS NULL))
+            `);
+
+            let result;
+            if (existing.recordset.length > 0) {
+              request.input('id', sql.Int, existing.recordset[0].id);
+              result = await request.query(`
+                UPDATE user_permissions
+                SET 
+                  can_view = @can_view,
+                  can_edit_target = @can_edit_target,
+                  can_edit_monthly_target = @can_edit_monthly_target,
+                  can_edit_monthly_actual = @can_edit_monthly_actual,
+                  can_view_reports = @can_view_reports,
+                  updated_at = GETDATE()
+                OUTPUT INSERTED.*
+                WHERE id = @id
+              `);
+            } else {
+              result = await request.query(`
+                INSERT INTO user_permissions
+                (user_id, department_id, kpi, can_view, can_edit_target, can_edit_monthly_target, can_edit_monthly_actual, can_view_reports)
+                OUTPUT INSERTED.*
+                VALUES
+                (@user_id, @department_id, @kpi, @can_view, @can_edit_target, @can_edit_monthly_target, @can_edit_monthly_actual, @can_view_reports)
+              `);
+            }
+            results.push(result.recordset[0]);
+          }
+
+          // Log bulk update
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: 'permission_updated',
+            metadata: { bulk: true, count: results.length }
+          });
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: results })
+          };
+        }
+      }
+
+      return {
+        statusCode: 404,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Endpoint not found' })
+      };
+
+    } catch (error) {
+      logger.error('Config API error', error);
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: error.message || 'Internal server error'
+        })
+      };
+    }
+  })
+);
+
+module.exports = { handler };

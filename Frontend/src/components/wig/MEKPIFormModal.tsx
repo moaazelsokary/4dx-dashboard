@@ -12,7 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useLockStatus } from '@/hooks/useLockStatus';
+import { getDepartmentObjectives } from '@/services/wigService';
+import { toast } from '@/hooks/use-toast';
+import { Loader2, Lock as LockIcon } from 'lucide-react';
 
 interface MEEKPI {
   id?: number;
@@ -33,6 +37,7 @@ interface MEKPIFormModalProps {
   onOpenChange: (open: boolean) => void;
   onSave: (data: MEEKPI) => Promise<void>;
   initialData?: MEEKPI;
+  departmentObjectiveId?: number; // For lock checking
 }
 
 export default function MEKPIFormModal({
@@ -40,10 +45,36 @@ export default function MEKPIFormModal({
   onOpenChange,
   onSave,
   initialData,
+  departmentObjectiveId,
 }: MEKPIFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [objectiveType, setObjectiveType] = useState<'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '' | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // Check lock status for target field (only if departmentObjectiveId is provided and type is Direct)
+  const { isLocked: isTargetLocked, lockInfo: targetLockInfo } = useLockStatus(
+    'target',
+    departmentObjectiveId || null,
+    undefined,
+    open && !!departmentObjectiveId && objectiveType === 'Direct'
+  );
+
+  // Load department objective to check type
+  useEffect(() => {
+    if (open && departmentObjectiveId) {
+      const loadObjective = async () => {
+        try {
+          const objectives = await getDepartmentObjectives();
+          const objective = objectives.find(obj => obj.id === departmentObjectiveId);
+          setObjectiveType(objective?.type || null);
+        } catch (error) {
+          console.error('Error loading department objective:', error);
+        }
+      };
+      loadObjective();
+    }
+  }, [open, departmentObjectiveId]);
 
   // Form state
   const [meKpi, setMeKpi] = useState('');
@@ -95,6 +126,16 @@ export default function MEKPIFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if target field is locked (only for Direct type)
+    if (objectiveType === 'Direct' && isTargetLocked && target !== null) {
+      toast({
+        title: 'Cannot Save',
+        description: targetLockInfo?.lock_reason || 'The target field is locked and cannot be edited',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     // Validate required fields
     const newErrors: Record<string, string> = {};
@@ -224,16 +265,43 @@ export default function MEKPIFormModal({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="target">Target</Label>
-                <Input
-                  id="target"
-                  type="number"
-                  value={target?.toString() || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setTarget(value === '' ? null : parseFloat(value) || null);
-                  }}
-                  placeholder="Enter target"
-                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="relative">
+                        <Input
+                          id="target"
+                          type="number"
+                          value={target?.toString() || ''}
+                          onChange={(e) => {
+                            // Check if locked before allowing edit
+                            if (objectiveType === 'Direct' && isTargetLocked) {
+                              toast({
+                                title: 'Field Locked',
+                                description: targetLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                                variant: 'destructive',
+                              });
+                              return;
+                            }
+                            const value = e.target.value;
+                            setTarget(value === '' ? null : parseFloat(value) || null);
+                          }}
+                          placeholder="Enter target"
+                          disabled={objectiveType === 'Direct' && isTargetLocked}
+                          readOnly={objectiveType === 'Direct' && isTargetLocked}
+                        />
+                        {objectiveType === 'Direct' && isTargetLocked && (
+                          <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    {objectiveType === 'Direct' && isTargetLocked && targetLockInfo?.lock_reason && (
+                      <TooltipContent>
+                        <p>{targetLockInfo.lock_reason}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="actual">Actual</Label>

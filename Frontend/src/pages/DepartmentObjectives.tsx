@@ -2836,6 +2836,7 @@ export default function DepartmentObjectives() {
             }
           }}
           onSave={handleAddMEKPI}
+          departmentObjectiveId={currentMEKPIObjectiveId || editingMEKPI?.id || undefined}
           initialData={editingMEKPI ? {
             id: editingMEKPI.id,
             me_kpi: editingMEKPI.kpi || '',

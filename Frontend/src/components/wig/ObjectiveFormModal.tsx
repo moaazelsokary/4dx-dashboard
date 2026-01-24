@@ -12,7 +12,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useLockStatus } from '@/hooks/useLockStatus';
+import { toast } from '@/hooks/use-toast';
+import { Loader2, Lock as LockIcon } from 'lucide-react';
 import KPISelector from '@/components/wig/KPISelector';
 import type { DepartmentObjective } from '@/types/wig';
 import { cn } from '@/lib/utils';
@@ -51,6 +54,23 @@ export default function ObjectiveFormModal({
   const [mov, setMov] = useState('');
   const [responsibleSuggestions, setResponsibleSuggestions] = useState<string[]>([]);
   const [showResponsibleSuggestions, setShowResponsibleSuggestions] = useState(false);
+  const [objectiveType, setObjectiveType] = useState<'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '' | null>(null);
+
+  // Check lock status for target field (only if editing and type is Direct)
+  const { isLocked: isTargetLocked, lockInfo: targetLockInfo } = useLockStatus(
+    'target',
+    initialData?.id || null,
+    undefined,
+    open && mode === 'edit' && !!initialData?.id && objectiveType === 'Direct'
+  );
+
+  // Determine objective type from initialData
+  useEffect(() => {
+    if (open && initialData) {
+      const parsedTypes = parseTypes(initialData.type || '');
+      setObjectiveType((parsedTypes[0] || initialData.type || 'Direct') as any);
+    }
+  }, [open, initialData]);
 
   // Parse KPI string to array
   const parseKPIs = (kpiStr: string | undefined): string[] => {
@@ -349,14 +369,43 @@ export default function ObjectiveFormModal({
               <Label htmlFor="activity-target">
                 Target <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="activity-target"
-                type="number"
-                value={activityTarget || ''}
-                onChange={(e) => setActivityTarget(parseFloat(e.target.value) || 0)}
-                placeholder="Enter target value"
-                className={cn(errors.activityTarget && 'border-destructive')}
-              />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative">
+                      <Input
+                        id="activity-target"
+                        type="number"
+                        value={activityTarget || ''}
+                        onChange={(e) => {
+                          // Check if locked before allowing edit (only for Direct type when editing)
+                          if (mode === 'edit' && objectiveType === 'Direct' && isTargetLocked) {
+                            toast({
+                              title: 'Field Locked',
+                              description: targetLockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          setActivityTarget(parseFloat(e.target.value) || 0);
+                        }}
+                        placeholder="Enter target value"
+                        className={cn(errors.activityTarget && 'border-destructive')}
+                        disabled={mode === 'edit' && objectiveType === 'Direct' && isTargetLocked}
+                        readOnly={mode === 'edit' && objectiveType === 'Direct' && isTargetLocked}
+                      />
+                      {mode === 'edit' && objectiveType === 'Direct' && isTargetLocked && (
+                        <LockIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  {mode === 'edit' && objectiveType === 'Direct' && isTargetLocked && targetLockInfo?.lock_reason && (
+                    <TooltipContent>
+                      <p>{targetLockInfo.lock_reason}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
               {errors.activityTarget && (
                 <p className="text-sm text-destructive">{errors.activityTarget}</p>
               )}
