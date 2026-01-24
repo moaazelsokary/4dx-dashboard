@@ -29,11 +29,12 @@ interface LockRuleFormProps {
 
 export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: LockRuleFormProps) {
   const queryClient = useQueryClient();
-  const [scopeType, setScopeType] = useState<'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives'>('all_users');
+  const [scopeType, setScopeType] = useState<'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives' | 'specific_objective'>('all_users');
   const [lockType, setLockType] = useState<string[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [selectedKPI, setSelectedKPI] = useState<string>('');
   const [selectedDepartment, setSelectedDepartment] = useState<number | null>(null);
+  const [selectedDepartmentObjective, setSelectedDepartmentObjective] = useState<number | null>(null);
   const [excludeMonthlyTarget, setExcludeMonthlyTarget] = useState(false);
   const [excludeMonthlyActual, setExcludeMonthlyActual] = useState(false);
   const [excludeAnnualTarget, setExcludeAnnualTarget] = useState(false);
@@ -50,7 +51,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   const { data: departments = [] } = useQuery({
     queryKey: ['departments'],
     queryFn: () => getDepartments(),
-    enabled: open && scopeType === 'department_kpi',
+    enabled: open && (scopeType === 'department_kpi' || scopeType === 'specific_objective'),
   });
 
   const { data: kpis = [] } = useQuery({
@@ -59,11 +60,11 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
     enabled: open && (scopeType === 'specific_kpi' || scopeType === 'department_kpi'),
   });
 
-  // Load department objectives for preview
+  // Load department objectives for preview and selection
   const { data: departmentObjectives = [] } = useQuery({
     queryKey: ['department-objectives', selectedDepartment, selectedKPI],
     queryFn: () => getDepartmentObjectives(selectedDepartment ? { department_id: selectedDepartment } : undefined),
-    enabled: open && (scopeType === 'department_kpi' || scopeType === 'specific_kpi'),
+    enabled: open && (scopeType === 'department_kpi' || scopeType === 'specific_kpi' || scopeType === 'specific_objective'),
   });
 
   const createMutation = useMutation({
@@ -130,6 +131,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
       }
       setSelectedKPI(lock.kpi || '');
       setSelectedDepartment(lock.department_id || null);
+      setSelectedDepartmentObjective(lock.department_objective_id || null);
       setExcludeMonthlyTarget(lock.exclude_monthly_target || false);
       setExcludeMonthlyActual(lock.exclude_monthly_actual || false);
       setExcludeAnnualTarget(lock.exclude_annual_target || false);
@@ -140,6 +142,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
       setSelectedUsers([]);
       setSelectedKPI('');
       setSelectedDepartment(null);
+      setSelectedDepartmentObjective(null);
       setExcludeMonthlyTarget(false);
       setExcludeMonthlyActual(false);
       setExcludeAnnualTarget(false);
@@ -203,12 +206,32 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
         return;
       }
 
+      if (scopeType === 'specific_objective') {
+        if (!selectedDepartment) {
+          toast({
+            title: 'Validation Error',
+            description: 'Please select a department',
+            variant: 'destructive',
+          });
+          return;
+        }
+        if (!selectedDepartmentObjective) {
+          toast({
+            title: 'Validation Error',
+            description: 'Please select a department objective',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
       const formData: LockRuleFormData = {
         lock_type: lockType.length === 1 ? lockType[0] : lockType,
         scope_type: scopeType,
         user_ids: scopeType === 'specific_users' ? selectedUsers : undefined,
         kpi: (scopeType === 'specific_kpi' || scopeType === 'department_kpi') ? selectedKPI : undefined,
-        department_id: scopeType === 'department_kpi' ? selectedDepartment || undefined : undefined,
+        department_id: (scopeType === 'department_kpi' || scopeType === 'specific_objective') ? selectedDepartment || undefined : undefined,
+        department_objective_id: scopeType === 'specific_objective' ? selectedDepartmentObjective || undefined : undefined,
       };
 
       if (lock?.id) {
@@ -277,6 +300,12 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                   <RadioGroupItem value="department_kpi" id="scope-dept-kpi" />
                   <Label htmlFor="scope-dept-kpi" className="font-normal cursor-pointer">
                     Department KPI
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="specific_objective" id="scope-specific-objective" />
+                  <Label htmlFor="scope-specific-objective" className="font-normal cursor-pointer">
+                    Specific Objective (in specific department)
                   </Label>
                 </div>
               </div>
@@ -599,12 +628,18 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
           )}
 
           {/* Department Selection */}
-          {scopeType === 'department_kpi' && (
+          {(scopeType === 'department_kpi' || scopeType === 'specific_objective') && (
             <div className="space-y-3">
               <Label>Department</Label>
               <Select
                 value={selectedDepartment?.toString() || ''}
-                onValueChange={(value) => setSelectedDepartment(value ? parseInt(value) : null)}
+                onValueChange={(value) => {
+                  setSelectedDepartment(value ? parseInt(value) : null);
+                  // Reset objective selection when department changes
+                  if (scopeType === 'specific_objective') {
+                    setSelectedDepartmentObjective(null);
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
@@ -617,6 +652,48 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Department Objective Selection for specific_objective */}
+          {scopeType === 'specific_objective' && selectedDepartment && (
+            <div className="space-y-3">
+              <Label>Department Objective</Label>
+              <Select
+                value={selectedDepartmentObjective?.toString() || ''}
+                onValueChange={(value) => setSelectedDepartmentObjective(value ? parseInt(value) : null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department objective" />
+                </SelectTrigger>
+                <SelectContent>
+                  <ScrollArea className="h-[300px]">
+                    {departmentObjectives
+                      .filter(obj => obj.department_id === selectedDepartment)
+                      .map((obj) => (
+                        <SelectItem key={obj.id} value={obj.id.toString()}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{obj.activity || 'Untitled Objective'}</span>
+                            <span className="text-xs text-muted-foreground">
+                              KPI: {obj.kpi?.split('||')[0] || 'N/A'} | Type: {obj.type || 'N/A'}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </ScrollArea>
+                </SelectContent>
+              </Select>
+              {selectedDepartmentObjective && (
+                <div className="p-3 bg-muted rounded-md">
+                  <p className="text-sm font-medium mb-1">Preview:</p>
+                  <p className="text-sm text-muted-foreground">
+                    Will lock the selected objective{' '}
+                    {departmentObjectives.find(obj => obj.id === selectedDepartmentObjective)?.type?.includes('Direct') 
+                      ? '(Direct type - will be locked)' 
+                      : '(Non-Direct type - will be skipped)'}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

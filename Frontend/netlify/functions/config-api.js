@@ -142,11 +142,12 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
       WHERE is_active = 1
       ORDER BY 
         CASE scope_type 
-          WHEN 'specific_users' THEN 1
-          WHEN 'department_kpi' THEN 2
-          WHEN 'specific_kpi' THEN 3
-          WHEN 'all_users' THEN 4
-          WHEN 'all_department_objectives' THEN 5
+          WHEN 'specific_objective' THEN 1
+          WHEN 'specific_users' THEN 2
+          WHEN 'department_kpi' THEN 3
+          WHEN 'specific_kpi' THEN 4
+          WHEN 'all_users' THEN 5
+          WHEN 'all_department_objectives' THEN 6
         END
     `);
 
@@ -157,7 +158,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
 
       switch (lock.scope_type) {
         case 'specific_users':
-          if (lock.user_ids) {
+          // Only lock Direct type objectives (like all_department_objectives)
+          if (objectiveHasDirectType && lock.user_ids) {
             const userIds = JSON.parse(lock.user_ids);
             if (Array.isArray(userIds) && userIds.includes(userId)) {
               // Check if lock_type matches field_type
@@ -176,7 +178,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           break;
 
         case 'department_kpi':
-          if (lock.department_id === departmentId && lock.kpi === kpi) {
+          // Only lock Direct type objectives (like all_department_objectives)
+          if (objectiveHasDirectType && lock.department_id === departmentId && lock.kpi === kpi) {
             let lockTypes = [];
             try {
               lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
@@ -191,7 +194,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           break;
 
         case 'specific_kpi':
-          if (lock.kpi === kpi) {
+          // Only lock Direct type objectives (like all_department_objectives)
+          if (objectiveHasDirectType && lock.kpi === kpi) {
             let lockTypes = [];
             try {
               lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
@@ -206,19 +210,43 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           break;
 
         case 'all_users':
-          let lockTypes = [];
-          try {
-            lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
-          } catch {
-            lockTypes = [lock.lock_type];
+          // Only lock Direct type objectives (like all_department_objectives)
+          if (objectiveHasDirectType) {
+            let lockTypes = [];
+            try {
+              lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
+            } catch {
+              lockTypes = [lock.lock_type];
+            }
+            if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
+              matches = true;
+              lockReason = `Locked for all users`;
+            }
           }
-          if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
-            matches = true;
-            lockReason = `Locked for all users`;
+          break;
+
+        case 'specific_objective':
+          // Lock specific department objective by ID
+          // Only lock Direct type objectives
+          if (objectiveHasDirectType && lock.department_objective_id === departmentObjectiveId) {
+            let lockTypes = [];
+            try {
+              lockTypes = Array.isArray(JSON.parse(lock.lock_type)) ? JSON.parse(lock.lock_type) : [lock.lock_type];
+            } catch {
+              lockTypes = [lock.lock_type];
+            }
+            if (lockTypes.includes(fieldType) || lock.lock_type === 'all_department_objectives') {
+              matches = true;
+              lockReason = `Locked for specific objective`;
+            }
           }
           break;
 
         case 'all_department_objectives':
+          // Only lock Direct type objectives
+          if (!objectiveHasDirectType) {
+            break;
+          }
           // Check user scope
           let userMatches = true;
           if (lock.user_ids) {
@@ -339,10 +367,12 @@ const handler = rateLimiter('general')(
             SELECT 
               fl.*,
               u.username as created_by_username,
-              d.name as department_name
+              d.name as department_name,
+              do.activity as department_objective_activity
             FROM field_locks fl
             LEFT JOIN users u ON fl.created_by = u.id
             LEFT JOIN departments d ON fl.department_id = d.id
+            LEFT JOIN department_objectives do ON fl.department_objective_id = do.id
             WHERE fl.is_active = 1
             ORDER BY fl.created_at DESC
           `);
@@ -368,10 +398,12 @@ const handler = rateLimiter('general')(
             SELECT 
               fl.*,
               u.username as created_by_username,
-              d.name as department_name
+              d.name as department_name,
+              do.activity as department_objective_activity
             FROM field_locks fl
             LEFT JOIN users u ON fl.created_by = u.id
             LEFT JOIN departments d ON fl.department_id = d.id
+            LEFT JOIN department_objectives do ON fl.department_objective_id = do.id
             WHERE fl.id = @id
           `);
 
@@ -464,6 +496,7 @@ const handler = rateLimiter('general')(
             user_ids,
             kpi,
             department_id,
+            department_objective_id,
             exclude_monthly_target,
             exclude_monthly_actual,
             exclude_annual_target
@@ -483,6 +516,7 @@ const handler = rateLimiter('general')(
           request.input('user_ids', sql.NVarChar, user_ids ? JSON.stringify(user_ids) : null);
           request.input('kpi', sql.NVarChar, kpi || null);
           request.input('department_id', sql.Int, department_id || null);
+          request.input('department_objective_id', sql.Int, department_objective_id || null);
           request.input('exclude_monthly_target', sql.Bit, exclude_monthly_target || false);
           request.input('exclude_monthly_actual', sql.Bit, exclude_monthly_actual || false);
           request.input('exclude_annual_target', sql.Bit, exclude_annual_target || false);
@@ -490,10 +524,10 @@ const handler = rateLimiter('general')(
 
           const result = await request.query(`
             INSERT INTO field_locks 
-            (lock_type, scope_type, user_ids, kpi, department_id, exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
+            (lock_type, scope_type, user_ids, kpi, department_id, department_objective_id, exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
             OUTPUT INSERTED.*
             VALUES 
-            (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
+            (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @department_objective_id, @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
           `);
 
           const newLock = result.recordset[0];
@@ -525,6 +559,7 @@ const handler = rateLimiter('general')(
           request.input('user_ids', sql.NVarChar, body.user_ids ? JSON.stringify(body.user_ids) : null);
           request.input('kpi', sql.NVarChar, body.kpi || null);
           request.input('department_id', sql.Int, body.department_id || null);
+          request.input('department_objective_id', sql.Int, body.department_objective_id !== undefined ? body.department_objective_id : null);
           request.input('exclude_monthly_target', sql.Bit, body.exclude_monthly_target !== undefined ? body.exclude_monthly_target : null);
           request.input('exclude_monthly_actual', sql.Bit, body.exclude_monthly_actual !== undefined ? body.exclude_monthly_actual : null);
           request.input('exclude_annual_target', sql.Bit, body.exclude_annual_target !== undefined ? body.exclude_annual_target : null);
@@ -538,6 +573,7 @@ const handler = rateLimiter('general')(
               user_ids = COALESCE(@user_ids, user_ids),
               kpi = COALESCE(@kpi, kpi),
               department_id = COALESCE(@department_id, department_id),
+              department_objective_id = COALESCE(@department_objective_id, department_objective_id),
               exclude_monthly_target = COALESCE(@exclude_monthly_target, exclude_monthly_target),
               exclude_monthly_actual = COALESCE(@exclude_monthly_actual, exclude_monthly_actual),
               exclude_annual_target = COALESCE(@exclude_annual_target, exclude_annual_target),
@@ -631,6 +667,7 @@ const handler = rateLimiter('general')(
               request.input('user_ids', sql.NVarChar, lockData.user_ids ? JSON.stringify(lockData.user_ids) : null);
               request.input('kpi', sql.NVarChar, lockData.kpi || null);
               request.input('department_id', sql.Int, lockData.department_id || null);
+              request.input('department_objective_id', sql.Int, lockData.department_objective_id || null);
               request.input('exclude_monthly_target', sql.Bit, lockData.exclude_monthly_target || false);
               request.input('exclude_monthly_actual', sql.Bit, lockData.exclude_monthly_actual || false);
               request.input('exclude_annual_target', sql.Bit, lockData.exclude_annual_target || false);
@@ -638,10 +675,10 @@ const handler = rateLimiter('general')(
 
               const result = await request.query(`
                 INSERT INTO field_locks 
-                (lock_type, scope_type, user_ids, kpi, department_id, exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
+                (lock_type, scope_type, user_ids, kpi, department_id, department_objective_id, exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
                 OUTPUT INSERTED.*
                 VALUES 
-                (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
+                (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @department_objective_id, @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
               `);
               results.push(result.recordset[0]);
             }
