@@ -322,8 +322,11 @@ const handler = rateLimiter('general')(
       // Parse path segments
       const pathParts = path.split('/').filter(p => p);
       const resource = pathParts[0]; // 'locks', 'logs', or 'permissions'
-      const action = pathParts[1]; // 'check', 'check-batch', 'export', etc.
-      const id = pathParts[2]; // ID parameter
+      
+      // Determine if pathParts[1] is an ID (number) or an action (string)
+      const isNumericId = pathParts[1] && !isNaN(parseInt(pathParts[1]));
+      const action = isNumericId ? null : pathParts[1]; // 'check', 'check-batch', 'export', etc.
+      const id = isNumericId ? parseInt(pathParts[1]) : (pathParts[2] ? parseInt(pathParts[2]) : null); // ID parameter
 
       // Lock checking endpoints are available to ALL authenticated users
       const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch');
