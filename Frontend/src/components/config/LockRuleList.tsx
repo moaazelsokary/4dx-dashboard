@@ -90,6 +90,9 @@ export default function LockRuleList() {
         return `KPI: ${lock.kpi || 'N/A'}`;
       case 'department_kpi':
         return `${lock.department_name || 'Department'} - ${lock.kpi || 'KPI'}`;
+      case 'specific_objective':
+        const objectiveName = lock.department_objective_activity || 'Objective';
+        return `${lock.department_name || 'Department'} - ${objectiveName}${lock.department_objective_id ? ` (ID: ${lock.department_objective_id})` : ''}`;
       case 'all_department_objectives':
         const exclusions = [];
         if (lock.exclude_monthly_target) exclusions.push('Monthly Target');

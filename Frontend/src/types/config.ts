@@ -1,7 +1,7 @@
 // Configuration System TypeScript Types
 
 export type LockType = 'target' | 'monthly_target' | 'monthly_actual' | 'all_department_objectives';
-export type ScopeType = 'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives';
+export type ScopeType = 'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives' | 'specific_objective';
 export type ActionType = 'lock_created' | 'lock_deleted' | 'lock_updated' | 'value_edited' | 'permission_created' | 'permission_updated' | 'permission_deleted';
 export type TargetField = 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields';
 
@@ -12,6 +12,7 @@ export interface FieldLock {
   user_ids: number[] | null; // JSON array of user IDs
   kpi: string | null;
   department_id: number | null;
+  department_objective_id: number | null; // For specific_objective scope type
   exclude_monthly_target: boolean; // Separate control for monthly target
   exclude_monthly_actual: boolean; // Separate control for monthly actual
   exclude_annual_target: boolean;
@@ -22,6 +23,7 @@ export interface FieldLock {
   // Denormalized fields for display
   created_by_username?: string;
   department_name?: string;
+  department_objective_activity?: string; // Denormalized activity name for display
 }
 
 export interface ActivityLog {
@@ -85,7 +87,8 @@ export interface LockRuleFormData {
   scope_type: ScopeType;
   user_ids?: number[]; // For specific_users or all_department_objectives
   kpi?: string; // For specific_kpi or department_kpi
-  department_id?: number; // For department_kpi
+  department_id?: number; // For department_kpi or specific_objective
+  department_objective_id?: number; // For specific_objective scope type
   exclude_monthly_target?: boolean; // For all_department_objectives - exclude monthly target
   exclude_monthly_actual?: boolean; // For all_department_objectives - exclude monthly actual
   exclude_annual_target?: boolean; // For all_department_objectives - exclude annual target
