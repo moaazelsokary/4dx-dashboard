@@ -1,5 +1,5 @@
 // React hook for checking lock status
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { LockCheckResponse } from '@/types/config';
 import { checkLockStatus, checkLockStatusBatch } from '@/services/configService';
@@ -18,14 +18,29 @@ export function useLockStatus(
     queryKey: ['lockStatus', fieldType, departmentObjectiveId, month],
     queryFn: async () => {
       if (!departmentObjectiveId) {
+        console.log(`[Lock Check] Skipped - no objective ID for ${fieldType}`);
         return { is_locked: false };
       }
-      return await checkLockStatus(fieldType, departmentObjectiveId, month);
+      console.log(`[Lock Check] Checking ${fieldType} for objective ${departmentObjectiveId}${month ? ` month ${month}` : ''}`);
+      const result = await checkLockStatus(fieldType, departmentObjectiveId, month);
+      console.log(`[Lock Check] Result for ${fieldType}:`, result);
+      return result;
     },
     enabled: enabled && !!departmentObjectiveId,
     staleTime: 0, // Always check fresh (no caching)
     cacheTime: 0,
   });
+
+  // Log when enabled state changes
+  useEffect(() => {
+    console.log(`[Lock Check] Hook state for ${fieldType} (obj: ${departmentObjectiveId}):`, {
+      enabled,
+      departmentObjectiveId,
+      isLocked: data?.is_locked,
+      isLoading,
+      hasError: !!error,
+    });
+  }, [enabled, departmentObjectiveId, fieldType, data?.is_locked, isLoading, error]);
 
   return {
     isLocked: data?.is_locked || false,
