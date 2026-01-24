@@ -36,11 +36,13 @@ export default function LockRuleList() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteLock(id),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['field-locks'] });
-      // Invalidate all lock status queries to force immediate refetch for live updates
-      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
+      // Invalidate and refetch all lock status queries immediately for live updates
+      await queryClient.invalidateQueries({ queryKey: ['lockStatus'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['batchLockStatus'], refetchType: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['lockStatus'], type: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['batchLockStatus'], type: 'active' });
       toast({
         title: 'Success',
         description: 'Lock deleted successfully',

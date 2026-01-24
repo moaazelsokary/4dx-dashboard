@@ -228,18 +228,23 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
 
           if (userMatches) {
             // Check exclusions (separate for target and actual now)
+            // Note: SQL Server BIT values are returned as booleans (true/false), not numbers (0/1)
+            // So we check for both false and 0 to handle both cases
             if (fieldType === 'monthly_target') {
-              if (lock.exclude_monthly_target === 0) {
+              // Lock if NOT excluded (exclude_monthly_target is false or 0)
+              if (lock.exclude_monthly_target === false || lock.exclude_monthly_target === 0) {
                 matches = true;
                 lockReason = `Locked by All Department Objectives`;
               }
             } else if (fieldType === 'monthly_actual') {
-              if (lock.exclude_monthly_actual === 0) {
+              // Lock if NOT excluded (exclude_monthly_actual is false or 0)
+              if (lock.exclude_monthly_actual === false || lock.exclude_monthly_actual === 0) {
                 matches = true;
                 lockReason = `Locked by All Department Objectives`;
               }
             } else if (fieldType === 'target') {
-              if (lock.exclude_annual_target === 0) {
+              // Lock if NOT excluded (exclude_annual_target is false or 0)
+              if (lock.exclude_annual_target === false || lock.exclude_annual_target === 0) {
                 matches = true;
                 lockReason = `Locked by All Department Objectives`;
               }

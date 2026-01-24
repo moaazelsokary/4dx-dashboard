@@ -28,7 +28,9 @@ export function useLockStatus(
     },
     enabled: enabled && !!departmentObjectiveId,
     staleTime: 0, // Always check fresh (no caching)
-    cacheTime: 0,
+    gcTime: 0, // No garbage collection time (replaces cacheTime in newer versions)
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
   });
 
   // Log when enabled state changes

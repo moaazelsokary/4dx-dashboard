@@ -13,15 +13,17 @@ export default function BulkLockOperations() {
 
   const bulkCreateMutation = useMutation({
     mutationFn: (locks: LockRuleFormData[]) => bulkCreateLocks(locks),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       toast({
         title: 'Success',
         description: `${data.length} lock rules created successfully`,
       });
       queryClient.invalidateQueries({ queryKey: ['field-locks'] });
-      // Invalidate all lock status queries to force immediate refetch for live updates
-      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
+      // Invalidate and refetch all lock status queries immediately for live updates
+      await queryClient.invalidateQueries({ queryKey: ['lockStatus'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['batchLockStatus'], refetchType: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['lockStatus'], type: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['batchLockStatus'], type: 'active' });
       setFormOpen(false);
     },
     onError: (error: Error) => {
@@ -35,15 +37,17 @@ export default function BulkLockOperations() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (ids: number[]) => bulkDeleteLocks(ids),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: 'Success',
         description: 'Locks deleted successfully',
       });
       queryClient.invalidateQueries({ queryKey: ['field-locks'] });
-      // Invalidate all lock status queries to force immediate refetch for live updates
-      queryClient.invalidateQueries({ queryKey: ['lockStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['batchLockStatus'] });
+      // Invalidate and refetch all lock status queries immediately for live updates
+      await queryClient.invalidateQueries({ queryKey: ['lockStatus'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['batchLockStatus'], refetchType: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['lockStatus'], type: 'active' });
+      await queryClient.refetchQueries({ queryKey: ['batchLockStatus'], type: 'active' });
     },
     onError: (error: Error) => {
       toast({
