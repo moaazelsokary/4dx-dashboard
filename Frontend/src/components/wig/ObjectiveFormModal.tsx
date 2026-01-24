@@ -78,7 +78,15 @@ export default function ObjectiveFormModal({
   const objectiveType = useMemo(() => {
     if (!open || !initialData) return null;
     const parsedTypes = parseTypes(initialData.type || '');
-    return (parsedTypes[0] || initialData.type || 'Direct') as 'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '';
+    const type = (parsedTypes[0] || initialData.type || 'Direct') as 'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '';
+    console.log('[ObjectiveFormModal] Computed objective type:', {
+      open,
+      objectiveId: initialData?.id,
+      rawType: initialData?.type,
+      parsedTypes,
+      finalType: type,
+    });
+    return type;
   }, [open, initialData]);
 
   // Check lock status for target field (only if editing and type is Direct)
