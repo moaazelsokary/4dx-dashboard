@@ -236,11 +236,20 @@ export default function ObjectiveFormModal({
 
     // Check for locks before saving (for edit mode, applies to both Direct and In direct)
     if (mode === 'edit') {
-      if (isTargetLocked || isAllFieldsLocked) {
-        const lockInfo = isTargetLocked ? targetLockInfo : allFieldsLockInfo;
+      // Check annual target lock separately (respects exclude_annual_target)
+      if (isTargetLocked) {
         toast({
           title: 'Cannot Save',
-          description: lockInfo?.lock_reason || 'One or more fields are locked and cannot be modified.',
+          description: targetLockInfo?.lock_reason || 'The target field is locked and cannot be modified.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      // Check other fields lock (activity, responsible, mov, etc.)
+      if (isAllFieldsLocked) {
+        toast({
+          title: 'Cannot Save',
+          description: allFieldsLockInfo?.lock_reason || 'One or more fields are locked and cannot be modified.',
           variant: 'destructive',
         });
         return;
@@ -528,7 +537,7 @@ export default function ObjectiveFormModal({
             <div className="space-y-2" data-field="activityTarget">
               <Label htmlFor="activity-target">
                 Target <span className="text-destructive">*</span>
-                {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                {mode === 'edit' && isTargetLocked && (
                   <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
                 )}
               </Label>
@@ -542,12 +551,11 @@ export default function ObjectiveFormModal({
                         value={activityTarget || ''}
                         onChange={(e) => {
                           // Check if locked before allowing edit (applies to both Direct and In direct)
-                          // Check both target lock and all_fields lock
-                          if (mode === 'edit' && (isTargetLocked || isAllFieldsLocked)) {
-                            const lockInfo = isTargetLocked ? targetLockInfo : allFieldsLockInfo;
+                          // Annual target only checks isTargetLocked (not isAllFieldsLocked) to respect exclude_annual_target
+                          if (mode === 'edit' && isTargetLocked) {
                             toast({
                               title: 'Field Locked',
-                              description: lockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                              description: targetLockInfo?.lock_reason || 'This field is locked and cannot be edited',
                               variant: 'destructive',
                             });
                             return;
@@ -557,21 +565,21 @@ export default function ObjectiveFormModal({
                         placeholder="Enter target value"
                         className={cn(
                           errors.activityTarget && 'border-destructive',
-                          mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && 'pr-10'
+                          mode === 'edit' && isTargetLocked && 'pr-10'
                         )}
-                        disabled={mode === 'edit' && (isTargetLocked || isAllFieldsLocked)}
-                        readOnly={mode === 'edit' && (isTargetLocked || isAllFieldsLocked)}
+                        disabled={mode === 'edit' && isTargetLocked}
+                        readOnly={mode === 'edit' && isTargetLocked}
                       />
-                      {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                      {mode === 'edit' && isTargetLocked && (
                         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
                           <LockIcon className="w-4 h-4 text-orange-600" />
                         </div>
                       )}
                     </div>
                   </TooltipTrigger>
-                  {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                  {mode === 'edit' && isTargetLocked && targetLockInfo?.lock_reason && (
                     <TooltipContent>
-                      <p>{(isTargetLocked ? targetLockInfo : allFieldsLockInfo)?.lock_reason || 'This field is locked and cannot be edited'}</p>
+                      <p>{targetLockInfo.lock_reason}</p>
                     </TooltipContent>
                   )}
                 </Tooltip>
@@ -583,7 +591,7 @@ export default function ObjectiveFormModal({
             <div className="space-y-2" data-field="targetType">
               <Label htmlFor="target-type">
                 Target Type <span className="text-destructive">*</span>
-                {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                {mode === 'edit' && isTargetLocked && (
                   <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
                 )}
               </Label>
@@ -595,18 +603,18 @@ export default function ObjectiveFormModal({
                         value={targetType}
                         onValueChange={(value: 'number' | 'percentage') => {
                           // Check if locked before allowing edit
-                          if (mode === 'edit' && (isTargetLocked || isAllFieldsLocked)) {
-                            const lockInfo = isTargetLocked ? targetLockInfo : allFieldsLockInfo;
+                          // Target type follows the same lock as annual target (respects exclude_annual_target)
+                          if (mode === 'edit' && isTargetLocked) {
                             toast({
                               title: 'Field Locked',
-                              description: lockInfo?.lock_reason || 'This field is locked and cannot be edited',
+                              description: targetLockInfo?.lock_reason || 'This field is locked and cannot be edited',
                               variant: 'destructive',
                             });
                             return;
                           }
                           setTargetType(value);
                         }}
-                        disabled={mode === 'edit' && (isTargetLocked || isAllFieldsLocked)}
+                        disabled={mode === 'edit' && isTargetLocked}
                       >
                         <SelectTrigger id="target-type">
                           <SelectValue />
@@ -616,16 +624,16 @@ export default function ObjectiveFormModal({
                           <SelectItem value="percentage">Percentage</SelectItem>
                         </SelectContent>
                       </Select>
-                      {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                      {mode === 'edit' && isTargetLocked && (
                         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
                           <LockIcon className="w-4 h-4 text-orange-600" />
                         </div>
                       )}
                     </div>
                   </TooltipTrigger>
-                  {mode === 'edit' && (isTargetLocked || isAllFieldsLocked) && (
+                  {mode === 'edit' && isTargetLocked && targetLockInfo?.lock_reason && (
                     <TooltipContent>
-                      <p>{(isTargetLocked ? targetLockInfo : allFieldsLockInfo)?.lock_reason || 'This field is locked and cannot be edited'}</p>
+                      <p>{targetLockInfo.lock_reason}</p>
                     </TooltipContent>
                   )}
                 </Tooltip>
