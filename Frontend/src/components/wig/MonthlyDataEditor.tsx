@@ -34,12 +34,14 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   const [objectiveType, setObjectiveType] = useState<'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '' | null>(null);
 
   // Prepare batch lock checks for all 36 fields (18 months × 2 fields)
+  // Note: monthly_target locks work for both Direct and In direct types
+  // Note: monthly_actual locks work for Direct type only (backend enforces this)
   const lockChecks = MONTHS.flatMap(month => [
     createLockCheckRequest('monthly_target', departmentObjectiveId, month),
     createLockCheckRequest('monthly_actual', departmentObjectiveId, month),
   ]);
 
-  const { getLockStatus, isLoading: locksLoading } = useBatchLockStatus(lockChecks, open && objectiveType === 'Direct');
+  const { getLockStatus, isLoading: locksLoading } = useBatchLockStatus(lockChecks, open && !!objectiveType);
 
   // Load department objective to check type
   useEffect(() => {
@@ -158,18 +160,18 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   };
 
   const updateMonthData = (month: string, field: 'target_value' | 'actual_value', value: string) => {
-    // Check if field is locked (only for Direct type)
-    if (objectiveType === 'Direct') {
-      const fieldType = field === 'target_value' ? 'monthly_target' : 'monthly_actual';
-      const lockInfo = getLockStatus(fieldType, departmentObjectiveId, month);
-      if (lockInfo.is_locked) {
-        toast({
-          title: 'Field Locked',
-          description: lockInfo.lock_reason || 'This field is locked and cannot be edited',
-          variant: 'destructive',
-        });
-        return;
-      }
+    // Check if field is locked
+    // Note: Backend enforces that monthly_actual only locks Direct type
+    // monthly_target locks both Direct and In direct types
+    const fieldType = field === 'target_value' ? 'monthly_target' : 'monthly_actual';
+    const lockInfo = getLockStatus(fieldType, departmentObjectiveId, month);
+    if (lockInfo.is_locked) {
+      toast({
+        title: 'Field Locked',
+        description: lockInfo.lock_reason || 'This field is locked and cannot be edited',
+        variant: 'destructive',
+      });
+      return;
     }
 
     const updated = new Map(data);
@@ -211,25 +213,26 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       return;
     }
 
-    // Check for locked fields before saving (only for Direct type)
-    if (objectiveType === 'Direct') {
-      const lockedFields: string[] = [];
-      MONTHS.forEach((month) => {
-        const targetLocked = getLockStatus('monthly_target', departmentObjectiveId, month).is_locked;
-        const actualLocked = getLockStatus('monthly_actual', departmentObjectiveId, month).is_locked;
-        const monthData = data.get(month);
-        const originalMonthData = originalData.get(month);
-        
-        // Check if field was changed and is locked
-        if (monthData && originalMonthData) {
-          if (monthData.target_value !== originalMonthData.target_value && targetLocked) {
-            lockedFields.push(`${month} target`);
-          }
-          if (monthData.actual_value !== originalMonthData.actual_value && actualLocked) {
-            lockedFields.push(`${month} actual`);
-          }
-        } else if (monthData) {
-          // New data
+    // Check for locked fields before saving
+    // Note: Backend enforces that monthly_actual only locks Direct type
+    // monthly_target locks both Direct and In direct types
+    const lockedFields: string[] = [];
+    MONTHS.forEach((month) => {
+      const targetLocked = getLockStatus('monthly_target', departmentObjectiveId, month).is_locked;
+      const actualLocked = getLockStatus('monthly_actual', departmentObjectiveId, month).is_locked;
+      const monthData = data.get(month);
+      const originalMonthData = originalData.get(month);
+      
+      // Check if field was changed and is locked
+      if (monthData && originalMonthData) {
+        if (monthData.target_value !== originalMonthData.target_value && targetLocked) {
+          lockedFields.push(`${month} target`);
+        }
+        if (monthData.actual_value !== originalMonthData.actual_value && actualLocked) {
+          lockedFields.push(`${month} actual`);
+        }
+      } else if (monthData) {
+        // New data
           if (monthData.target_value !== null && targetLocked) {
             lockedFields.push(`${month} target`);
           }
@@ -237,16 +240,15 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
             lockedFields.push(`${month} actual`);
           }
         }
-      });
+    });
 
-      if (lockedFields.length > 0) {
-        toast({
-          title: 'Cannot Save',
-          description: `The following fields are locked and cannot be edited: ${lockedFields.join(', ')}`,
-          variant: 'destructive',
-        });
-        return;
-      }
+    if (lockedFields.length > 0) {
+      toast({
+        title: 'Cannot Save',
+        description: `The following fields are locked and cannot be edited: ${lockedFields.join(', ')}`,
+        variant: 'destructive',
+      });
+      return;
     }
 
     // Debug: Log authentication status
@@ -403,20 +405,13 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                   
                   const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'MMM yyyy');
                   
-                  // Check lock status for this month's fields (only if Direct type)
-                  const isTargetLocked = objectiveType === 'Direct' 
-                    ? getLockStatus('monthly_target', departmentObjectiveId, month).is_locked 
-                    : false;
-                  const isActualLocked = objectiveType === 'Direct'
-                    ? getLockStatus('monthly_actual', departmentObjectiveId, month).is_locked
-                    : false;
-                  
-                  const targetLockInfo = objectiveType === 'Direct'
-                    ? getLockStatus('monthly_target', departmentObjectiveId, month)
-                    : { is_locked: false };
-                  const actualLockInfo = objectiveType === 'Direct'
-                    ? getLockStatus('monthly_actual', departmentObjectiveId, month)
-                    : { is_locked: false };
+                  // Check lock status for this month's fields
+                  // Note: Backend enforces that monthly_actual only locks Direct type
+                  // monthly_target locks both Direct and In direct types
+                  const targetLockInfo = getLockStatus('monthly_target', departmentObjectiveId, month);
+                  const actualLockInfo = getLockStatus('monthly_actual', departmentObjectiveId, month);
+                  const isTargetLocked = targetLockInfo.is_locked;
+                  const isActualLocked = actualLockInfo.is_locked;
 
                   return (
                     <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
