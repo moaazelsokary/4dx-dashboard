@@ -101,30 +101,9 @@ async function logActivity(pool, logData) {
   }
 }
 
-// Helper function to check if department objective is Direct type
-async function isDirectType(pool, department_objective_id) {
-  try {
-    const request = pool.request();
-    request.input('id', sql.Int, department_objective_id);
-    const result = await request.query(`
-      SELECT type FROM department_objectives WHERE id = @id
-    `);
-    return result.recordset.length > 0 && result.recordset[0].type === 'Direct';
-  } catch (error) {
-    logger.error('Error checking department objective type', error);
-    return false;
-  }
-}
-
 // Helper function to check lock status for a single field
 async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month = null) {
   try {
-    // First check if department objective is Direct type
-    const isDirect = await isDirectType(pool, departmentObjectiveId);
-    if (!isDirect) {
-      return { is_locked: false };
-    }
-
     // Get department objective details including type
     const deptObjRequest = pool.request();
     deptObjRequest.input('id', sql.Int, departmentObjectiveId);
@@ -143,9 +122,9 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
     // Type restrictions per field:
     // - monthly_actual: ONLY Direct type can be locked
     // - All other fields: Both Direct and In direct can be locked
-    const isDirectType = objectiveType && objectiveType.includes('Direct');
+    const objectiveHasDirectType = objectiveType && objectiveType.includes('Direct');
     
-    if (fieldType === 'monthly_actual' && !isDirectType) {
+    if (fieldType === 'monthly_actual' && !objectiveHasDirectType) {
       // monthly_actual can ONLY be locked for Direct type objectives
       return { is_locked: false };
     }
