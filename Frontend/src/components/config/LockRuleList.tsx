@@ -87,7 +87,8 @@ export default function LockRuleList() {
         return `${lock.department_name || 'Department'} - ${lock.kpi || 'KPI'}`;
       case 'all_department_objectives':
         const exclusions = [];
-        if (lock.exclude_monthly) exclusions.push('Monthly Data');
+        if (lock.exclude_monthly_target) exclusions.push('Monthly Target');
+        if (lock.exclude_monthly_actual) exclusions.push('Monthly Actual');
         if (lock.exclude_annual_target) exclusions.push('Annual Target');
         const userScope = Array.isArray(lock.user_ids) && lock.user_ids.length > 0 
           ? `Users: ${lock.user_ids.length}` 
