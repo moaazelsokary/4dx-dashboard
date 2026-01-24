@@ -599,15 +599,17 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
               <p className="text-sm text-muted-foreground">
                 Will lock entire department_objectives table for{' '}
                 {selectedUsers.length > 0 ? `${selectedUsers.length} selected user(s)` : 'all users'}
-                {excludeMonthly && excludeAnnualTarget && (
-                  <>, excluding monthly data and annual target (will lock other fields)</>
-                )}
-                {excludeMonthly && !excludeAnnualTarget && (
-                  <>, excluding monthly data</>
-                )}
-                {!excludeMonthly && excludeAnnualTarget && (
-                  <>, excluding annual target</>
-                )}
+                {(() => {
+                  const exclusions = [];
+                  if (excludeMonthlyTarget) exclusions.push('monthly target');
+                  if (excludeMonthlyActual) exclusions.push('monthly actual');
+                  if (excludeAnnualTarget) exclusions.push('annual target');
+                  
+                  if (exclusions.length > 0) {
+                    return <>, excluding {exclusions.join(', ')}</>;
+                  }
+                  return null;
+                })()}
               </p>
             </div>
           )}
