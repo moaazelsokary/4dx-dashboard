@@ -878,13 +878,18 @@ export default function DepartmentObjectives() {
     if (!deletingId) return;
 
     try {
-      // Optimistically remove from UI immediately - use flushSync for instant re-render
       const deletedObjective = objectives.find(obj => obj.id === deletingId);
       console.log('[DepartmentObjectives] Deleting objective:', deletingId);
       
+      // Delete from database FIRST (before optimistic update)
+      // This ensures lock checks happen before UI update
+      await deleteDepartmentObjective(deletingId);
+      
+      // Only remove from UI after successful deletion
+      const deletedId = deletingId;
       flushSync(() => {
         setObjectives(prev => {
-          const filtered = prev.filter(obj => obj.id !== deletingId);
+          const filtered = prev.filter(obj => obj.id !== deletedId);
           console.log('[DepartmentObjectives] Removed from state. Previous count:', prev.length, 'New count:', filtered.length);
           return filtered;
         });
@@ -892,68 +897,49 @@ export default function DepartmentObjectives() {
       });
       
       toast({
-        title: 'Deleting...',
-        description: 'Objective is being deleted',
-      });
-      
-      // Delete from database
-      await deleteDepartmentObjective(deletingId);
-      console.log('[DepartmentObjectives] Delete API call successful');
-      
-      // Ensure deletion is reflected (optimistic update already done, but double-check)
-      setObjectives(prev => {
-        const stillExists = prev.some(obj => obj.id === deletingId);
-        if (stillExists) {
-          console.warn('[DepartmentObjectives] Objective still in state after delete, removing again');
-          return prev.filter(obj => obj.id !== deletingId);
-        }
-        return prev;
-      });
-      
-      toast({
         title: 'Success',
         description: 'Objective deleted successfully',
       });
-      
       // Delay reload to allow server transaction to commit and avoid race conditions
-      // This ensures the deletion persists even if server response is delayed
       setTimeout(async () => {
         console.log('[DepartmentObjectives] Delayed reload after delete starting...');
         try {
           await loadData(false);
           console.log('[DepartmentObjectives] Delayed reload after delete completed');
-          
-          // Double-check that deleted objective is not in state
-          setObjectives(prev => {
-            const stillExists = prev.some(obj => obj.id === deletingId);
-            if (stillExists) {
-              console.warn('[DepartmentObjectives] Deleted objective reappeared after reload! Removing again...');
-              return prev.filter(obj => obj.id !== deletingId);
-            }
-            return prev;
-          });
         } catch (err) {
           console.error('[DepartmentObjectives] Delayed reload after delete failed:', err);
-          // Restore on error only if we have the deleted objective
-          if (deletedObjective) {
-            console.log('[DepartmentObjectives] Restoring deleted objective due to reload error');
-            setObjectives(prev => {
-              const exists = prev.some(obj => obj.id === deletingId);
-              if (!exists) {
-                return [...prev, deletedObjective];
-              }
-              return prev;
-            });
-          }
         }
       }, 500); // 500ms delay to allow server transaction to commit
     } catch (err) {
       console.error('[DepartmentObjectives] Delete failed:', err);
+      
+      // Restore the objective if it was optimistically removed
+      const deletedObjective = objectives.find(obj => obj.id === deletingId);
+      if (deletedObjective) {
+        setObjectives(prev => {
+          const exists = prev.some(obj => obj.id === deletingId);
+          if (!exists) {
+            return [...prev, deletedObjective];
+          }
+          return prev;
+        });
+      }
+      
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete objective';
       toast({
         title: 'Error',
-        description: 'Failed to delete objective',
+        description: errorMessage,
         variant: 'destructive',
       });
+      
+      // If it's a lock error, show more details
+      if (errorMessage.includes('locked') || errorMessage.includes('Cannot delete')) {
+        toast({
+          title: 'Operation Locked',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
       // Reload to get correct state on error
       loadData(false);
     }
@@ -1121,11 +1107,24 @@ export default function DepartmentObjectives() {
       
       // Force a re-render - filteredObjectives will update automatically via useMemo
     } catch (err) {
+      // Remove optimistic update on error
+      setObjectives(prev => prev.filter(obj => obj.id !== tempId));
+      
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create objective';
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to create objective',
+        description: errorMessage,
         variant: 'destructive',
       });
+      
+      // If it's a lock error, show more details
+      if (errorMessage.includes('locked') || errorMessage.includes('Cannot add')) {
+        toast({
+          title: 'Operation Locked',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     }
   };
 
