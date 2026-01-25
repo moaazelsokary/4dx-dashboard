@@ -24,22 +24,59 @@ async function getDbPool() {
 
   // Robust password handling (match wig-api.js and config-api.js)
   let password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PWD;
-  if (password && password.startsWith('/')) {
+  
+  // If PWD looks like a path (starts with /), it's the system variable, not our password
+  if (password && password.startsWith('/') && password.includes('/')) {
+    console.warn('[Auth API] PWD appears to be system path, not password. Use DB_PASSWORD instead.');
     password = process.env.DB_PASSWORD || process.env.VITE_PWD;
   }
-  if (password && (password.includes('%'))) {
-    try {
-      password = decodeURIComponent(password);
-    } catch (e) {
-      // Keep original if decode fails
-    }
-  }
-  if ((password && password.startsWith('"') && password.endsWith('"')) || 
-      (password && password.startsWith("'") && password.endsWith("'"))) {
-    password = password.slice(1, -1);
-  }
+  
+  // Log password info for debugging (without exposing the actual password)
   if (password) {
-    password = password.trim();
+    const passwordSource = process.env.DB_PASSWORD ? 'DB_PASSWORD' : 
+                          (process.env.VITE_PWD ? 'VITE_PWD' : 'PWD');
+    console.log('[Auth API] Raw password from env:', {
+      source: passwordSource,
+      length: password.length,
+      firstChar: password[0],
+      lastChar: password[password.length - 1],
+      hasPercent: password.includes('%'),
+      hasQuotes: password.includes('"') || password.includes("'"),
+      hasAt: password.includes('@'),
+    });
+    
+    // If password contains URL encoding (%), try to decode it
+    if (password.includes('%')) {
+      try {
+        const decoded = decodeURIComponent(password);
+        console.log('[Auth API] Password was URL-encoded, decoded. New length:', decoded.length);
+        password = decoded;
+      } catch (e) {
+        console.log('[Auth API] Password decode failed, using as-is');
+      }
+    }
+    
+    // Remove quotes if they were added (Netlify might add them)
+    if ((password.startsWith('"') && password.endsWith('"')) || 
+        (password.startsWith("'") && password.endsWith("'"))) {
+      password = password.slice(1, -1);
+      console.log('[Auth API] Removed quotes from password');
+    }
+    
+    // Remove any leading/trailing whitespace
+    const trimmed = password.trim();
+    if (trimmed !== password) {
+      console.log('[Auth API] Removed whitespace from password');
+      password = trimmed;
+    }
+    
+    console.log('[Auth API] Final password info:', {
+      length: password.length,
+      firstChar: password[0],
+      lastChar: password[password.length - 1],
+    });
+  } else {
+    console.error('[Auth API] Password is missing!');
   }
   
   const config = {
@@ -62,13 +99,30 @@ async function getDbPool() {
     },
   };
 
+  // Validate required configuration before attempting connection
+  const missingConfig = [];
+  if (!server) missingConfig.push('SERVER or VITE_SERVER');
+  if (!config.database) missingConfig.push('DATABASE or VITE_DATABASE');
+  if (!config.user) missingConfig.push('DB_USER, UID, VITE_UID, or VIE_UID');
+  if (!password) missingConfig.push('DB_PASSWORD, VITE_PWD, or PWD');
+
+  if (missingConfig.length > 0) {
+    const errorMsg = `Missing required environment variables: ${missingConfig.join(', ')}`;
+    console.error('[Auth API] Configuration error:', errorMsg);
+    logger.error('Database configuration incomplete', { missing: missingConfig });
+    throw new Error(errorMsg);
+  }
+
   try {
     console.log('[Auth API] Attempting database connection...', {
       server: server,
       port: port,
       database: config.database,
       user: config.user,
-      hasPassword: !!password
+      hasPassword: !!password,
+      hasServer: !!server,
+      hasDatabase: !!config.database,
+      hasUser: !!config.user
     });
     pool = await sql.connect(config);
     logger.info('Database connection established for auth-api');
@@ -76,11 +130,32 @@ async function getDbPool() {
     return pool;
   } catch (error) {
     logger.error('Database connection failed', error);
-    console.error('[Auth API] Database connection error:', {
+    
+    // Enhanced error diagnostics for ELOGIN errors
+    const errorDetails = {
       message: error.message,
       code: error.code,
-      name: error.name
-    });
+      name: error.name,
+      server: server,
+      port: port,
+      database: config.database,
+      user: config.user,
+      hasPassword: !!password,
+      passwordLength: password ? password.length : 0
+    };
+    
+    // Provide specific guidance for login failures
+    if (error.code === 'ELOGIN') {
+      console.error('[Auth API] Login authentication failed. Possible causes:');
+      console.error('  1. Incorrect password - verify DB_PASSWORD/VITE_PWD in Netlify environment variables');
+      console.error('  2. User does not exist - verify user "Khadija" exists in SQL Server');
+      console.error('  3. SQL Server authentication mode - ensure SQL Server Authentication is enabled');
+      console.error('  4. Password encoding - check if password contains special characters that need URL encoding');
+      console.error('  5. User permissions - verify user has access to the database');
+      errorDetails.troubleshooting = 'Check password, user existence, SQL auth mode, and permissions';
+    }
+    
+    console.error('[Auth API] Database connection error:', errorDetails);
     throw error;
   }
 }

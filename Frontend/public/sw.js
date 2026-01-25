@@ -55,9 +55,18 @@ self.addEventListener('fetch', (event) => {
           // Don't cache HTML
           return response;
         })
-        .catch(() => {
+        .catch(async () => {
           // If network fails, try cache as fallback
-          return caches.match(request);
+          const cachedResponse = await caches.match(request);
+          // If no cache, return a basic error response instead of null
+          if (!cachedResponse) {
+            return new Response('Network error and no cache available', {
+              status: 503,
+              statusText: 'Service Unavailable',
+              headers: { 'Content-Type': 'text/plain' }
+            });
+          }
+          return cachedResponse;
         })
     );
     return;
@@ -78,16 +87,28 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
 
-      return fetch(request).then((response) => {
-        // Only cache successful responses
-        if (response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
+      return fetch(request)
+        .then((response) => {
+          // Only cache successful responses
+          if (response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone);
+            }).catch((err) => {
+              console.warn('[SW] Failed to cache response:', err);
+            });
+          }
+          return response;
+        })
+        .catch((error) => {
+          // If fetch fails, return a proper error response
+          console.error('[SW] Fetch failed:', error);
+          return new Response('Network error', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain' }
           });
-        }
-        return response;
-      });
+        });
     })
   );
 });
