@@ -16,7 +16,7 @@ export function useOperationLock(
     queryFn: async () => {
       return await checkOperationLock(operation, kpi, departmentId);
     },
-    enabled: enabled && (operation === 'add' ? !!kpi : true), // For add, we need KPI
+    enabled: enabled, // Allow checking even without KPI (backend will handle it)
     staleTime: 0, // Always check fresh
     gcTime: 0,
     refetchOnMount: true,

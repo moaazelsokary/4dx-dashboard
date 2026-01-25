@@ -1164,9 +1164,11 @@ const handler = rateLimiter('general')(
                 if (!kpiMatches) continue;
               } else {
                 // If no KPI provided, only match locks with kpi_scope = 'all' or 'none'
+                // This allows checking if user has ANY add/delete locks before they select a KPI
                 if (lock.kpi_scope === 'specific') {
                   continue; // Skip locks that require specific KPIs if we don't have a KPI
                 }
+                // For kpi_scope = 'all' or 'none', the lock applies regardless of KPI
               }
 
               // If we get here, the lock applies
