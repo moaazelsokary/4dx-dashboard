@@ -115,56 +115,20 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   });
 
   // Load objectives filtered by selected KPIs (when KPI scope is 'specific')
-  // If user scope is also 'specific', we need to filter by both KPIs and users
+  // If user scope is also 'specific', pass userIds to filter by both KPIs and users
   const { data: kpiFilteredObjectives = [], isLoading: kpiObjectivesLoading } = useQuery({
-    queryKey: ['objectives-by-kpis', selectedKPIs],
-    queryFn: () => getObjectivesByKPIs(selectedKPIs),
+    queryKey: ['objectives-by-kpis', selectedKPIs, userScope === 'specific' ? selectedUsers : []],
+    queryFn: () => getObjectivesByKPIs(
+      selectedKPIs, 
+      userScope === 'specific' && selectedUsers.length > 0 ? selectedUsers : undefined
+    ),
     enabled: open && kpiScope === 'specific' && selectedKPIs.length > 0,
   });
-
-  // When KPI scope is 'specific' and user scope is 'specific', filter kpiFilteredObjectives by users
-  const kpiAndUserFilteredObjectives = useMemo(() => {
-    if (kpiScope === 'specific' && userScope === 'specific' && selectedUsers.length > 0) {
-      // Get user departments
-      const userDepartments = new Set<string>();
-      users.forEach(u => {
-        if (selectedUsers.includes(u.id) && u.departments) {
-          const depts = Array.isArray(u.departments) ? u.departments : 
-                       typeof u.departments === 'string' ? (u.departments.startsWith('[') ? JSON.parse(u.departments) : u.departments.split(',')) : [];
-          depts.forEach((d: string) => userDepartments.add(d.trim()));
-        }
-      });
-      
-      // Filter objectives by user departments
-      return kpiFilteredObjectives.filter(obj => {
-        // We need to check if objective's department matches user departments
-        // Since we don't have department_code in the objective, we'll need to match by department_id
-        // For now, we'll return all kpiFilteredObjectives and let the backend handle it
-        // Actually, we should get objectives filtered by both KPIs and users from backend
-        return true; // Temporary - will be handled by backend filtering
-      });
-    }
-    return kpiFilteredObjectives;
-  }, [kpiFilteredObjectives, userScope, selectedUsers, users, kpiScope]);
 
   // Use appropriate objective list based on user scope and KPI scope
   const availableObjectives = useMemo(() => {
     if (kpiScope === 'specific') {
-      // When KPI scope is specific, use KPI-filtered objectives
-      // If user scope is also specific, we need to further filter by users
-      if (userScope === 'specific' && selectedUsers.length > 0) {
-        // Filter by user departments
-        const userDeptCodes = new Set<string>();
-        users.forEach(u => {
-          if (selectedUsers.includes(u.id) && u.departments) {
-            const depts = Array.isArray(u.departments) ? u.departments : 
-                         typeof u.departments === 'string' ? (u.departments.startsWith('[') ? JSON.parse(u.departments) : u.departments.split(',')) : [];
-            depts.forEach((d: string) => userDeptCodes.add(d.trim().toLowerCase()));
-          }
-        });
-        // We'll need department info to filter properly - for now return all and let backend handle
-        return kpiFilteredObjectives;
-      }
+      // When KPI scope is specific, use KPI-filtered objectives (already filtered by users if user scope is specific)
       return kpiFilteredObjectives;
     } else {
       // When KPI scope is 'all' or 'none', use user-filtered or all objectives
@@ -173,7 +137,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
       }
       return allObjectives;
     }
-  }, [kpiScope, userScope, selectedUsers, kpiFilteredObjectives, userFilteredObjectives, allObjectives, users]);
+  }, [kpiScope, userScope, selectedUsers, kpiFilteredObjectives, userFilteredObjectives, allObjectives]);
 
   const objectivesLoading = kpiObjectivesLoading || userObjectivesLoading;
 
@@ -560,6 +524,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
           {/* Step 3: Objective Selection */}
           <div className="space-y-3">
             <Label>Step 3: Select Objectives {
+              (kpiScope === 'specific' && selectedKPIs.length > 0 && userScope === 'specific' && selectedUsers.length > 0) ? '(filtered by selected KPIs and users)' :
               (kpiScope === 'specific' && selectedKPIs.length > 0) ? '(filtered by selected KPIs)' :
               (userScope === 'specific' && selectedUsers.length > 0 && (kpiScope === 'all' || kpiScope === 'none')) ? '(filtered by selected users)' :
               ''
