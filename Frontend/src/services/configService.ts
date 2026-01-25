@@ -133,7 +133,7 @@ export async function getKPIsByUsers(userIds: number[]): Promise<string[]> {
   return data.success ? data.data : data;
 }
 
-export async function getObjectivesByKPIs(kpiIds: string[], userIds?: number[]): Promise<Array<{
+export async function getObjectivesByKPIs(kpiIds: string[]): Promise<Array<{
   id: number;
   activity: string;
   kpi: string;
@@ -142,13 +142,9 @@ export async function getObjectivesByKPIs(kpiIds: string[], userIds?: number[]):
   department_id: number;
 }>> {
   const params = new URLSearchParams();
-  // Encode each KPI separately to handle special characters
   kpiIds.forEach(kpi => {
     params.append('kpi_ids', kpi);
   });
-  if (userIds && userIds.length > 0) {
-    params.append('user_ids', userIds.join(','));
-  }
   const response = await fetch(`${API_BASE_URL}/locks/objectives-by-kpis?${params.toString()}`, {
     method: 'GET',
     headers: {
