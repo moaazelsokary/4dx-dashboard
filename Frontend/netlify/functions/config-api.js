@@ -849,16 +849,33 @@ const handler = rateLimiter('general')(
 
           const lockStatus = await checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month);
           
-          // Add debug info to response in development
+          // Get all active locks for debug info
+          const allLocksResult = await pool.request().query(`
+            SELECT id, scope_type, user_scope, user_ids, lock_annual_target, lock_monthly_target, lock_all_other_fields, is_active
+            FROM field_locks 
+            WHERE is_active = 1
+          `);
+          
+          // Add comprehensive debug info to response
           const response = {
             success: true,
             data: {
               ...lockStatus,
-              // Add debug info to help troubleshoot
+              // Add detailed debug info to help troubleshoot
               _debug: {
                 user_id_used: userId,
                 objective_id: departmentObjectiveId,
-                field_type: fieldType
+                field_type: fieldType,
+                total_active_locks: allLocksResult.recordset.length,
+                locks_found: allLocksResult.recordset.map(l => ({
+                  id: l.id,
+                  scope_type: l.scope_type,
+                  user_scope: l.user_scope,
+                  user_ids: l.user_ids,
+                  lock_annual_target: l.lock_annual_target,
+                  lock_monthly_target: l.lock_monthly_target,
+                  lock_all_other_fields: l.lock_all_other_fields
+                }))
               }
             }
           };
