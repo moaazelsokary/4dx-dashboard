@@ -773,8 +773,20 @@ const handler = rateLimiter('general')(
           const userId = user.id;
           const month = params.month || null;
 
-          // Debug logging
-          logger.info(`[Lock Check API] Request received: field_type=${fieldType}, objective_id=${departmentObjectiveId}, user_id=${userId}, user_object=${JSON.stringify({ id: user.id, userId: user.userId, username: user.username })}`);
+          // Debug logging with full user object details
+          logger.info(`[Lock Check API] Request received:`, {
+            field_type: fieldType,
+            objective_id: departmentObjectiveId,
+            user_id: userId,
+            user_object: {
+              id: user.id,
+              userId: user.userId,
+              username: user.username,
+              role: user.role,
+              raw_user: user
+            },
+            month: month
+          });
 
           if (!fieldType || !departmentObjectiveId) {
             return {
@@ -785,19 +797,46 @@ const handler = rateLimiter('general')(
           }
 
           if (!userId) {
-            logger.error(`[Lock Check API] No user ID found! user object: ${JSON.stringify(user)}`);
+            logger.error(`[Lock Check API] No user ID found!`, {
+              user_object: user,
+              user_keys: Object.keys(user || {}),
+              event_user: event.user
+            });
             return {
               statusCode: 400,
               headers,
-              body: JSON.stringify({ success: false, error: 'User ID not found in authentication token' })
+              body: JSON.stringify({ 
+                success: false, 
+                error: 'User ID not found in authentication token',
+                debug: {
+                  user_id: user?.id,
+                  user_userId: user?.userId,
+                  user_keys: Object.keys(user || {})
+                }
+              })
             };
           }
 
           const lockStatus = await checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month);
+          
+          // Add debug info to response in development
+          const response = {
+            success: true,
+            data: {
+              ...lockStatus,
+              // Add debug info to help troubleshoot
+              _debug: {
+                user_id_used: userId,
+                objective_id: departmentObjectiveId,
+                field_type: fieldType
+              }
+            }
+          };
+          
           return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({ success: true, data: lockStatus })
+            body: JSON.stringify(response)
           };
         }
 
