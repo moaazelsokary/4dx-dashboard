@@ -814,7 +814,8 @@ async function checkObjectiveOperationLock(pool, operation, userId, kpi, respons
           userMatches = false;
         }
       } else if (lock.user_scope === 'none') {
-        userMatches = false;
+        // 'none' = skip user filter = match all
+        userMatches = true;
       }
 
       if (!userMatches) continue;
