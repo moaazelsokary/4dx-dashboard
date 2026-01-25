@@ -175,7 +175,7 @@ export async function getObjectivesByUsers(userIds: number[]): Promise<Array<{
   return data.success ? data.data : data;
 }
 
-export async function getObjectivesByKPIs(kpiIds: string[]): Promise<Array<{
+export async function getObjectivesByKPIs(kpiIds: string[], userIds?: number[]): Promise<Array<{
   id: number;
   activity: string;
   kpi: string;
@@ -187,6 +187,9 @@ export async function getObjectivesByKPIs(kpiIds: string[]): Promise<Array<{
   kpiIds.forEach(kpi => {
     params.append('kpi_ids', kpi);
   });
+  if (userIds && userIds.length > 0) {
+    params.append('user_ids', userIds.join(','));
+  }
   const response = await fetch(`${API_BASE_URL}/locks/objectives-by-kpis?${params.toString()}`, {
     method: 'GET',
     headers: {
