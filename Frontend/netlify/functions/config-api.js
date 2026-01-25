@@ -542,7 +542,7 @@ const handler = rateLimiter('general')(
         // GET /api/config/locks/objectives-by-kpis?kpi_ids=kpi1&kpi_ids=kpi2&user_ids=1,2
         // Support both comma-separated and multiple query params
         if (method === 'GET') {
-          let kpiIds: string[] = [];
+          let kpiIds = [];
           if (Array.isArray(queryParams.kpi_ids)) {
             kpiIds = queryParams.kpi_ids.map(k => decodeURIComponent(String(k).trim())).filter(k => k);
           } else if (queryParams.kpi_ids) {
@@ -629,7 +629,7 @@ const handler = rateLimiter('general')(
           `);
 
           const locks = result.recordset.map(lock => {
-            const parsed: any = {
+            const parsed = {
               ...lock,
               user_ids: lock.user_ids ? JSON.parse(lock.user_ids) : null,
               lock_type: lock.lock_type && lock.lock_type.includes && lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type
