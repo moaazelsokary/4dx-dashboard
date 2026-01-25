@@ -721,17 +721,28 @@ async function checkSpecificObjectiveLock(pool, objectiveId, userId) {
         const objectiveIds = JSON.parse(lock.objective_ids);
         if (Array.isArray(objectiveIds) && objectiveIds.includes(objectiveId)) {
           // Check user and KPI scope matches
+          // Match by USER ID (the current user trying to delete), not by responsible person
           let userMatches = lock.user_scope === 'all';
           if (lock.user_scope === 'specific' && lock.user_ids) {
-            const userIds = JSON.parse(lock.user_ids);
-            if (Array.isArray(userIds) && userIds.length > 0) {
-              const userIdsStr = userIds.join(',');
-              const lockUserResult = await pool.request().query(`
-                SELECT username FROM users WHERE id IN (${userIdsStr})
-              `);
-              const lockUsernames = lockUserResult.recordset.map(r => r.username);
-              userMatches = lockUsernames.includes(obj.responsible_person);
+            try {
+              const userIds = JSON.parse(lock.user_ids);
+              if (Array.isArray(userIds) && userIds.length > 0) {
+                // Check if the current user (the one trying to delete) is in the locked users list
+                const currentUserId = Number(userId);
+                const lockedUserIds = userIds.map(id => Number(id));
+                userMatches = lockedUserIds.includes(currentUserId);
+                
+                console.log(`[Specific Objective Lock] User scope check: lock_id=${lock.id}, current_user_id=${currentUserId}, locked_user_ids=${JSON.stringify(lockedUserIds)}, matches=${userMatches}`);
+              } else {
+                userMatches = false;
+              }
+            } catch (err) {
+              console.error('Error parsing user_ids in specific objective lock check', err);
+              userMatches = false;
             }
+          } else if (lock.user_scope === 'none') {
+            // 'none' = skip user filter = match all
+            userMatches = true;
           }
 
           let kpiMatches = lock.kpi_scope === 'all';
@@ -794,18 +805,21 @@ async function checkObjectiveOperationLock(pool, operation, userId, kpi, respons
       
       if (!isLocked) continue;
 
-      // Check user scope
+      // Check user scope - match by USER ID (the current user trying to add/delete)
+      // When user_scope is 'specific', check if the current user (userId) is in the locked users list
       let userMatches = true;
       if (lock.user_scope === 'specific' && lock.user_ids) {
         try {
           const userIds = JSON.parse(lock.user_ids);
           if (Array.isArray(userIds) && userIds.length > 0) {
-            const userIdsStr = userIds.join(',');
-            const lockUserResult = await pool.request().query(`
-              SELECT username FROM users WHERE id IN (${userIdsStr})
-            `);
-            const lockUsernames = lockUserResult.recordset.map(r => r.username);
-            userMatches = lockUsernames.includes(responsiblePerson);
+            // Ensure both userId and array values are numbers for comparison
+            const currentUserId = Number(userId);
+            const lockedUserIds = userIds.map(id => Number(id));
+            // Check if the current user (the one trying to add/delete) is in the locked users list
+            userMatches = lockedUserIds.includes(currentUserId);
+            
+            // Debug logging
+            console.log(`[Lock Operation Check] User scope check: lock_id=${lock.id}, operation=${operation}, current_user_id=${currentUserId}, locked_user_ids=${JSON.stringify(lockedUserIds)}, matches=${userMatches}`);
           } else {
             userMatches = false;
           }
@@ -817,8 +831,12 @@ async function checkObjectiveOperationLock(pool, operation, userId, kpi, respons
         // 'none' = skip user filter = match all
         userMatches = true;
       }
+      // When user_scope is 'all', userMatches remains true (matches all users)
 
-      if (!userMatches) continue;
+      if (!userMatches) {
+        console.log(`[Lock Operation Check] Lock ID ${lock.id} skipped: user scope check failed`);
+        continue;
+      }
 
       // Check KPI scope
       let kpiMatches = true;
@@ -836,7 +854,8 @@ async function checkObjectiveOperationLock(pool, operation, userId, kpi, respons
           kpiMatches = false;
         }
       } else if (lock.kpi_scope === 'none') {
-        kpiMatches = false;
+        // 'none' = skip KPI filter = match all
+        kpiMatches = true;
       }
 
       if (!kpiMatches) continue;
