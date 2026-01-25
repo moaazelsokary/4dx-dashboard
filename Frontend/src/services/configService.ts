@@ -100,6 +100,23 @@ export async function checkLockStatusBatch(
   });
 }
 
+export async function checkOperationLock(
+  operation: 'add' | 'delete',
+  kpi?: string,
+  departmentId?: number
+): Promise<{ is_locked: boolean; lock_reason?: string }> {
+  const params = new URLSearchParams({
+    operation,
+  });
+  if (kpi) {
+    params.append('kpi', kpi);
+  }
+  if (departmentId) {
+    params.append('department_id', departmentId.toString());
+  }
+  return fetchAPI<{ is_locked: boolean; lock_reason?: string }>(`/locks/check-operation?${params.toString()}`);
+}
+
 export async function bulkCreateLocks(locks: LockRuleFormData[]): Promise<FieldLock[]> {
   return fetchAPI<FieldLock[]>('/locks/bulk', {
     method: 'POST',

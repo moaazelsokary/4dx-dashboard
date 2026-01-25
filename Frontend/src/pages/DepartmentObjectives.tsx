@@ -53,6 +53,71 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import OptimizedImage from '@/components/ui/OptimizedImage';
+import { useOperationLock } from '@/hooks/useOperationLock';
+import { Lock as LockIcon } from 'lucide-react';
+
+// Component to check delete lock for a specific objective
+function DeleteButtonWithLockCheck({ 
+  objective, 
+  departmentId, 
+  onDelete 
+}: { 
+  objective: DepartmentObjective; 
+  departmentId: number;
+  onDelete: () => void;
+}) {
+  const { isLocked, lockReason } = useOperationLock(
+    'delete',
+    objective.kpi,
+    departmentId,
+    true
+  );
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <Button 
+              type="button" 
+              size="sm" 
+              variant="outline" 
+              data-no-drag
+              disabled={isLocked}
+              className={isLocked ? 'opacity-50 cursor-not-allowed' : ''}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (isLocked) {
+                  toast({
+                    title: 'Operation Locked',
+                    description: lockReason || 'Cannot delete objective - operation is locked',
+                    variant: 'destructive',
+                  });
+                  return;
+                }
+                onDelete();
+              }}
+              aria-label={`Delete objective ${objective.id}`} 
+              title={isLocked ? (lockReason || 'Delete locked') : 'Delete objective'}
+            >
+              {isLocked && <LockIcon className="h-3 w-3 mr-1" />}
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </span>
+        </TooltipTrigger>
+        {isLocked && lockReason && (
+          <TooltipContent>
+            <p>{lockReason}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 interface MEEKPI {
   id?: number;
@@ -239,6 +304,25 @@ export default function DepartmentObjectives() {
 
   // State for department filter (CEO/admin only)
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  
+  // Check if add operation is locked (check with empty KPI to see if user has any add locks)
+  const currentDepartmentId = useMemo(() => {
+    if (user?.role === 'CEO' && selectedDepartment) {
+      const dept = departments.find(d => d.code === selectedDepartment);
+      return dept?.id;
+    } else if (user?.departments?.[0]) {
+      const dept = departments.find(d => d.code === user.departments[0]);
+      return dept?.id;
+    }
+    return undefined;
+  }, [user, selectedDepartment, departments]);
+  
+  const { isLocked: isAddLocked, lockReason: addLockReason } = useOperationLock(
+    'add',
+    undefined, // No specific KPI - check if user has any add locks
+    currentDepartmentId,
+    !!user && !!currentDepartmentId
+  );
   
   // Removed ref caching - server data is now authoritative with cache-busting
 
@@ -2149,14 +2233,40 @@ export default function DepartmentObjectives() {
                     Reset
                   </Button>
                 </div>
-                <Button onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleOpenAddModal();
-              }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Objective
-              </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (isAddLocked) {
+                              toast({
+                                title: 'Operation Locked',
+                                description: addLockReason || 'Cannot add objective - operation is locked',
+                                variant: 'destructive',
+                              });
+                              return;
+                            }
+                            handleOpenAddModal();
+                          }}
+                          disabled={isAddLocked}
+                          className={isAddLocked ? 'opacity-50 cursor-not-allowed' : ''}
+                        >
+                          {isAddLocked && <LockIcon className="mr-2 h-4 w-4" />}
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Objective
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {isAddLocked && addLockReason && (
+                      <TooltipContent>
+                        <p>{addLockReason}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
           </CardHeader>
@@ -2452,24 +2562,11 @@ export default function DepartmentObjectives() {
                               >
                                 <Edit2 className="h-4 w-4" />
                               </Button>
-                              <Button 
-                                type="button" 
-                                size="sm" 
-                                variant="outline" 
-                                data-no-drag
-                                onPointerDown={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  setDeletingId(obj.id);
-                                }}
-                                aria-label={`Delete objective ${obj.id}`} 
-                                title="Delete objective"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <DeleteButtonWithLockCheck 
+                                objective={obj}
+                                departmentId={obj.department_id}
+                                onDelete={() => setDeletingId(obj.id)}
+                              />
                                 </div>
                               </TableCell>
                                     </>
