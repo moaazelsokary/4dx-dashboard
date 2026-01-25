@@ -10,6 +10,12 @@ const API_BASE_URL = isLocalhost
 
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
+import { handleApiError, isAuthError, shouldRetry, getRetryDelay, handleAuthError } from '@/utils/apiErrorHandler';
+import { getUserFriendlyError } from '@/utils/errorMessages';
+import { requestQueue } from '@/utils/requestQueue';
+
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+const MAX_RETRIES = 3;
 
 interface CMSPage {
   id?: number;
@@ -63,23 +69,146 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   const csrfHeaders = needsAuth ? getCsrfHeader() : {};
   const authHeaders = needsAuth ? getAuthHeader() : {};
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...csrfHeaders,
-      ...authHeaders,
-      ...options?.headers,
-    },
-  });
+  const url = `${API_BASE_URL}${endpoint}`;
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || error.message || `HTTP error! status: ${response.status}`);
+  // Check if offline
+  if (!navigator.onLine) {
+    // Queue request for when connection is restored
+    return new Promise<T>((resolve, reject) => {
+      requestQueue.enqueue(
+        url,
+        {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...csrfHeaders,
+            ...authHeaders,
+            ...options?.headers,
+          },
+        },
+        async (response) => {
+          const data = await response.json();
+          resolve(data.success ? data.data : data);
+        },
+        reject
+      );
+    });
   }
 
-  const data = await response.json();
-  return data.success ? data.data : data;
+  // Retry logic
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...csrfHeaders,
+          ...authHeaders,
+          ...options?.headers,
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        // Handle error using centralized error handler
+        const apiError = await handleApiError(new Error(`HTTP ${response.status}`), response);
+        
+        // Handle authentication errors
+        if (apiError.isAuthError) {
+          handleAuthError();
+          throw new Error(apiError.message);
+        }
+
+        // Check if should retry
+        if (shouldRetry(apiError, attempt, MAX_RETRIES)) {
+          const delay = getRetryDelay(attempt);
+          console.log(`[CMS Service] Retrying request (attempt ${attempt + 1}/${MAX_RETRIES}) after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Get user-friendly error message
+        const friendlyError = getUserFriendlyError(apiError);
+        const error = new Error(friendlyError.description);
+        (error as any).status = response.status;
+        (error as any).friendlyError = friendlyError;
+        throw error;
+      }
+
+      const data = await response.json();
+      return data.success ? data.data : data;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Request failed');
+      
+      // Handle network errors
+      if (lastError.name === 'AbortError' || lastError.message.includes('timeout')) {
+        const apiError = await handleApiError(lastError);
+        if (shouldRetry(apiError, attempt, MAX_RETRIES)) {
+          const delay = getRetryDelay(attempt);
+          console.log(`[CMS Service] Retrying after timeout (attempt ${attempt + 1}/${MAX_RETRIES}) after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      // If this is the last attempt, throw the error
+      if (attempt === MAX_RETRIES) {
+        // If offline, queue the request
+        if (!navigator.onLine) {
+          return new Promise<T>((resolve, reject) => {
+            requestQueue.enqueue(
+              url,
+              {
+                ...options,
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...csrfHeaders,
+                  ...authHeaders,
+                  ...options?.headers,
+                },
+              },
+              async (response) => {
+                const data = await response.json();
+                resolve(data.success ? data.data : data);
+              },
+              reject
+            );
+          });
+        }
+        
+        const apiError = await handleApiError(lastError);
+        const friendlyError = getUserFriendlyError(apiError);
+        const finalError = new Error(friendlyError.description);
+        (finalError as any).status = apiError.status;
+        (finalError as any).friendlyError = friendlyError;
+        throw finalError;
+      }
+
+      // Check if error is retryable
+      const apiError = await handleApiError(lastError);
+      if (!shouldRetry(apiError, attempt, MAX_RETRIES)) {
+        const friendlyError = getUserFriendlyError(apiError);
+        const finalError = new Error(friendlyError.description);
+        (finalError as any).status = apiError.status;
+        (finalError as any).friendlyError = friendlyError;
+        throw finalError;
+      }
+
+      // Wait before retrying
+      const delay = getRetryDelay(attempt);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // This should never be reached, but TypeScript needs it
+  throw lastError || new Error('Request failed');
 }
 
 // Pages

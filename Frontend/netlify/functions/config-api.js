@@ -553,10 +553,31 @@ const handler = rateLimiter('general')(
       const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch' || action === 'check-operation');
       const isHelperEndpoint = resource === 'locks' && (action === 'kpis-by-users' || action === 'objectives-by-kpis' || action === 'objectives-by-users');
       
+      // Debug logging for permission checks
+      logger.info(`[Config API] Path parsing:`, {
+        originalPath: event.path,
+        processedPath: path,
+        pathParts,
+        resource,
+        action,
+        isNumericId,
+        isLockCheckEndpoint,
+        isHelperEndpoint,
+        userRole: user.role,
+        userId: user.id
+      });
+      
       // All other endpoints require Admin or CEO role
       if (!isLockCheckEndpoint && !isHelperEndpoint) {
         const isAdmin = user.role === 'Admin' || user.role === 'CEO';
         if (!isAdmin) {
+          logger.warn(`[Config API] Access denied:`, {
+            resource,
+            action,
+            userRole: user.role,
+            userId: user.id,
+            path: event.path
+          });
           return {
             statusCode: 403,
             headers,
