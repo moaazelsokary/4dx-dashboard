@@ -88,7 +88,7 @@ async function getDbPool() {
 const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRY = '24h';
 
-// Apply rate limiting (login type: 5 requests per 15 minutes)
+// Apply rate limiting (login type: 20 requests per 15 minutes)
 const handler = rateLimiter('login')(async (event, context) => {
   // CORS headers
   const headers = {
@@ -107,6 +107,14 @@ const handler = rateLimiter('login')(async (event, context) => {
     };
   }
 
+  // Log request for debugging
+  logger.info('[Auth API] Request received', {
+    method: event.httpMethod,
+    path: event.path,
+    hasBody: !!event.body,
+    bodyLength: event.body ? event.body.length : 0
+  });
+
   try {
     if (event.httpMethod !== 'POST') {
       return {
@@ -116,7 +124,20 @@ const handler = rateLimiter('login')(async (event, context) => {
       };
     }
 
-    const { username, password } = JSON.parse(event.body || '{}');
+    // Parse request body with error handling
+    let body;
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch (parseError) {
+      logger.error('Failed to parse request body', { error: parseError.message, body: event.body });
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Invalid request body' }),
+      };
+    }
+
+    const { username, password } = body;
 
     if (!username || !password) {
       return {
@@ -127,23 +148,61 @@ const handler = rateLimiter('login')(async (event, context) => {
     }
 
     // Get database connection
-    const pool = await getDbPool();
+    let pool;
+    try {
+      pool = await getDbPool();
+    } catch (dbError) {
+      logger.error('Database connection failed in handler', dbError);
+      console.error('[Auth API] Database connection error in handler:', {
+        message: dbError.message,
+        code: dbError.code,
+        name: dbError.name
+      });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'Database connection failed',
+          details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+        }),
+      };
+    }
     
     // Query user from database
-    const request = pool.request();
-    request.input('username', sql.NVarChar, username);
-    
-    const result = await request.query(`
-      SELECT 
-        id,
-        username,
-        password_hash,
-        role,
-        departments,
-        is_active
-      FROM users
-      WHERE username = @username
-    `);
+    let result;
+    try {
+      const request = pool.request();
+      request.input('username', sql.NVarChar, username);
+      
+      result = await request.query(`
+        SELECT 
+          id,
+          username,
+          password_hash,
+          role,
+          departments,
+          is_active
+        FROM users
+        WHERE username = @username
+      `);
+    } catch (queryError) {
+      logger.error('Database query failed', { username, error: queryError.message, code: queryError.code });
+      console.error('[Auth API] Query error:', {
+        message: queryError.message,
+        code: queryError.code,
+        name: queryError.name
+      });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'Database query failed',
+          details: process.env.NODE_ENV === 'development' ? queryError.message : undefined
+        }),
+      };
+    }
 
     if (result.recordset.length === 0) {
       logger.warn('Login attempt with invalid username', { username });
@@ -156,6 +215,16 @@ const handler = rateLimiter('login')(async (event, context) => {
 
     const user = result.recordset[0];
 
+    // Validate user data
+    if (!user.password_hash) {
+      logger.error('User found but password_hash is missing', { username, userId: user.id });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ success: false, error: 'User account configuration error' }),
+      };
+    }
+
     // Check if user is active
     if (!user.is_active) {
       logger.warn('Login attempt for inactive user', { username });
@@ -167,7 +236,17 @@ const handler = rateLimiter('login')(async (event, context) => {
     }
 
     // Verify password
-    const passwordValid = await bcrypt.compare(password, user.password_hash);
+    let passwordValid;
+    try {
+      passwordValid = await bcrypt.compare(password, user.password_hash);
+    } catch (bcryptError) {
+      logger.error('Password comparison failed', { username, error: bcryptError.message });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Authentication error' }),
+      };
+    }
     
     if (!passwordValid) {
       logger.warn('Login attempt with invalid password', { username });
@@ -192,16 +271,26 @@ const handler = rateLimiter('login')(async (event, context) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        username: user.username,
-        role: user.role,
-        departments: departments,
-      },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRY }
-    );
+    let token;
+    try {
+      token = jwt.sign(
+        {
+          userId: user.id,
+          username: user.username,
+          role: user.role,
+          departments: departments,
+        },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRY }
+      );
+    } catch (jwtError) {
+      logger.error('JWT token generation failed', { username, error: jwtError.message });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Token generation failed' }),
+      };
+    }
 
     const userData = {
       username: user.username,
@@ -240,23 +329,92 @@ const handler = rateLimiter('login')(async (event, context) => {
       body: JSON.stringify(responseBody),
     };
   } catch (error) {
-    logger.error('Authentication error', error);
-    console.error('[Auth API] Full error details:', {
+    // Enhanced error logging
+    const errorInfo = {
       message: error.message,
       stack: error.stack,
-      name: error.name
-    });
+      name: error.name,
+      code: error.code,
+      originalError: error.originalError ? {
+        message: error.originalError.message,
+        code: error.originalError.code
+      } : undefined
+    };
+    
+    logger.error('[Auth API] Authentication error', errorInfo);
+    console.error('[Auth API] Full error details:', errorInfo);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Internal server error';
+    let errorDetails = undefined;
+    
+    // Always include error message in response for better debugging
+    // In production, we'll include at least the error message
+    errorDetails = {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    };
+    
+    // Include stack trace only in development
+    if (process.env.NODE_ENV === 'development' || process.env.NETLIFY_DEV) {
+      errorDetails.stack = error.stack?.split('\n').slice(0, 5).join('\n');
+    }
+    
+    // Check for specific error types
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      errorMessage = 'Database connection failed';
+    } else if (error.message && error.message.includes('password')) {
+      errorMessage = 'Authentication failed';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
         success: false, 
-        error: 'Internal server error',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        error: errorMessage,
+        details: errorDetails
       }),
     };
   }
 });
 
-exports.handler = handler;
+// Wrap handler with additional error handling
+const wrappedHandler = async (event, context) => {
+  try {
+    return await handler(event, context);
+  } catch (error) {
+    // Catch any errors that escape the handler (e.g., from rate limiter)
+    logger.error('[Auth API] Unhandled error in wrapper', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code
+    });
+    console.error('[Auth API] Unhandled error:', error);
+    
+    return {
+      statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? {
+          message: error.message,
+          stack: error.stack?.split('\n').slice(0, 5).join('\n')
+        } : { message: error.message }
+      }),
+    };
+  }
+};
+
+exports.handler = wrappedHandler;
 
