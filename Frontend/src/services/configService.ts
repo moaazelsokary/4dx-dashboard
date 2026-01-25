@@ -150,6 +150,31 @@ export async function getKPIsByUsers(userIds: number[]): Promise<string[]> {
   return data.success ? data.data : data;
 }
 
+export async function getObjectivesByUsers(userIds: number[]): Promise<Array<{
+  id: number;
+  activity: string;
+  kpi: string;
+  responsible_person: string;
+  type: string;
+  department_id: number;
+}>> {
+  const params = new URLSearchParams();
+  params.append('user_ids', userIds.join(','));
+  const response = await fetch(`${API_BASE_URL}/locks/objectives-by-users?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || error.message || `HTTP error! status: ${response.status}`);
+  }
+  const data = await response.json();
+  return data.success ? data.data : data;
+}
+
 export async function getObjectivesByKPIs(kpiIds: string[]): Promise<Array<{
   id: number;
   activity: string;
