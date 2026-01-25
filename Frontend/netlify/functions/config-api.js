@@ -445,16 +445,30 @@ const handler = rateLimiter('general')(
       
       // Normalize user ID field (JWT uses userId, but we need id for database)
       // Handle both userId and id fields from JWT token
+      // JWT token contains userId, but we need id for consistency
       if (user) {
-        if (user.userId && !user.id) {
+        // JWT payload has userId, normalize to id
+        if (user.userId !== undefined && user.id === undefined) {
           user.id = user.userId;
-        } else if (user.id && !user.userId) {
+        } else if (user.id !== undefined && user.userId === undefined) {
           user.userId = user.id;
         }
-        // Ensure user.id is a number
-        if (user.id) {
+        // Ensure user.id is a number (handle string conversion)
+        if (user.id !== undefined) {
           user.id = Number(user.id);
         }
+        if (user.userId !== undefined) {
+          user.userId = Number(user.userId);
+        }
+        
+        // Debug logging
+        logger.info(`[Config API] User object normalized:`, {
+          original_userId: event.user?.userId,
+          original_id: event.user?.id,
+          normalized_id: user.id,
+          normalized_userId: user.userId,
+          username: user.username
+        });
       }
 
       // Parse path segments
