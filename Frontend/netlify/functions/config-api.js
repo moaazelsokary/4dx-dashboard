@@ -306,8 +306,13 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
         }
 
         if (matches) {
-          logger.info(`[Lock Check] ✅ Lock matched! Breaking loop. Lock ID: ${lock.id}, Reason: ${lockReason}`);
-          break; // Found matching lock, exit loop
+          logger.info(`[Lock Check] ✅ Lock matched! Returning locked status. Lock ID: ${lock.id}, Reason: ${lockReason}`);
+          return {
+            is_locked: true,
+            lock_reason: lockReason,
+            lock_id: lock.id,
+            scope_type: lock.scope_type
+          };
         }
         logger.info(`[Lock Check] Lock ID ${lock.id} did not match, continuing to next lock`);
         continue; // Skip to next lock
@@ -444,8 +449,9 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           break;
       }
 
+      // Check if this legacy lock matched (after switch statement)
       if (matches) {
-        logger.info(`[Lock Check] Lock matched! Returning locked status`, {
+        logger.info(`[Lock Check] Legacy lock matched! Returning locked status`, {
           lock_id: lock.id,
           field_type: fieldType,
           objective_id: departmentObjectiveId,
