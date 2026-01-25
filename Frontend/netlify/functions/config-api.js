@@ -925,6 +925,123 @@ const handler = rateLimiter('general')(
           };
         }
 
+        // GET /api/config/locks/check-operation - Check if add/delete operation is locked
+        else if (path === '/locks/check-operation' && method === 'GET') {
+          const operation = queryParams.operation; // 'add' or 'delete'
+          const kpi = queryParams.kpi || null;
+          const departmentId = queryParams.department_id ? parseInt(queryParams.department_id) : null;
+          
+          if (!operation || !userId) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Missing required parameters: operation and user authentication'
+              })
+            };
+          }
+
+          // For add operation without KPI, we can still check if user has any add locks
+          // For delete operation, KPI is optional - we can check general locks
+
+          // Import the checkObjectiveOperationLock function from wig-api
+          // Since we can't directly import, we'll duplicate the logic here
+          // Actually, let's call the wig-api function via HTTP or duplicate the logic
+          // For now, let's duplicate a simplified version
+          
+          try {
+            // Get all active hierarchical locks that lock this operation
+            const operationLockField = operation === 'add' ? 'lock_add_objective' : 'lock_delete_objective';
+            const lockRequest = pool.request();
+            const locks = await lockRequest.query(`
+              SELECT * FROM field_locks 
+              WHERE is_active = 1 
+                AND scope_type = 'hierarchical'
+                AND (${operationLockField} = 1 OR ${operationLockField} = 'true')
+            `);
+
+            let isLocked = false;
+            let lockReason = '';
+
+            for (const lock of locks.recordset) {
+              // Check user scope
+              let userMatches = true;
+              if (lock.user_scope === 'specific' && lock.user_ids) {
+                try {
+                  const userIds = JSON.parse(lock.user_ids);
+                  if (Array.isArray(userIds) && userIds.length > 0) {
+                    const currentUserId = Number(userId);
+                    const lockedUserIds = userIds.map(id => Number(id));
+                    userMatches = lockedUserIds.includes(currentUserId);
+                  } else {
+                    userMatches = false;
+                  }
+                } catch (err) {
+                  userMatches = false;
+                }
+              } else if (lock.user_scope === 'none') {
+                userMatches = true;
+              }
+
+              if (!userMatches) continue;
+
+              // Check KPI scope (only if kpi is provided)
+              if (kpi) {
+                let kpiMatches = true;
+                if (lock.kpi_scope === 'specific' && lock.kpi_ids) {
+                  try {
+                    const kpiIds = JSON.parse(lock.kpi_ids);
+                    if (Array.isArray(kpiIds) && kpiIds.length > 0) {
+                      const objectiveKPIs = kpi.includes('||') ? kpi.split('||').map(k => k.trim()) : [kpi];
+                      kpiMatches = objectiveKPIs.some(objKpi => kpiIds.includes(objKpi));
+                    } else {
+                      kpiMatches = false;
+                    }
+                  } catch (err) {
+                    kpiMatches = false;
+                  }
+                } else if (lock.kpi_scope === 'none') {
+                  kpiMatches = true;
+                }
+
+                if (!kpiMatches) continue;
+              } else {
+                // If no KPI provided, only match locks with kpi_scope = 'all' or 'none'
+                if (lock.kpi_scope === 'specific') {
+                  continue; // Skip locks that require specific KPIs if we don't have a KPI
+                }
+              }
+
+              // If we get here, the lock applies
+              isLocked = true;
+              lockReason = `Cannot ${operation} objective - locked by hierarchical rule`;
+              break;
+            }
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  is_locked: isLocked,
+                  lock_reason: lockReason || undefined
+                }
+              })
+            };
+          } catch (error) {
+            logger.error('[Config API] Error checking operation lock:', error);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Failed to check operation lock'
+              })
+            };
+          }
+        }
         // POST /api/config/locks/check-batch - Batch check locks
         if (method === 'POST' && action === 'check-batch') {
           const body = JSON.parse(event.body || '{}');
