@@ -212,7 +212,11 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
         }
         // When user_scope is 'all', userMatches remains true (matches all users)
 
-        if (!userMatches) continue;
+        if (!userMatches) {
+          logger.info(`[Lock Check] Lock ID ${lock.id} skipped: user scope check failed`);
+          continue;
+        }
+        logger.info(`[Lock Check] Lock ID ${lock.id} passed user scope check`);
 
         // Check KPI scope
         let kpiMatches = true;
@@ -234,7 +238,11 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           kpiMatches = true;
         }
 
-        if (!kpiMatches) continue;
+        if (!kpiMatches) {
+          logger.info(`[Lock Check] Lock ID ${lock.id} skipped: KPI scope check failed`);
+          continue;
+        }
+        logger.info(`[Lock Check] Lock ID ${lock.id} passed KPI scope check`);
 
         // Check objective scope
         let objectiveMatches = true;
@@ -255,29 +263,53 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           objectiveMatches = true;
         }
 
-        if (!objectiveMatches) continue;
+        if (!objectiveMatches) {
+          logger.info(`[Lock Check] Lock ID ${lock.id} skipped: objective scope check failed`);
+          continue;
+        }
+        logger.info(`[Lock Check] Lock ID ${lock.id} passed objective scope check`);
 
         // Check if objective type is Direct (for monthly_actual)
         if (fieldType === 'monthly_actual' && !objectiveHasDirectType) {
+          logger.info(`[Lock Check] Lock ID ${lock.id} skipped: monthly_actual requires Direct type, but objective type is: ${objectiveType}`);
           continue;
         }
 
         // Check field locks
+        logger.info(`[Lock Check] Checking field locks for lock_id=${lock.id}`, {
+          field_type: fieldType,
+          lock_annual_target: lock.lock_annual_target,
+          lock_monthly_target: lock.lock_monthly_target,
+          lock_monthly_actual: lock.lock_monthly_actual,
+          lock_all_other_fields: lock.lock_all_other_fields,
+          objective_has_direct_type: objectiveHasDirectType
+        });
+        
         if (fieldType === 'target' && (lock.lock_annual_target === true || lock.lock_annual_target === 1)) {
           matches = true;
           lockReason = 'Locked by hierarchical rule (Annual Target)';
+          logger.info(`[Lock Check] ✅ MATCH FOUND! Lock ID ${lock.id} matches field type 'target'`);
         } else if (fieldType === 'monthly_target' && (lock.lock_monthly_target === true || lock.lock_monthly_target === 1)) {
           matches = true;
           lockReason = 'Locked by hierarchical rule (Monthly Target)';
+          logger.info(`[Lock Check] ✅ MATCH FOUND! Lock ID ${lock.id} matches field type 'monthly_target'`);
         } else if (fieldType === 'monthly_actual' && (lock.lock_monthly_actual === true || lock.lock_monthly_actual === 1)) {
           matches = true;
           lockReason = 'Locked by hierarchical rule (Monthly Actual)';
+          logger.info(`[Lock Check] ✅ MATCH FOUND! Lock ID ${lock.id} matches field type 'monthly_actual'`);
         } else if (fieldType === 'all_fields' && (lock.lock_all_other_fields === true || lock.lock_all_other_fields === 1)) {
           matches = true;
           lockReason = 'Locked by hierarchical rule (Other Fields)';
+          logger.info(`[Lock Check] ✅ MATCH FOUND! Lock ID ${lock.id} matches field type 'all_fields'`);
+        } else {
+          logger.info(`[Lock Check] Field type '${fieldType}' does NOT match lock ID ${lock.id} field locks`);
         }
 
-        if (matches) break; // Found matching lock, exit loop
+        if (matches) {
+          logger.info(`[Lock Check] ✅ Lock matched! Breaking loop. Lock ID: ${lock.id}, Reason: ${lockReason}`);
+          break; // Found matching lock, exit loop
+        }
+        logger.info(`[Lock Check] Lock ID ${lock.id} did not match, continuing to next lock`);
         continue; // Skip to next lock
       }
 
