@@ -1,21 +1,41 @@
 // Configuration System TypeScript Types
 
 export type LockType = 'target' | 'monthly_target' | 'monthly_actual' | 'all_department_objectives';
-export type ScopeType = 'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives' | 'specific_objective';
+export type ScopeType = 'hierarchical'; // New unified scope type
 export type ActionType = 'lock_created' | 'lock_deleted' | 'lock_updated' | 'value_edited' | 'permission_created' | 'permission_updated' | 'permission_deleted';
 export type TargetField = 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields';
+export type UserScope = 'all' | 'specific' | 'none';
+export type KPIScope = 'all' | 'specific' | 'none';
+export type ObjectiveScope = 'all' | 'specific' | 'none';
 
 export interface FieldLock {
   id: number;
-  lock_type: LockType;
-  scope_type: ScopeType;
-  user_ids: number[] | null; // JSON array of user IDs
-  kpi: string | null;
-  department_id: number | null;
-  department_objective_id: number | null; // For specific_objective scope type
-  exclude_monthly_target: boolean; // Separate control for monthly target
-  exclude_monthly_actual: boolean; // Separate control for monthly actual
-  exclude_annual_target: boolean;
+  // New hierarchical structure
+  scope_type: ScopeType; // Always 'hierarchical' for new structure
+  user_scope: UserScope; // 'all', 'specific', or 'none'
+  user_ids: number[] | null; // JSON array of user IDs (when user_scope = 'specific')
+  kpi_scope: KPIScope; // 'all', 'specific', or 'none'
+  kpi_ids: string[] | null; // JSON array of KPI strings (when kpi_scope = 'specific')
+  objective_scope: ObjectiveScope; // 'all', 'specific', or 'none'
+  objective_ids: number[] | null; // JSON array of objective IDs (when objective_scope = 'specific')
+  
+  // Field locks
+  lock_annual_target: boolean;
+  lock_monthly_target: boolean;
+  lock_monthly_actual: boolean;
+  lock_all_other_fields: boolean; // activity, responsible_person, mov, etc.
+  lock_add_objective: boolean;
+  lock_delete_objective: boolean;
+  
+  // Legacy fields (for backward compatibility during migration)
+  lock_type?: LockType;
+  kpi?: string | null;
+  department_id?: number | null;
+  department_objective_id?: number | null;
+  exclude_monthly_target?: boolean;
+  exclude_monthly_actual?: boolean;
+  exclude_annual_target?: boolean;
+  
   is_active: boolean;
   created_by: number;
   created_at: string;
@@ -23,7 +43,7 @@ export interface FieldLock {
   // Denormalized fields for display
   created_by_username?: string;
   department_name?: string;
-  department_objective_activity?: string; // Denormalized activity name for display
+  department_objective_activity?: string;
 }
 
 export interface ActivityLog {
@@ -83,15 +103,21 @@ export interface BatchLockCheckResponse {
 }
 
 export interface LockRuleFormData {
-  lock_type?: LockType | LockType[]; // For specific field locks
-  scope_type: ScopeType;
-  user_ids?: number[]; // For specific_users or all_department_objectives
-  kpi?: string; // For specific_kpi or department_kpi
-  department_id?: number; // For department_kpi or specific_objective
-  department_objective_id?: number; // For specific_objective scope type
-  exclude_monthly_target?: boolean; // For all_department_objectives - exclude monthly target
-  exclude_monthly_actual?: boolean; // For all_department_objectives - exclude monthly actual
-  exclude_annual_target?: boolean; // For all_department_objectives - exclude annual target
+  scope_type: ScopeType; // Always 'hierarchical'
+  user_scope: UserScope; // 'all', 'specific', or 'none'
+  user_ids?: number[]; // When user_scope = 'specific'
+  kpi_scope: KPIScope; // 'all', 'specific', or 'none'
+  kpi_ids?: string[]; // When kpi_scope = 'specific'
+  objective_scope: ObjectiveScope; // 'all', 'specific', or 'none'
+  objective_ids?: number[]; // When objective_scope = 'specific'
+  
+  // Field locks
+  lock_annual_target?: boolean;
+  lock_monthly_target?: boolean;
+  lock_monthly_actual?: boolean;
+  lock_all_other_fields?: boolean;
+  lock_add_objective?: boolean;
+  lock_delete_objective?: boolean;
 }
 
 export interface LogFilters {

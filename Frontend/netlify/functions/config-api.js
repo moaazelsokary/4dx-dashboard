@@ -108,7 +108,7 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
     const deptObjRequest = pool.request();
     deptObjRequest.input('id', sql.Int, departmentObjectiveId);
     const deptObjResult = await deptObjRequest.query(`
-      SELECT kpi, department_id, type FROM department_objectives WHERE id = @id
+      SELECT kpi, department_id, type, responsible_person FROM department_objectives WHERE id = @id
     `);
     
     if (deptObjResult.recordset.length === 0) {
@@ -118,6 +118,7 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
     const kpi = deptObjResult.recordset[0].kpi;
     const departmentId = deptObjResult.recordset[0].department_id;
     const objectiveType = deptObjResult.recordset[0].type;
+    const responsiblePerson = deptObjResult.recordset[0].responsible_person;
 
     // Type restrictions per field:
     // - monthly_actual: ONLY Direct type can be locked
@@ -141,21 +142,141 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
       SELECT * FROM field_locks 
       WHERE is_active = 1
       ORDER BY 
-        CASE scope_type 
-          WHEN 'specific_objective' THEN 1
-          WHEN 'specific_users' THEN 2
-          WHEN 'department_kpi' THEN 3
-          WHEN 'specific_kpi' THEN 4
-          WHEN 'all_users' THEN 5
-          WHEN 'all_department_objectives' THEN 6
+        CASE 
+          WHEN scope_type = 'hierarchical' AND objective_scope = 'specific' THEN 1
+          WHEN scope_type = 'hierarchical' AND kpi_scope = 'specific' THEN 2
+          WHEN scope_type = 'hierarchical' AND user_scope = 'specific' THEN 3
+          WHEN scope_type = 'hierarchical' THEN 4
+          WHEN scope_type = 'specific_objective' THEN 5
+          WHEN scope_type = 'specific_users' THEN 6
+          WHEN scope_type = 'department_kpi' THEN 7
+          WHEN scope_type = 'specific_kpi' THEN 8
+          WHEN scope_type = 'all_users' THEN 9
+          WHEN scope_type = 'all_department_objectives' THEN 10
+          ELSE 11
         END
     `);
+
+    // Get current user's username for matching responsible_person
+    let currentUserUsername = null;
+    if (userId) {
+      try {
+        const userRequest = pool.request();
+        userRequest.input('user_id', sql.Int, userId);
+        const userResult = await userRequest.query('SELECT username FROM users WHERE id = @user_id');
+        if (userResult.recordset.length > 0) {
+          currentUserUsername = userResult.recordset[0].username;
+        }
+      } catch (err) {
+        logger.error('Error getting user username', err);
+      }
+    }
+
+    // For hierarchical locks, we also check if the objective's responsible_person matches locked users
+    // This allows locking by user even when the user viewing is different from responsible_person
 
     // Check locks in priority order
     for (const lock of locks.recordset) {
       let matches = false;
       let lockReason = '';
 
+      // New hierarchical scope type
+      if (lock.scope_type === 'hierarchical') {
+        // Check user scope - match by responsible_person (the user who owns the objective)
+        let userMatches = true;
+        if (lock.user_scope === 'specific' && lock.user_ids) {
+          try {
+            const userIds = JSON.parse(lock.user_ids);
+            if (Array.isArray(userIds) && userIds.length > 0) {
+              // Get usernames for the user IDs in the lock
+              const userIdsStr = userIds.join(',');
+              const lockUserResult = await pool.request().query(`
+                SELECT username FROM users WHERE id IN (${userIdsStr})
+              `);
+              const lockUsernames = lockUserResult.recordset.map(r => r.username);
+              // Match against the objective's responsible_person (not the current viewing user)
+              userMatches = lockUsernames.includes(responsiblePerson);
+            } else {
+              userMatches = false;
+            }
+          } catch (err) {
+            logger.error('Error parsing user_ids in hierarchical lock', err);
+            userMatches = false;
+          }
+        } else if (lock.user_scope === 'none') {
+          userMatches = false;
+        }
+
+        if (!userMatches) continue;
+
+        // Check KPI scope
+        let kpiMatches = true;
+        if (lock.kpi_scope === 'specific' && lock.kpi_ids) {
+          try {
+            const kpiIds = JSON.parse(lock.kpi_ids);
+            if (Array.isArray(kpiIds) && kpiIds.length > 0) {
+              // Check if objective's KPI matches any of the locked KPIs
+              // Handle multiple KPIs separated by ||
+              const objectiveKPIs = kpi.includes('||') ? kpi.split('||').map(k => k.trim()) : [kpi];
+              kpiMatches = objectiveKPIs.some(objKpi => kpiIds.includes(objKpi));
+            } else {
+              kpiMatches = false;
+            }
+          } catch (err) {
+            logger.error('Error parsing kpi_ids in hierarchical lock', err);
+            kpiMatches = false;
+          }
+        } else if (lock.kpi_scope === 'none') {
+          kpiMatches = false;
+        }
+
+        if (!kpiMatches) continue;
+
+        // Check objective scope
+        let objectiveMatches = true;
+        if (lock.objective_scope === 'specific' && lock.objective_ids) {
+          try {
+            const objectiveIds = JSON.parse(lock.objective_ids);
+            if (Array.isArray(objectiveIds) && objectiveIds.length > 0) {
+              objectiveMatches = objectiveIds.includes(departmentObjectiveId);
+            } else {
+              objectiveMatches = false;
+            }
+          } catch (err) {
+            logger.error('Error parsing objective_ids in hierarchical lock', err);
+            objectiveMatches = false;
+          }
+        } else if (lock.objective_scope === 'none') {
+          objectiveMatches = false;
+        }
+
+        if (!objectiveMatches) continue;
+
+        // Check if objective type is Direct (for monthly_actual)
+        if (fieldType === 'monthly_actual' && !objectiveHasDirectType) {
+          continue;
+        }
+
+        // Check field locks
+        if (fieldType === 'target' && (lock.lock_annual_target === true || lock.lock_annual_target === 1)) {
+          matches = true;
+          lockReason = 'Locked by hierarchical rule (Annual Target)';
+        } else if (fieldType === 'monthly_target' && (lock.lock_monthly_target === true || lock.lock_monthly_target === 1)) {
+          matches = true;
+          lockReason = 'Locked by hierarchical rule (Monthly Target)';
+        } else if (fieldType === 'monthly_actual' && (lock.lock_monthly_actual === true || lock.lock_monthly_actual === 1)) {
+          matches = true;
+          lockReason = 'Locked by hierarchical rule (Monthly Actual)';
+        } else if (fieldType === 'all_fields' && (lock.lock_all_other_fields === true || lock.lock_all_other_fields === 1)) {
+          matches = true;
+          lockReason = 'Locked by hierarchical rule (Other Fields)';
+        }
+
+        if (matches) break; // Found matching lock, exit loop
+        continue; // Skip to next lock
+      }
+
+      // Legacy scope types (backward compatibility)
       switch (lock.scope_type) {
         case 'specific_users':
           // Only lock Direct type objectives (like all_department_objectives)
@@ -339,12 +460,14 @@ const handler = rateLimiter('general')(
       const isNumericId = pathParts[1] && !isNaN(parseInt(pathParts[1]));
       const action = isNumericId ? null : pathParts[1]; // 'check', 'check-batch', 'export', etc.
       const id = isNumericId ? parseInt(pathParts[1]) : (pathParts[2] ? parseInt(pathParts[2]) : null); // ID parameter
+      const queryParams = event.queryStringParameters || {};
 
       // Lock checking endpoints are available to ALL authenticated users
       const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch');
+      const isHelperEndpoint = resource === 'locks' && (action === 'kpis-by-users' || action === 'objectives-by-kpis');
       
       // All other endpoints require Admin or CEO role
-      if (!isLockCheckEndpoint) {
+      if (!isLockCheckEndpoint && !isHelperEndpoint) {
         const isAdmin = user.role === 'Admin' || user.role === 'CEO';
         if (!isAdmin) {
           return {
@@ -354,6 +477,134 @@ const handler = rateLimiter('general')(
               success: false,
               error: 'Access denied. Admin or CEO role required.'
             })
+          };
+        }
+      }
+
+      // ========== HELPER ENDPOINTS FOR HIERARCHICAL LOCKS ==========
+      
+      if (resource === 'locks' && action === 'kpis-by-users') {
+        // GET /api/config/locks/kpis-by-users?user_ids=1,2,3
+        if (method === 'GET') {
+          const userIdsParam = queryParams.user_ids || '';
+          const userIds = userIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+          
+          if (userIds.length === 0) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'user_ids parameter required' })
+            };
+          }
+
+          // Get usernames for the user IDs
+          const userIdsStr = userIds.join(',');
+          const userResult = await pool.request().query(`
+            SELECT username FROM users WHERE id IN (${userIdsStr})
+          `);
+          
+          const usernames = userResult.recordset.map(r => r.username);
+          
+          if (usernames.length === 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, data: [] })
+            };
+          }
+          
+          // Get unique KPIs from objectives where responsible_person matches any of the usernames
+          // Use parameterized query with LIKE for each username
+          const usernameConditions = usernames.map((_, i) => `responsible_person = @username_${i}`).join(' OR ');
+          const kpiRequest = pool.request();
+          usernames.forEach((username, i) => {
+            kpiRequest.input(`username_${i}`, sql.NVarChar, username);
+          });
+          
+          const kpiResult = await kpiRequest.query(`
+            SELECT DISTINCT kpi 
+            FROM department_objectives 
+            WHERE ${usernameConditions}
+            ORDER BY kpi
+          `);
+          
+          const kpis = kpiResult.recordset.map(r => r.kpi);
+          
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: kpis })
+          };
+        }
+      }
+
+      if (resource === 'locks' && action === 'objectives-by-kpis') {
+        // GET /api/config/locks/objectives-by-kpis?kpi_ids=kpi1&kpi_ids=kpi2&user_ids=1,2
+        // Support both comma-separated and multiple query params
+        if (method === 'GET') {
+          let kpiIds: string[] = [];
+          if (Array.isArray(queryParams.kpi_ids)) {
+            kpiIds = queryParams.kpi_ids.map(k => decodeURIComponent(String(k).trim())).filter(k => k);
+          } else if (queryParams.kpi_ids) {
+            kpiIds = String(queryParams.kpi_ids).split(',').map(k => decodeURIComponent(k.trim())).filter(k => k);
+          }
+          const userIdsParam = queryParams.user_ids || '';
+          const userIds = userIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+          
+          if (kpiIds.length === 0) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'kpi_ids parameter required' })
+            };
+          }
+
+          // Get usernames if user_ids provided
+          let usernames = [];
+          if (userIds.length > 0) {
+            const userIdsStr = userIds.join(',');
+            const userResult = await pool.request().query(`
+              SELECT username FROM users WHERE id IN (${userIdsStr})
+            `);
+            usernames = userResult.recordset.map(r => r.username);
+          }
+
+          // Get objectives matching KPIs (and optionally usernames)
+          const objRequest = pool.request();
+          const kpiConditions = kpiIds.map((_, i) => {
+            objRequest.input(`kpi_${i}`, sql.NVarChar, kpiIds[i]);
+            return `kpi = @kpi_${i}`;
+          }).join(' OR ');
+          
+          let whereClause = `(${kpiConditions})`;
+          if (usernames.length > 0) {
+            const usernameConditions = usernames.map((_, i) => {
+              objRequest.input(`username_${i}`, sql.NVarChar, usernames[i]);
+              return `responsible_person = @username_${i}`;
+            }).join(' OR ');
+            whereClause += ` AND (${usernameConditions})`;
+          }
+          
+          const objResult = await objRequest.query(`
+            SELECT id, activity, kpi, responsible_person, type, department_id
+            FROM department_objectives 
+            WHERE ${whereClause}
+            ORDER BY activity
+          `);
+          
+          const objectives = objResult.recordset.map(r => ({
+            id: r.id,
+            activity: r.activity,
+            kpi: r.kpi,
+            responsible_person: r.responsible_person,
+            type: r.type,
+            department_id: r.department_id
+          }));
+          
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: objectives })
           };
         }
       }
@@ -377,11 +628,39 @@ const handler = rateLimiter('general')(
             ORDER BY fl.created_at DESC
           `);
 
-          const locks = result.recordset.map(lock => ({
-            ...lock,
-            user_ids: lock.user_ids ? JSON.parse(lock.user_ids) : null,
-            lock_type: lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type
-          }));
+          const locks = result.recordset.map(lock => {
+            const parsed: any = {
+              ...lock,
+              user_ids: lock.user_ids ? JSON.parse(lock.user_ids) : null,
+              lock_type: lock.lock_type && lock.lock_type.includes && lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type
+            };
+            // Parse new hierarchical fields
+            if (lock.kpi_ids) {
+              try {
+                parsed.kpi_ids = JSON.parse(lock.kpi_ids);
+              } catch {
+                // Try parsing as single string if JSON parse fails
+                try {
+                  parsed.kpi_ids = [lock.kpi_ids];
+                } catch {
+                  parsed.kpi_ids = null;
+                }
+              }
+            }
+            if (lock.objective_ids) {
+              try {
+                parsed.objective_ids = JSON.parse(lock.objective_ids);
+              } catch {
+                // Try parsing as single number if JSON parse fails
+                try {
+                  parsed.objective_ids = [parseInt(lock.objective_ids)];
+                } catch {
+                  parsed.objective_ids = null;
+                }
+              }
+            }
+            return parsed;
+          });
 
           return {
             statusCode: 200,
@@ -417,7 +696,32 @@ const handler = rateLimiter('general')(
 
           const lock = result.recordset[0];
           lock.user_ids = lock.user_ids ? JSON.parse(lock.user_ids) : null;
-          lock.lock_type = lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type;
+          lock.lock_type = lock.lock_type && lock.lock_type.includes && lock.lock_type.includes('[') ? JSON.parse(lock.lock_type) : lock.lock_type;
+          // Parse new hierarchical fields
+          if (lock.kpi_ids) {
+            try {
+              lock.kpi_ids = JSON.parse(lock.kpi_ids);
+            } catch {
+              // Try parsing as single string if JSON parse fails
+              try {
+                lock.kpi_ids = [lock.kpi_ids];
+              } catch {
+                lock.kpi_ids = null;
+              }
+            }
+          }
+          if (lock.objective_ids) {
+            try {
+              lock.objective_ids = JSON.parse(lock.objective_ids);
+            } catch {
+              // Try parsing as single number if JSON parse fails
+              try {
+                lock.objective_ids = [parseInt(lock.objective_ids)];
+              } catch {
+                lock.objective_ids = null;
+              }
+            }
+          }
 
           return {
             statusCode: 200,
@@ -491,9 +795,22 @@ const handler = rateLimiter('general')(
         if (method === 'POST' && !action) {
           const body = JSON.parse(event.body || '{}');
           const {
-            lock_type,
+            // New hierarchical structure
             scope_type,
+            user_scope,
             user_ids,
+            kpi_scope,
+            kpi_ids,
+            objective_scope,
+            objective_ids,
+            lock_annual_target,
+            lock_monthly_target,
+            lock_monthly_actual,
+            lock_all_other_fields,
+            lock_add_objective,
+            lock_delete_objective,
+            // Legacy fields (for backward compatibility)
+            lock_type,
             kpi,
             department_id,
             department_objective_id,
@@ -502,18 +819,52 @@ const handler = rateLimiter('general')(
             exclude_annual_target
           } = body;
 
-          if (!lock_type || !scope_type) {
+          if (!scope_type) {
             return {
               statusCode: 400,
               headers,
-              body: JSON.stringify({ success: false, error: 'lock_type and scope_type are required' })
+              body: JSON.stringify({ success: false, error: 'scope_type is required' })
             };
           }
 
+          // Validate new hierarchical structure
+          if (scope_type === 'hierarchical') {
+            if (!user_scope || !kpi_scope || !objective_scope) {
+              return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ success: false, error: 'user_scope, kpi_scope, and objective_scope are required for hierarchical locks' })
+              };
+            }
+            // Check at least one field is locked
+            const hasFieldLock = lock_annual_target || lock_monthly_target || lock_monthly_actual || 
+                                 lock_all_other_fields || lock_add_objective || lock_delete_objective;
+            if (!hasFieldLock) {
+              return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ success: false, error: 'At least one field must be locked' })
+              };
+            }
+          }
+
           const request = pool.request();
-          request.input('lock_type', sql.NVarChar, Array.isArray(lock_type) ? JSON.stringify(lock_type) : lock_type);
-          request.input('scope_type', sql.NVarChar, scope_type);
+          // New hierarchical fields
+          request.input('scope_type', sql.NVarChar, scope_type || 'hierarchical');
+          request.input('user_scope', sql.NVarChar, user_scope || 'all');
           request.input('user_ids', sql.NVarChar, user_ids ? JSON.stringify(user_ids) : null);
+          request.input('kpi_scope', sql.NVarChar, kpi_scope || 'all');
+          request.input('kpi_ids', sql.NVarChar, kpi_ids ? JSON.stringify(kpi_ids) : null);
+          request.input('objective_scope', sql.NVarChar, objective_scope || 'all');
+          request.input('objective_ids', sql.NVarChar, objective_ids ? JSON.stringify(objective_ids) : null);
+          request.input('lock_annual_target', sql.Bit, lock_annual_target || false);
+          request.input('lock_monthly_target', sql.Bit, lock_monthly_target || false);
+          request.input('lock_monthly_actual', sql.Bit, lock_monthly_actual || false);
+          request.input('lock_all_other_fields', sql.Bit, lock_all_other_fields || false);
+          request.input('lock_add_objective', sql.Bit, lock_add_objective || false);
+          request.input('lock_delete_objective', sql.Bit, lock_delete_objective || false);
+          // Legacy fields (for backward compatibility)
+          request.input('lock_type', sql.NVarChar, lock_type ? (Array.isArray(lock_type) ? JSON.stringify(lock_type) : lock_type) : null);
           request.input('kpi', sql.NVarChar, kpi || null);
           request.input('department_id', sql.Int, department_id || null);
           request.input('department_objective_id', sql.Int, department_objective_id || null);
@@ -524,10 +875,18 @@ const handler = rateLimiter('general')(
 
           const result = await request.query(`
             INSERT INTO field_locks 
-            (lock_type, scope_type, user_ids, kpi, department_id, department_objective_id, exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
+            (scope_type, user_scope, user_ids, kpi_scope, kpi_ids, objective_scope, objective_ids,
+             lock_annual_target, lock_monthly_target, lock_monthly_actual, lock_all_other_fields, 
+             lock_add_objective, lock_delete_objective,
+             lock_type, kpi, department_id, department_objective_id, 
+             exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
             OUTPUT INSERTED.*
             VALUES 
-            (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @department_objective_id, @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
+            (@scope_type, @user_scope, @user_ids, @kpi_scope, @kpi_ids, @objective_scope, @objective_ids,
+             @lock_annual_target, @lock_monthly_target, @lock_monthly_actual, @lock_all_other_fields,
+             @lock_add_objective, @lock_delete_objective,
+             @lock_type, @kpi, @department_id, @department_objective_id,
+             @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
           `);
 
           const newLock = result.recordset[0];
@@ -554,73 +913,57 @@ const handler = rateLimiter('general')(
           const body = JSON.parse(event.body || '{}');
           const request = pool.request();
           request.input('id', sql.Int, id);
+          const scopeType = body.scope_type || 'hierarchical';
+          
+          // New hierarchical structure
+          request.input('scope_type', sql.NVarChar, scopeType);
+          request.input('user_scope', sql.NVarChar, body.user_scope !== undefined ? body.user_scope : null);
+          request.input('user_ids', sql.NVarChar, body.user_ids ? JSON.stringify(body.user_ids) : null);
+          request.input('kpi_scope', sql.NVarChar, body.kpi_scope !== undefined ? body.kpi_scope : null);
+          request.input('kpi_ids', sql.NVarChar, body.kpi_ids ? JSON.stringify(body.kpi_ids) : null);
+          request.input('objective_scope', sql.NVarChar, body.objective_scope !== undefined ? body.objective_scope : null);
+          request.input('objective_ids', sql.NVarChar, body.objective_ids ? JSON.stringify(body.objective_ids) : null);
+          request.input('lock_annual_target', sql.Bit, body.lock_annual_target !== undefined ? body.lock_annual_target : null);
+          request.input('lock_monthly_target', sql.Bit, body.lock_monthly_target !== undefined ? body.lock_monthly_target : null);
+          request.input('lock_monthly_actual', sql.Bit, body.lock_monthly_actual !== undefined ? body.lock_monthly_actual : null);
+          request.input('lock_all_other_fields', sql.Bit, body.lock_all_other_fields !== undefined ? body.lock_all_other_fields : null);
+          request.input('lock_add_objective', sql.Bit, body.lock_add_objective !== undefined ? body.lock_add_objective : null);
+          request.input('lock_delete_objective', sql.Bit, body.lock_delete_objective !== undefined ? body.lock_delete_objective : null);
+          
+          // Legacy fields (for backward compatibility)
           request.input('lock_type', sql.NVarChar, body.lock_type ? (Array.isArray(body.lock_type) ? JSON.stringify(body.lock_type) : body.lock_type) : null);
-          request.input('scope_type', sql.NVarChar, body.scope_type || null);
-          
-          // When scope_type changes, we need to clear fields that don't apply to the new scope
-          // Use explicit null values instead of COALESCE to clear old values
-          const scopeType = body.scope_type;
-          
-          // Determine which fields should be null based on scope type
-          let userIdsValue = null;
-          let kpiValue = null;
-          let departmentIdValue = null;
-          let departmentObjectiveIdValue = null;
-          let excludeMonthlyTargetValue = null;
-          let excludeMonthlyActualValue = null;
-          let excludeAnnualTargetValue = null;
-          
-          if (scopeType === 'all_department_objectives') {
-            userIdsValue = body.user_ids ? JSON.stringify(body.user_ids) : null;
-            excludeMonthlyTargetValue = body.exclude_monthly_target !== undefined ? body.exclude_monthly_target : null;
-            excludeMonthlyActualValue = body.exclude_monthly_actual !== undefined ? body.exclude_monthly_actual : null;
-            excludeAnnualTargetValue = body.exclude_annual_target !== undefined ? body.exclude_annual_target : null;
-          } else if (scopeType === 'specific_users') {
-            userIdsValue = body.user_ids ? JSON.stringify(body.user_ids) : null;
-          } else if (scopeType === 'specific_kpi') {
-            kpiValue = body.kpi || null;
-          } else if (scopeType === 'department_kpi') {
-            kpiValue = body.kpi || null;
-            departmentIdValue = body.department_id || null;
-          } else if (scopeType === 'specific_objective') {
-            departmentIdValue = body.department_id || null;
-            departmentObjectiveIdValue = body.department_objective_id || null;
-          }
-          // For 'all_users', all optional fields remain null
-          
-          request.input('user_ids', sql.NVarChar, userIdsValue);
-          request.input('kpi', sql.NVarChar, kpiValue);
-          request.input('department_id', sql.Int, departmentIdValue);
-          request.input('department_objective_id', sql.Int, departmentObjectiveIdValue);
-          request.input('exclude_monthly_target', sql.Bit, excludeMonthlyTargetValue);
-          request.input('exclude_monthly_actual', sql.Bit, excludeMonthlyActualValue);
-          request.input('exclude_annual_target', sql.Bit, excludeAnnualTargetValue);
+          request.input('kpi', sql.NVarChar, body.kpi || null);
+          request.input('department_id', sql.Int, body.department_id || null);
+          request.input('department_objective_id', sql.Int, body.department_objective_id !== undefined ? body.department_objective_id : null);
+          request.input('exclude_monthly_target', sql.Bit, body.exclude_monthly_target !== undefined ? body.exclude_monthly_target : null);
+          request.input('exclude_monthly_actual', sql.Bit, body.exclude_monthly_actual !== undefined ? body.exclude_monthly_actual : null);
+          request.input('exclude_annual_target', sql.Bit, body.exclude_annual_target !== undefined ? body.exclude_annual_target : null);
           request.input('is_active', sql.Bit, body.is_active !== undefined ? body.is_active : null);
-          request.input('scope_type_param', sql.NVarChar, scopeType); // Add scope_type as parameter for CASE statement
 
-          // Build UPDATE query - use direct assignment (not COALESCE) for scope-specific fields
-          // This ensures old values are cleared when switching scope types
+          // Build UPDATE query - use COALESCE for optional updates
           const result = await request.query(`
             UPDATE field_locks
             SET 
-              lock_type = COALESCE(@lock_type, lock_type),
               scope_type = COALESCE(@scope_type, scope_type),
-              user_ids = @user_ids,
-              kpi = @kpi,
-              department_id = @department_id,
-              department_objective_id = @department_objective_id,
-              exclude_monthly_target = CASE 
-                WHEN @scope_type_param = 'all_department_objectives' THEN COALESCE(@exclude_monthly_target, exclude_monthly_target)
-                ELSE 0
-              END,
-              exclude_monthly_actual = CASE 
-                WHEN @scope_type_param = 'all_department_objectives' THEN COALESCE(@exclude_monthly_actual, exclude_monthly_actual)
-                ELSE 0
-              END,
-              exclude_annual_target = CASE 
-                WHEN @scope_type_param = 'all_department_objectives' THEN COALESCE(@exclude_annual_target, exclude_annual_target)
-                ELSE 0
-              END,
+              user_scope = COALESCE(@user_scope, user_scope),
+              user_ids = COALESCE(@user_ids, user_ids),
+              kpi_scope = COALESCE(@kpi_scope, kpi_scope),
+              kpi_ids = COALESCE(@kpi_ids, kpi_ids),
+              objective_scope = COALESCE(@objective_scope, objective_scope),
+              objective_ids = COALESCE(@objective_ids, objective_ids),
+              lock_annual_target = COALESCE(@lock_annual_target, lock_annual_target),
+              lock_monthly_target = COALESCE(@lock_monthly_target, lock_monthly_target),
+              lock_monthly_actual = COALESCE(@lock_monthly_actual, lock_monthly_actual),
+              lock_all_other_fields = COALESCE(@lock_all_other_fields, lock_all_other_fields),
+              lock_add_objective = COALESCE(@lock_add_objective, lock_add_objective),
+              lock_delete_objective = COALESCE(@lock_delete_objective, lock_delete_objective),
+              lock_type = COALESCE(@lock_type, lock_type),
+              kpi = COALESCE(@kpi, kpi),
+              department_id = COALESCE(@department_id, department_id),
+              department_objective_id = COALESCE(@department_objective_id, department_objective_id),
+              exclude_monthly_target = COALESCE(@exclude_monthly_target, exclude_monthly_target),
+              exclude_monthly_actual = COALESCE(@exclude_monthly_actual, exclude_monthly_actual),
+              exclude_annual_target = COALESCE(@exclude_annual_target, exclude_annual_target),
               is_active = COALESCE(@is_active, is_active),
               updated_at = GETDATE()
             OUTPUT INSERTED.*
@@ -706,9 +1049,22 @@ const handler = rateLimiter('general')(
             const results = [];
             for (const lockData of locks) {
               const request = pool.request();
-              request.input('lock_type', sql.NVarChar, Array.isArray(lockData.lock_type) ? JSON.stringify(lockData.lock_type) : lockData.lock_type);
-              request.input('scope_type', sql.NVarChar, lockData.scope_type);
+              // New hierarchical fields
+              request.input('scope_type', sql.NVarChar, lockData.scope_type || 'hierarchical');
+              request.input('user_scope', sql.NVarChar, lockData.user_scope || 'all');
               request.input('user_ids', sql.NVarChar, lockData.user_ids ? JSON.stringify(lockData.user_ids) : null);
+              request.input('kpi_scope', sql.NVarChar, lockData.kpi_scope || 'all');
+              request.input('kpi_ids', sql.NVarChar, lockData.kpi_ids ? JSON.stringify(lockData.kpi_ids) : null);
+              request.input('objective_scope', sql.NVarChar, lockData.objective_scope || 'all');
+              request.input('objective_ids', sql.NVarChar, lockData.objective_ids ? JSON.stringify(lockData.objective_ids) : null);
+              request.input('lock_annual_target', sql.Bit, lockData.lock_annual_target || false);
+              request.input('lock_monthly_target', sql.Bit, lockData.lock_monthly_target || false);
+              request.input('lock_monthly_actual', sql.Bit, lockData.lock_monthly_actual || false);
+              request.input('lock_all_other_fields', sql.Bit, lockData.lock_all_other_fields || false);
+              request.input('lock_add_objective', sql.Bit, lockData.lock_add_objective || false);
+              request.input('lock_delete_objective', sql.Bit, lockData.lock_delete_objective || false);
+              // Legacy fields
+              request.input('lock_type', sql.NVarChar, lockData.lock_type ? (Array.isArray(lockData.lock_type) ? JSON.stringify(lockData.lock_type) : lockData.lock_type) : null);
               request.input('kpi', sql.NVarChar, lockData.kpi || null);
               request.input('department_id', sql.Int, lockData.department_id || null);
               request.input('department_objective_id', sql.Int, lockData.department_objective_id || null);
@@ -719,10 +1075,18 @@ const handler = rateLimiter('general')(
 
               const result = await request.query(`
                 INSERT INTO field_locks 
-                (lock_type, scope_type, user_ids, kpi, department_id, department_objective_id, exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
+                (scope_type, user_scope, user_ids, kpi_scope, kpi_ids, objective_scope, objective_ids,
+                 lock_annual_target, lock_monthly_target, lock_monthly_actual, lock_all_other_fields,
+                 lock_add_objective, lock_delete_objective,
+                 lock_type, kpi, department_id, department_objective_id, 
+                 exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
                 OUTPUT INSERTED.*
                 VALUES 
-                (@lock_type, @scope_type, @user_ids, @kpi, @department_id, @department_objective_id, @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
+                (@scope_type, @user_scope, @user_ids, @kpi_scope, @kpi_ids, @objective_scope, @objective_ids,
+                 @lock_annual_target, @lock_monthly_target, @lock_monthly_actual, @lock_all_other_fields,
+                 @lock_add_objective, @lock_delete_objective,
+                 @lock_type, @kpi, @department_id, @department_objective_id,
+                 @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
               `);
               results.push(result.recordset[0]);
             }
