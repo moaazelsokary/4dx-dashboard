@@ -161,6 +161,15 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           ELSE 11
         END
     `);
+    
+    // Debug: Log all locks found
+    logger.info(`[Lock Check] Found ${locks.recordset.length} active lock(s) for check`, {
+      field_type: fieldType,
+      objective_id: departmentObjectiveId,
+      user_id: userId,
+      lock_count: locks.recordset.length,
+      lock_ids: locks.recordset.map(l => l.id)
+    });
 
     // Check locks in priority order
     for (const lock of locks.recordset) {
@@ -404,6 +413,13 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
       }
 
       if (matches) {
+        logger.info(`[Lock Check] Lock matched! Returning locked status`, {
+          lock_id: lock.id,
+          field_type: fieldType,
+          objective_id: departmentObjectiveId,
+          user_id: userId,
+          reason: lockReason
+        });
         return {
           is_locked: true,
           lock_reason: lockReason,
@@ -413,6 +429,20 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
       }
     }
 
+    // Debug: Log why no lock was found
+    logger.info(`[Lock Check] No matching lock found`, {
+      field_type: fieldType,
+      objective_id: departmentObjectiveId,
+      user_id: userId,
+      total_locks_checked: locks.recordset.length,
+      locks_checked: locks.recordset.map(l => ({
+        id: l.id,
+        scope_type: l.scope_type,
+        user_scope: l.user_scope,
+        user_ids: l.user_ids
+      }))
+    });
+    
     return { is_locked: false };
   } catch (error) {
     logger.error('Error checking lock status', error);
