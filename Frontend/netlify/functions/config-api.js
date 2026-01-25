@@ -764,8 +764,8 @@ const handler = rateLimiter('general')(
       }
 
       if (resource === 'locks' && action === 'objectives-by-kpis') {
-        // GET /api/config/locks/objectives-by-kpis?kpi_ids=kpi1&kpi_ids=kpi2
-        // Returns objectives matching selected KPIs only (no user filter)
+        // GET /api/config/locks/objectives-by-kpis?kpi_ids=kpi1&kpi_ids=kpi2&user_ids=1,2,3
+        // Returns objectives matching selected KPIs, optionally filtered by users
         if (method === 'GET') {
           let kpiIds = [];
           if (Array.isArray(queryParams.kpi_ids)) {
@@ -782,17 +782,71 @@ const handler = rateLimiter('general')(
             };
           }
 
+          // Optional user filter
+          let departmentIds = null;
+          if (queryParams.user_ids) {
+            const userIdsParam = queryParams.user_ids;
+            const userIds = userIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+            
+            if (userIds.length > 0) {
+              // Get users with their departments
+              const userIdsStr = userIds.join(',');
+              const userResult = await pool.request().query(`
+                SELECT id, username, departments FROM users WHERE id IN (${userIdsStr})
+              `);
+              
+              if (userResult.recordset.length > 0) {
+                // Collect all department codes from users' departments
+                const departmentCodes = new Set();
+                for (const u of userResult.recordset) {
+                  let depts = [];
+                  try {
+                    if (typeof u.departments === 'string') {
+                      if (u.departments.trim().startsWith('[')) {
+                        depts = JSON.parse(u.departments);
+                      } else {
+                        depts = u.departments.split(',').map(d => d.trim()).filter(Boolean);
+                      }
+                    } else if (Array.isArray(u.departments)) {
+                      depts = u.departments;
+                    }
+                  } catch {
+                    depts = u.departments ? u.departments.split(',').map(d => d.trim()).filter(Boolean) : [];
+                  }
+                  depts.forEach(c => departmentCodes.add(String(c).trim()));
+                }
+
+                const codes = Array.from(departmentCodes).filter(Boolean);
+                if (codes.length > 0) {
+                  // Get department IDs
+                  const codeConditions = codes.map((_, i) => `(LOWER(RTRIM(code)) = LOWER(RTRIM(@code_${i})) OR LOWER(RTRIM(name)) = LOWER(RTRIM(@code_${i})))`).join(' OR ');
+                  const deptRequest = pool.request();
+                  codes.forEach((c, i) => { deptRequest.input(`code_${i}`, sql.NVarChar, c); });
+                  const deptResult = await deptRequest.query(`
+                    SELECT id FROM departments WHERE ${codeConditions}
+                  `);
+                  departmentIds = deptResult.recordset.map(r => r.id);
+                }
+              }
+            }
+          }
+
           const objRequest = pool.request();
           const kpiConditions = kpiIds.map((_, i) => {
             objRequest.input(`kpi_${i}`, sql.NVarChar, kpiIds[i]);
             return `kpi = @kpi_${i}`;
           }).join(' OR ');
           
+          let whereClause = `(${kpiConditions}) AND type NOT IN ('M&E', 'M&E MOV')`;
+          if (departmentIds && departmentIds.length > 0) {
+            const deptIdsStr = departmentIds.join(',');
+            whereClause += ` AND department_id IN (${deptIdsStr})`;
+          }
+          
           const objResult = await objRequest.query(`
             SELECT id, activity, kpi, responsible_person, type, department_id
             FROM department_objectives 
-            WHERE (${kpiConditions})
-              AND type NOT IN ('M&E', 'M&E MOV')
+            WHERE ${whereClause}
             ORDER BY activity
           `);
           
@@ -801,7 +855,7 @@ const handler = rateLimiter('general')(
             activity: r.activity,
             kpi: r.kpi,
             responsible_person: r.responsible_person,
-            type: r.type,
+            type: r.type || '',
             department_id: r.department_id
           }));
           
