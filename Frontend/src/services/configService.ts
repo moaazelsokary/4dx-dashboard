@@ -114,6 +114,56 @@ export async function bulkDeleteLocks(lockIds: number[]): Promise<void> {
   });
 }
 
+// Helper functions for hierarchical lock rules
+export async function getKPIsByUsers(userIds: number[]): Promise<string[]> {
+  const params = new URLSearchParams();
+  params.append('user_ids', userIds.join(','));
+  const response = await fetch(`${API_BASE_URL}/locks/kpis-by-users?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || error.message || `HTTP error! status: ${response.status}`);
+  }
+  const data = await response.json();
+  return data.success ? data.data : data;
+}
+
+export async function getObjectivesByKPIs(kpiIds: string[], userIds?: number[]): Promise<Array<{
+  id: number;
+  activity: string;
+  kpi: string;
+  responsible_person: string;
+  type: string;
+  department_id: number;
+}>> {
+  const params = new URLSearchParams();
+  // Encode each KPI separately to handle special characters
+  kpiIds.forEach(kpi => {
+    params.append('kpi_ids', kpi);
+  });
+  if (userIds && userIds.length > 0) {
+    params.append('user_ids', userIds.join(','));
+  }
+  const response = await fetch(`${API_BASE_URL}/locks/objectives-by-kpis?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || error.message || `HTTP error! status: ${response.status}`);
+  }
+  const data = await response.json();
+  return data.success ? data.data : data;
+}
+
 // ========== ACTIVITY LOGS ==========
 
 export async function getLogs(filters?: LogFilters): Promise<{ data: ActivityLog[]; pagination: any }> {

@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import LockRuleForm from './LockRuleForm';
+import LockRuleForm from './LockRuleFormNew';
 import LockVisualMap from './LockVisualMap';
 
 export default function LockRuleList() {
@@ -81,6 +81,30 @@ export default function LockRuleList() {
   };
 
   const getScopeDescription = (lock: FieldLock): string => {
+    if (lock.scope_type === 'hierarchical') {
+      // New hierarchical structure
+      const userDesc = lock.user_scope === 'all' ? 'All Users' : 
+                       lock.user_scope === 'specific' ? `${Array.isArray(lock.user_ids) ? lock.user_ids.length : 0} User(s)` : 
+                       'No Users';
+      const kpiDesc = lock.kpi_scope === 'all' ? 'All KPIs' : 
+                     lock.kpi_scope === 'specific' ? `${Array.isArray(lock.kpi_ids) ? lock.kpi_ids.length : 0} KPI(s)` : 
+                     'No KPIs';
+      const objDesc = lock.objective_scope === 'all' ? 'All Objectives' : 
+                      lock.objective_scope === 'specific' ? `${Array.isArray(lock.objective_ids) ? lock.objective_ids.length : 0} Objective(s)` : 
+                      'No Objectives';
+      
+      const fields = [];
+      if (lock.lock_annual_target) fields.push('Annual Target');
+      if (lock.lock_monthly_target) fields.push('Monthly Target');
+      if (lock.lock_monthly_actual) fields.push('Monthly Actual');
+      if (lock.lock_all_other_fields) fields.push('Other Fields');
+      if (lock.lock_add_objective) fields.push('Add Objective');
+      if (lock.lock_delete_objective) fields.push('Delete Objective');
+      
+      return `Hierarchical: ${userDesc} → ${kpiDesc} → ${objDesc} | Fields: ${fields.join(', ') || 'None'}`;
+    }
+    
+    // Legacy scope types
     switch (lock.scope_type) {
       case 'all_users':
         return 'All Users';
@@ -103,7 +127,7 @@ export default function LockRuleList() {
           : 'All Users';
         return `All Department Objectives (${userScope}${exclusions.length > 0 ? `, Excluding: ${exclusions.join(', ')}` : ''})`;
       default:
-        return lock.scope_type;
+        return lock.scope_type || 'Unknown';
     }
   };
 

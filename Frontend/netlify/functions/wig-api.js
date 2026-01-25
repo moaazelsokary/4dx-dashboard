@@ -298,12 +298,74 @@ const handler = rateLimiter('general')(
       const kpi = decodeURIComponent(path.split('/by-kpi/')[1]);
       result = await getDepartmentObjectivesByKPI(pool, kpi);
     } else if (path === '/department-objectives' && method === 'POST') {
+      // Check if add objective is locked
+      if (event.user && event.user.id) {
+        const lockCheck = await checkObjectiveOperationLock(
+          pool, 
+          'add', 
+          event.user.id, 
+          body.kpi, 
+          body.responsible_person, 
+          body.department_id
+        );
+        if (lockCheck.is_locked) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({
+              error: lockCheck.lock_reason || 'Cannot add objective - operation is locked'
+            })
+          };
+        }
+      }
       result = await createDepartmentObjective(pool, body);
     } else if (path.startsWith('/department-objectives/') && method === 'PUT') {
       const id = parseInt(path.split('/')[2]);
       result = await updateDepartmentObjective(pool, id, body, event.user);
     } else if (path.startsWith('/department-objectives/') && method === 'DELETE') {
       const id = parseInt(path.split('/')[2]);
+      // Check if delete objective is locked
+      if (event.user && event.user.id) {
+        // Get objective details first
+        const objRequest = pool.request();
+        objRequest.input('id', sql.Int, id);
+        const objResult = await objRequest.query(`
+          SELECT kpi, responsible_person, department_id FROM department_objectives WHERE id = @id
+        `);
+        
+        if (objResult.recordset.length > 0) {
+          const obj = objResult.recordset[0];
+          const lockCheck = await checkObjectiveOperationLock(
+            pool, 
+            'delete', 
+            event.user.id, 
+            obj.kpi, 
+            obj.responsible_person, 
+            obj.department_id
+          );
+          if (lockCheck.is_locked) {
+            return {
+              statusCode: 403,
+              headers,
+              body: JSON.stringify({
+                error: lockCheck.lock_reason || 'Cannot delete objective - operation is locked'
+              })
+            };
+          }
+          
+          // Also check if the specific objective is locked
+          const specificLockCheck = await checkSpecificObjectiveLock(pool, id, event.user.id);
+          if (specificLockCheck.is_locked && specificLockCheck.lock_delete_objective) {
+            return {
+              statusCode: 403,
+              headers,
+              body: JSON.stringify({
+                error: specificLockCheck.lock_reason || 'Cannot delete objective - operation is locked'
+              })
+            };
+          }
+        }
+      }
       result = await deleteDepartmentObjective(pool, id, event.user);
     } else if (path === '/department-objectives/update-order' && method === 'POST') {
       result = await updateDepartmentObjectivesOrder(pool, body);
@@ -627,7 +689,180 @@ async function getDepartmentObjectivesByKPI(pool, kpi) {
   return result.recordset;
 }
 
+// Helper function to check if a specific objective is locked for delete
+async function checkSpecificObjectiveLock(pool, objectiveId, userId) {
+  try {
+    // Get objective details
+    const objRequest = pool.request();
+    objRequest.input('id', sql.Int, objectiveId);
+    const objResult = await objRequest.query(`
+      SELECT kpi, responsible_person, department_id, type FROM department_objectives WHERE id = @id
+    `);
+    
+    if (objResult.recordset.length === 0) {
+      return { is_locked: false };
+    }
+
+    const obj = objResult.recordset[0];
+    const objectiveHasDirectType = obj.type && obj.type.includes('Direct');
+
+    // Get hierarchical locks that target this specific objective
+    const lockRequest = pool.request();
+    const locks = await lockRequest.query(`
+      SELECT * FROM field_locks 
+      WHERE is_active = 1 
+        AND scope_type = 'hierarchical'
+        AND objective_scope = 'specific'
+        AND (lock_delete_objective = 1 OR lock_add_objective = 1)
+    `);
+
+    for (const lock of locks.recordset) {
+      try {
+        const objectiveIds = JSON.parse(lock.objective_ids);
+        if (Array.isArray(objectiveIds) && objectiveIds.includes(objectiveId)) {
+          // Check user and KPI scope matches
+          let userMatches = lock.user_scope === 'all';
+          if (lock.user_scope === 'specific' && lock.user_ids) {
+            const userIds = JSON.parse(lock.user_ids);
+            if (Array.isArray(userIds) && userIds.length > 0) {
+              const userIdsStr = userIds.join(',');
+              const lockUserResult = await pool.request().query(`
+                SELECT username FROM users WHERE id IN (${userIdsStr})
+              `);
+              const lockUsernames = lockUserResult.recordset.map(r => r.username);
+              userMatches = lockUsernames.includes(obj.responsible_person);
+            }
+          }
+
+          let kpiMatches = lock.kpi_scope === 'all';
+          if (lock.kpi_scope === 'specific' && lock.kpi_ids) {
+            const kpiIds = JSON.parse(lock.kpi_ids);
+            if (Array.isArray(kpiIds) && kpiIds.length > 0) {
+              const objectiveKPIs = obj.kpi.includes('||') ? obj.kpi.split('||').map(k => k.trim()) : [obj.kpi];
+              kpiMatches = objectiveKPIs.some(objKpi => kpiIds.includes(objKpi));
+            }
+          }
+
+          if (userMatches && kpiMatches && objectiveHasDirectType) {
+            return {
+              is_locked: true,
+              lock_reason: 'Cannot delete objective - locked by hierarchical rule',
+              lock_delete_objective: lock.lock_delete_objective === true || lock.lock_delete_objective === 1
+            };
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing objective_ids in lock check', err);
+      }
+    }
+
+    return { is_locked: false };
+  } catch (error) {
+    console.error('Error checking specific objective lock', error);
+    return { is_locked: false };
+  }
+}
+
+// Helper function to check if add/delete objective is locked
+async function checkObjectiveOperationLock(pool, operation, userId, kpi, responsiblePerson, departmentId) {
+  try {
+    // Get user's username
+    const userRequest = pool.request();
+    userRequest.input('user_id', sql.Int, userId);
+    const userResult = await userRequest.query('SELECT username FROM users WHERE id = @user_id');
+    const currentUserUsername = userResult.recordset.length > 0 ? userResult.recordset[0].username : null;
+
+    // Get all active hierarchical locks
+    const lockRequest = pool.request();
+    const locks = await lockRequest.query(`
+      SELECT * FROM field_locks 
+      WHERE is_active = 1 AND scope_type = 'hierarchical'
+      ORDER BY 
+        CASE 
+          WHEN objective_scope = 'specific' THEN 1
+          WHEN kpi_scope = 'specific' THEN 2
+          WHEN user_scope = 'specific' THEN 3
+          ELSE 4
+        END
+    `);
+
+    for (const lock of locks.recordset) {
+      // Check if this operation is locked
+      const isLocked = operation === 'add' 
+        ? (lock.lock_add_objective === true || lock.lock_add_objective === 1)
+        : (lock.lock_delete_objective === true || lock.lock_delete_objective === 1);
+      
+      if (!isLocked) continue;
+
+      // Check user scope
+      let userMatches = true;
+      if (lock.user_scope === 'specific' && lock.user_ids) {
+        try {
+          const userIds = JSON.parse(lock.user_ids);
+          if (Array.isArray(userIds) && userIds.length > 0) {
+            const userIdsStr = userIds.join(',');
+            const lockUserResult = await pool.request().query(`
+              SELECT username FROM users WHERE id IN (${userIdsStr})
+            `);
+            const lockUsernames = lockUserResult.recordset.map(r => r.username);
+            userMatches = lockUsernames.includes(responsiblePerson);
+          } else {
+            userMatches = false;
+          }
+        } catch (err) {
+          console.error('Error parsing user_ids in lock check', err);
+          userMatches = false;
+        }
+      } else if (lock.user_scope === 'none') {
+        userMatches = false;
+      }
+
+      if (!userMatches) continue;
+
+      // Check KPI scope
+      let kpiMatches = true;
+      if (lock.kpi_scope === 'specific' && lock.kpi_ids) {
+        try {
+          const kpiIds = JSON.parse(lock.kpi_ids);
+          if (Array.isArray(kpiIds) && kpiIds.length > 0) {
+            const objectiveKPIs = kpi.includes('||') ? kpi.split('||').map(k => k.trim()) : [kpi];
+            kpiMatches = objectiveKPIs.some(objKpi => kpiIds.includes(objKpi));
+          } else {
+            kpiMatches = false;
+          }
+        } catch (err) {
+          console.error('Error parsing kpi_ids in lock check', err);
+          kpiMatches = false;
+        }
+      } else if (lock.kpi_scope === 'none') {
+        kpiMatches = false;
+      }
+
+      if (!kpiMatches) continue;
+
+      // Objective scope doesn't matter for add operation (new objective doesn't exist yet)
+      // For delete, we check objective scope in the delete function itself
+
+      // If we get here, the lock applies
+      return {
+        is_locked: true,
+        lock_reason: `Cannot ${operation} objective - locked by hierarchical rule`
+      };
+    }
+
+    return { is_locked: false };
+  } catch (error) {
+    console.error('Error checking objective operation lock', error);
+    return { is_locked: false };
+  }
+}
+
 async function createDepartmentObjective(pool, body) {
+  // Check if add objective is locked (if user is provided)
+  // Note: We need to check locks based on the new objective's properties
+  // For now, we'll check after creation, but ideally we'd check before
+  // This requires the user context which may not always be available
+  
   // Skip RASCI validation for M&E type objectives (including M&E MOV)
   if (body.type !== 'M&E' && body.type !== 'M&E MOV') {
     // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
