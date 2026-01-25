@@ -551,7 +551,7 @@ const handler = rateLimiter('general')(
 
       // Lock checking endpoints are available to ALL authenticated users
       const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch');
-      const isHelperEndpoint = resource === 'locks' && (action === 'kpis-by-users' || action === 'objectives-by-kpis');
+      const isHelperEndpoint = resource === 'locks' && (action === 'kpis-by-users' || action === 'objectives-by-kpis' || action === 'objectives-by-users');
       
       // All other endpoints require Admin or CEO role
       if (!isLockCheckEndpoint && !isHelperEndpoint) {
@@ -658,6 +658,107 @@ const handler = rateLimiter('general')(
             statusCode: 200,
             headers,
             body: JSON.stringify({ success: true, data: kpis })
+          };
+        }
+      }
+
+      if (resource === 'locks' && action === 'objectives-by-users') {
+        // GET /api/config/locks/objectives-by-users?user_ids=1,2,3
+        // Returns objectives from department_objectives in the selected users' department(s)
+        if (method === 'GET') {
+          const userIdsParam = queryParams.user_ids || '';
+          const userIds = userIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+          
+          if (userIds.length === 0) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'user_ids parameter required' })
+            };
+          }
+
+          // Get users with their departments
+          const userIdsStr = userIds.join(',');
+          const userResult = await pool.request().query(`
+            SELECT id, username, departments FROM users WHERE id IN (${userIdsStr})
+          `);
+          
+          if (userResult.recordset.length === 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, data: [] })
+            };
+          }
+
+          // Collect all department codes from users' departments
+          const departmentCodes = new Set();
+          for (const u of userResult.recordset) {
+            let depts = [];
+            try {
+              if (typeof u.departments === 'string') {
+                if (u.departments.trim().startsWith('[')) {
+                  depts = JSON.parse(u.departments);
+                } else {
+                  depts = u.departments.split(',').map(d => d.trim()).filter(Boolean);
+                }
+              } else if (Array.isArray(u.departments)) {
+                depts = u.departments;
+              }
+            } catch {
+              depts = u.departments ? u.departments.split(',').map(d => d.trim()).filter(Boolean) : [];
+            }
+            depts.forEach(c => departmentCodes.add(String(c).trim()));
+          }
+
+          const codes = Array.from(departmentCodes).filter(Boolean);
+          if (codes.length === 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, data: [] })
+            };
+          }
+
+          // Get department IDs
+          const codeConditions = codes.map((_, i) => `(LOWER(RTRIM(code)) = LOWER(RTRIM(@code_${i})) OR LOWER(RTRIM(name)) = LOWER(RTRIM(@code_${i})))`).join(' OR ');
+          const deptRequest = pool.request();
+          codes.forEach((c, i) => { deptRequest.input(`code_${i}`, sql.NVarChar, c); });
+          const deptResult = await deptRequest.query(`
+            SELECT id FROM departments WHERE ${codeConditions}
+          `);
+          const departmentIds = deptResult.recordset.map(r => r.id);
+          if (departmentIds.length === 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, data: [] })
+            };
+          }
+
+          // Get objectives from department_objectives in those departments (exclude M&E and M&E MOV)
+          const deptIdsStr = departmentIds.join(',');
+          const objResult = await pool.request().query(`
+            SELECT id, activity, kpi, responsible_person, type, department_id
+            FROM department_objectives 
+            WHERE department_id IN (${deptIdsStr}) 
+              AND type NOT IN ('M&E', 'M&E MOV')
+            ORDER BY activity
+          `);
+          
+          const objectives = objResult.recordset.map(r => ({
+            id: r.id,
+            activity: r.activity,
+            kpi: r.kpi,
+            responsible_person: r.responsible_person,
+            type: r.type || '',
+            department_id: r.department_id
+          }));
+          
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: objectives })
           };
         }
       }
