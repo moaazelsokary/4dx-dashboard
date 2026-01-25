@@ -78,14 +78,14 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   });
 
   // Load KPIs filtered by selected users
-  const { data: filteredKPIs = [], isLoading: kpisLoading } = useQuery({
+  const { data: userFilteredKPIs = [], isLoading: kpisLoading } = useQuery({
     queryKey: ['kpis-by-users', selectedUsers],
     queryFn: () => getKPIsByUsers(selectedUsers),
     enabled: open && userScope === 'specific' && selectedUsers.length > 0,
   });
 
   // Use appropriate KPI list based on user scope
-  const availableKPIs = userScope === 'specific' ? filteredKPIs : allKPIs;
+  const availableKPIs = userScope === 'specific' ? userFilteredKPIs : allKPIs;
 
   // Load all objectives (for when KPI scope is 'all' or 'none')
   const { data: allObjectives = [] } = useQuery({
@@ -105,14 +105,14 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   });
 
   // Load objectives filtered by selected KPIs (and optionally users)
-  const { data: filteredObjectives = [], isLoading: objectivesLoading } = useQuery({
+  const { data: kpiFilteredObjectives = [], isLoading: objectivesLoading } = useQuery({
     queryKey: ['objectives-by-kpis', selectedKPIs, selectedUsers],
     queryFn: () => getObjectivesByKPIs(selectedKPIs, userScope === 'specific' ? selectedUsers : undefined),
     enabled: open && kpiScope === 'specific' && selectedKPIs.length > 0,
   });
 
   // Use appropriate objective list based on KPI scope
-  const availableObjectives = kpiScope === 'specific' ? filteredObjectives : allObjectives;
+  const availableObjectives = kpiScope === 'specific' ? kpiFilteredObjectives : allObjectives;
 
   const createMutation = useMutation({
     mutationFn: (data: LockRuleFormData) => createLock(data),
