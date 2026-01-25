@@ -444,8 +444,17 @@ const handler = rateLimiter('general')(
       const user = event.user;
       
       // Normalize user ID field (JWT uses userId, but we need id for database)
-      if (user && user.userId && !user.id) {
-        user.id = user.userId;
+      // Handle both userId and id fields from JWT token
+      if (user) {
+        if (user.userId && !user.id) {
+          user.id = user.userId;
+        } else if (user.id && !user.userId) {
+          user.userId = user.id;
+        }
+        // Ensure user.id is a number
+        if (user.id) {
+          user.id = Number(user.id);
+        }
       }
 
       // Parse path segments
