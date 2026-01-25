@@ -13,23 +13,24 @@ const ScrollArea = React.forwardRef<
     const viewport = viewportRef.current;
     if (!viewport) return;
 
-    // Ensure wheel events work by handling them directly
+    // Handle wheel events to ensure scrolling works
     const handleWheel = (e: WheelEvent) => {
-      // Allow natural scrolling behavior
       const { scrollTop, scrollHeight, clientHeight } = viewport;
-      const isAtTop = scrollTop === 0;
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+      const maxScroll = scrollHeight - clientHeight;
       
-      // Only prevent default if we're at the boundaries and scrolling in that direction
-      if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
-        // At boundary, allow parent scroll
-        return;
+      // If we can scroll in the direction of the wheel, do it
+      if (e.deltaY > 0 && scrollTop < maxScroll) {
+        // Scrolling down and not at bottom
+        viewport.scrollTop = Math.min(scrollTop + e.deltaY, maxScroll);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.deltaY < 0 && scrollTop > 0) {
+        // Scrolling up and not at top
+        viewport.scrollTop = Math.max(scrollTop + e.deltaY, 0);
+        e.preventDefault();
+        e.stopPropagation();
       }
-      
-      // Otherwise, scroll the viewport
-      viewport.scrollTop += e.deltaY;
-      e.preventDefault();
-      e.stopPropagation();
+      // If at boundaries, let the event bubble (don't prevent default)
     };
 
     viewport.addEventListener('wheel', handleWheel, { passive: false });
@@ -50,12 +51,7 @@ const ScrollArea = React.forwardRef<
         className="h-full w-full rounded-[inherit]"
         style={{ 
           // Ensure pointer events work for scrolling
-          pointerEvents: 'auto',
-          // Enable smooth scrolling
-          scrollBehavior: 'auto',
-          // Ensure overflow is visible for scrolling
-          overflowY: 'auto',
-          overflowX: 'hidden'
+          pointerEvents: 'auto'
         }}
       >
         {children}
