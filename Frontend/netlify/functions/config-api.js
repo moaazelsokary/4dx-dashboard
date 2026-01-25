@@ -169,50 +169,15 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
 
       // New hierarchical scope type
       if (lock.scope_type === 'hierarchical') {
-        // Check user scope - match by DEPARTMENT (objectives in locked users' department(s))
-        // Same logic as kpis-by-users: user -> departments (codes) -> department IDs
+        // Check user scope - match by USER ID (the current user trying to edit)
+        // When user_scope is 'specific', check if the current user (userId) is in the locked users list
         let userMatches = true;
         if (lock.user_scope === 'specific' && lock.user_ids) {
           try {
             const userIds = JSON.parse(lock.user_ids);
             if (Array.isArray(userIds) && userIds.length > 0) {
-              const userIdsStr = userIds.join(',');
-              const userResult = await pool.request().query(`
-                SELECT id, departments FROM users WHERE id IN (${userIdsStr})
-              `);
-              const departmentCodes = new Set();
-              for (const u of userResult.recordset) {
-                let depts = [];
-                try {
-                  if (typeof u.departments === 'string') {
-                    if (u.departments.trim().startsWith('[')) {
-                      depts = JSON.parse(u.departments);
-                    } else {
-                      depts = u.departments.split(',').map(d => d.trim()).filter(Boolean);
-                    }
-                  } else if (Array.isArray(u.departments)) {
-                    depts = u.departments;
-                  }
-                } catch {
-                  depts = u.departments ? u.departments.split(',').map(d => d.trim()).filter(Boolean) : [];
-                }
-                depts.forEach(c => departmentCodes.add(String(c).trim()));
-              }
-              const codes = Array.from(departmentCodes).filter(Boolean);
-              if (codes.length === 0) {
-                userMatches = false;
-              } else {
-                // Match both code and name (users.departments may store either)
-                const codeConditions = codes.map((_, i) => `(LOWER(RTRIM(code)) = LOWER(RTRIM(@ucode_${i})) OR LOWER(RTRIM(name)) = LOWER(RTRIM(@ucode_${i})))`).join(' OR ');
-                const deptRequest = pool.request();
-                codes.forEach((c, i) => { deptRequest.input(`ucode_${i}`, sql.NVarChar, c); });
-                const deptResult = await deptRequest.query(`
-                  SELECT id FROM departments WHERE ${codeConditions}
-                `);
-                const lockDeptIds = deptResult.recordset.map(r => r.id);
-                const deptIdNum = Number(departmentId);
-                userMatches = lockDeptIds.length > 0 && lockDeptIds.some(id => Number(id) === deptIdNum);
-              }
+              // Check if the current user (the one trying to edit) is in the locked users list
+              userMatches = userIds.includes(Number(userId));
             } else {
               userMatches = false;
             }
@@ -224,6 +189,7 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           // 'none' = skip user filter = match all
           userMatches = true;
         }
+        // When user_scope is 'all', userMatches remains true (matches all users)
 
         if (!userMatches) continue;
 
