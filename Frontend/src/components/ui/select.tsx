@@ -88,6 +88,18 @@ const SelectContent = React.forwardRef<
           position === "popper" &&
             "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
         )}
+        style={{
+          // Enable smooth scrolling and ensure pointer events work
+          pointerEvents: 'auto',
+          overflowY: 'auto',
+          maxHeight: 'var(--radix-select-content-available-height, 300px)',
+          // Ensure wheel scrolling works
+          WebkitOverflowScrolling: 'touch'
+        }}
+        onWheel={(e) => {
+          // Allow natural scrolling - don't prevent default
+          // The viewport will handle scrolling naturally
+        }}
       >
         {children}
       </SelectPrimitive.Viewport>
