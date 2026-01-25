@@ -105,10 +105,10 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
     enabled: open && (kpiScope === 'all' || kpiScope === 'none'),
   });
 
-  // Load objectives filtered by selected KPIs (and optionally users)
+  // Load objectives filtered by selected KPIs only (no user filter)
   const { data: kpiFilteredObjectives = [], isLoading: objectivesLoading } = useQuery({
-    queryKey: ['objectives-by-kpis', selectedKPIs, selectedUsers],
-    queryFn: () => getObjectivesByKPIs(selectedKPIs, userScope === 'specific' ? selectedUsers : undefined),
+    queryKey: ['objectives-by-kpis', selectedKPIs],
+    queryFn: () => getObjectivesByKPIs(selectedKPIs),
     enabled: open && kpiScope === 'specific' && selectedKPIs.length > 0,
   });
 

@@ -485,6 +485,7 @@ const handler = rateLimiter('general')(
       
       if (resource === 'locks' && action === 'kpis-by-users') {
         // GET /api/config/locks/kpis-by-users?user_ids=1,2,3
+        // Returns KPIs from department_objectives in the selected users' department(s)
         if (method === 'GET') {
           const userIdsParam = queryParams.user_ids || '';
           const userIds = userIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
@@ -497,37 +498,70 @@ const handler = rateLimiter('general')(
             };
           }
 
-          // Get usernames for the user IDs
+          // Get users with their departments (stored as JSON or comma-separated codes)
           const userIdsStr = userIds.join(',');
           const userResult = await pool.request().query(`
-            SELECT username FROM users WHERE id IN (${userIdsStr})
+            SELECT id, username, departments FROM users WHERE id IN (${userIdsStr})
           `);
           
-          const usernames = userResult.recordset.map(r => r.username);
-          
-          if (usernames.length === 0) {
+          if (userResult.recordset.length === 0) {
             return {
               statusCode: 200,
               headers,
               body: JSON.stringify({ success: true, data: [] })
             };
           }
-          
-          // Get unique KPIs from objectives where responsible_person matches any of the usernames
-          // Use parameterized query with LIKE for each username
-          const usernameConditions = usernames.map((_, i) => `responsible_person = @username_${i}`).join(' OR ');
-          const kpiRequest = pool.request();
-          usernames.forEach((username, i) => {
-            kpiRequest.input(`username_${i}`, sql.NVarChar, username);
-          });
-          
-          const kpiResult = await kpiRequest.query(`
-            SELECT DISTINCT kpi 
-            FROM department_objectives 
-            WHERE ${usernameConditions}
-            ORDER BY kpi
+
+          // Collect all department codes from users' departments
+          const departmentCodes = new Set();
+          for (const u of userResult.recordset) {
+            let depts = [];
+            try {
+              if (typeof u.departments === 'string') {
+                if (u.departments.trim().startsWith('[')) {
+                  depts = JSON.parse(u.departments);
+                } else {
+                  depts = u.departments.split(',').map(d => d.trim()).filter(Boolean);
+                }
+              } else if (Array.isArray(u.departments)) {
+                depts = u.departments;
+              }
+            } catch {
+              depts = u.departments ? u.departments.split(',').map(d => d.trim()).filter(Boolean) : [];
+            }
+            depts.forEach(c => departmentCodes.add(String(c).trim()));
+          }
+
+          const codes = Array.from(departmentCodes).filter(Boolean);
+          if (codes.length === 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, data: [] })
+            };
+          }
+
+          // Get department IDs from codes (departments.code)
+          const codeConditions = codes.map((_, i) => `LOWER(RTRIM(code)) = LOWER(RTRIM(@code_${i}))`).join(' OR ');
+          const deptRequest = pool.request();
+          codes.forEach((c, i) => { deptRequest.input(`code_${i}`, sql.NVarChar, c); });
+          const deptResult = await deptRequest.query(`
+            SELECT id FROM departments WHERE ${codeConditions}
           `);
-          
+          const departmentIds = deptResult.recordset.map(r => r.id);
+          if (departmentIds.length === 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ success: true, data: [] })
+            };
+          }
+
+          // Get distinct KPIs from department_objectives in those departments
+          const deptIdsStr = departmentIds.join(',');
+          const kpiResult = await pool.request().query(`
+            SELECT DISTINCT kpi FROM department_objectives WHERE department_id IN (${deptIdsStr}) ORDER BY kpi
+          `);
           const kpis = kpiResult.recordset.map(r => r.kpi);
           
           return {
@@ -539,8 +573,8 @@ const handler = rateLimiter('general')(
       }
 
       if (resource === 'locks' && action === 'objectives-by-kpis') {
-        // GET /api/config/locks/objectives-by-kpis?kpi_ids=kpi1&kpi_ids=kpi2&user_ids=1,2
-        // Support both comma-separated and multiple query params
+        // GET /api/config/locks/objectives-by-kpis?kpi_ids=kpi1&kpi_ids=kpi2
+        // Returns objectives matching selected KPIs only (no user filter)
         if (method === 'GET') {
           let kpiIds = [];
           if (Array.isArray(queryParams.kpi_ids)) {
@@ -548,8 +582,6 @@ const handler = rateLimiter('general')(
           } else if (queryParams.kpi_ids) {
             kpiIds = String(queryParams.kpi_ids).split(',').map(k => decodeURIComponent(k.trim())).filter(k => k);
           }
-          const userIdsParam = queryParams.user_ids || '';
-          const userIds = userIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
           
           if (kpiIds.length === 0) {
             return {
@@ -559,36 +591,16 @@ const handler = rateLimiter('general')(
             };
           }
 
-          // Get usernames if user_ids provided
-          let usernames = [];
-          if (userIds.length > 0) {
-            const userIdsStr = userIds.join(',');
-            const userResult = await pool.request().query(`
-              SELECT username FROM users WHERE id IN (${userIdsStr})
-            `);
-            usernames = userResult.recordset.map(r => r.username);
-          }
-
-          // Get objectives matching KPIs (and optionally usernames)
           const objRequest = pool.request();
           const kpiConditions = kpiIds.map((_, i) => {
             objRequest.input(`kpi_${i}`, sql.NVarChar, kpiIds[i]);
             return `kpi = @kpi_${i}`;
           }).join(' OR ');
           
-          let whereClause = `(${kpiConditions})`;
-          if (usernames.length > 0) {
-            const usernameConditions = usernames.map((_, i) => {
-              objRequest.input(`username_${i}`, sql.NVarChar, usernames[i]);
-              return `responsible_person = @username_${i}`;
-            }).join(' OR ');
-            whereClause += ` AND (${usernameConditions})`;
-          }
-          
           const objResult = await objRequest.query(`
             SELECT id, activity, kpi, responsible_person, type, department_id
             FROM department_objectives 
-            WHERE ${whereClause}
+            WHERE (${kpiConditions})
             ORDER BY activity
           `);
           
@@ -863,8 +875,9 @@ const handler = rateLimiter('general')(
           request.input('lock_all_other_fields', sql.Bit, lock_all_other_fields || false);
           request.input('lock_add_objective', sql.Bit, lock_add_objective || false);
           request.input('lock_delete_objective', sql.Bit, lock_delete_objective || false);
-          // Legacy fields (for backward compatibility)
-          request.input('lock_type', sql.NVarChar, lock_type ? (Array.isArray(lock_type) ? JSON.stringify(lock_type) : lock_type) : null);
+          // Legacy fields (for backward compatibility). lock_type is NOT NULL - use 'hierarchical' for new hierarchical locks.
+          const lockTypeValue = lock_type ? (Array.isArray(lock_type) ? JSON.stringify(lock_type) : lock_type) : (scope_type === 'hierarchical' ? 'hierarchical' : 'all_department_objectives');
+          request.input('lock_type', sql.NVarChar, lockTypeValue);
           request.input('kpi', sql.NVarChar, kpi || null);
           request.input('department_id', sql.Int, department_id || null);
           request.input('department_objective_id', sql.Int, department_objective_id || null);
@@ -891,7 +904,7 @@ const handler = rateLimiter('general')(
 
           const newLock = result.recordset[0];
           newLock.user_ids = newLock.user_ids ? JSON.parse(newLock.user_ids) : null;
-          newLock.lock_type = newLock.lock_type.includes('[') ? JSON.parse(newLock.lock_type) : newLock.lock_type;
+          newLock.lock_type = newLock.lock_type && newLock.lock_type.includes && newLock.lock_type.includes('[') ? JSON.parse(newLock.lock_type) : newLock.lock_type;
 
           // Log activity
           await logActivity(pool, {
@@ -1063,8 +1076,9 @@ const handler = rateLimiter('general')(
               request.input('lock_all_other_fields', sql.Bit, lockData.lock_all_other_fields || false);
               request.input('lock_add_objective', sql.Bit, lockData.lock_add_objective || false);
               request.input('lock_delete_objective', sql.Bit, lockData.lock_delete_objective || false);
-              // Legacy fields
-              request.input('lock_type', sql.NVarChar, lockData.lock_type ? (Array.isArray(lockData.lock_type) ? JSON.stringify(lockData.lock_type) : lockData.lock_type) : null);
+              // Legacy fields. lock_type is NOT NULL - use 'hierarchical' for new hierarchical locks.
+              const bulkLockType = lockData.lock_type ? (Array.isArray(lockData.lock_type) ? JSON.stringify(lockData.lock_type) : lockData.lock_type) : (lockData.scope_type === 'hierarchical' ? 'hierarchical' : 'all_department_objectives');
+              request.input('lock_type', sql.NVarChar, bulkLockType);
               request.input('kpi', sql.NVarChar, lockData.kpi || null);
               request.input('department_id', sql.Int, lockData.department_id || null);
               request.input('department_objective_id', sql.Int, lockData.department_objective_id || null);
