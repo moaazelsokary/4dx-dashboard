@@ -120,6 +120,11 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
     const objectiveType = deptObjResult.recordset[0].type;
     const responsiblePerson = deptObjResult.recordset[0].responsible_person;
 
+    // Exclude M&E objectives from lock matching (same as form: no M&E in KPIs/objectives)
+    if (objectiveType === 'M&E' || objectiveType === 'M&E MOV') {
+      return { is_locked: false };
+    }
+
     // Type restrictions per field:
     // - monthly_actual: ONLY Direct type can be locked
     // - All other fields: Both Direct and In direct can be locked
@@ -157,24 +162,6 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
         END
     `);
 
-    // Get current user's username for matching responsible_person
-    let currentUserUsername = null;
-    if (userId) {
-      try {
-        const userRequest = pool.request();
-        userRequest.input('user_id', sql.Int, userId);
-        const userResult = await userRequest.query('SELECT username FROM users WHERE id = @user_id');
-        if (userResult.recordset.length > 0) {
-          currentUserUsername = userResult.recordset[0].username;
-        }
-      } catch (err) {
-        logger.error('Error getting user username', err);
-      }
-    }
-
-    // For hierarchical locks, we also check if the objective's responsible_person matches locked users
-    // This allows locking by user even when the user viewing is different from responsible_person
-
     // Check locks in priority order
     for (const lock of locks.recordset) {
       let matches = false;
@@ -182,20 +169,48 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
 
       // New hierarchical scope type
       if (lock.scope_type === 'hierarchical') {
-        // Check user scope - match by responsible_person (the user who owns the objective)
+        // Check user scope - match by DEPARTMENT (objectives in locked users' department(s))
+        // Same logic as kpis-by-users: user -> departments (codes) -> department IDs
         let userMatches = true;
         if (lock.user_scope === 'specific' && lock.user_ids) {
           try {
             const userIds = JSON.parse(lock.user_ids);
             if (Array.isArray(userIds) && userIds.length > 0) {
-              // Get usernames for the user IDs in the lock
               const userIdsStr = userIds.join(',');
-              const lockUserResult = await pool.request().query(`
-                SELECT username FROM users WHERE id IN (${userIdsStr})
+              const userResult = await pool.request().query(`
+                SELECT id, departments FROM users WHERE id IN (${userIdsStr})
               `);
-              const lockUsernames = lockUserResult.recordset.map(r => r.username);
-              // Match against the objective's responsible_person (not the current viewing user)
-              userMatches = lockUsernames.includes(responsiblePerson);
+              const departmentCodes = new Set();
+              for (const u of userResult.recordset) {
+                let depts = [];
+                try {
+                  if (typeof u.departments === 'string') {
+                    if (u.departments.trim().startsWith('[')) {
+                      depts = JSON.parse(u.departments);
+                    } else {
+                      depts = u.departments.split(',').map(d => d.trim()).filter(Boolean);
+                    }
+                  } else if (Array.isArray(u.departments)) {
+                    depts = u.departments;
+                  }
+                } catch {
+                  depts = u.departments ? u.departments.split(',').map(d => d.trim()).filter(Boolean) : [];
+                }
+                depts.forEach(c => departmentCodes.add(String(c).trim()));
+              }
+              const codes = Array.from(departmentCodes).filter(Boolean);
+              if (codes.length === 0) {
+                userMatches = false;
+              } else {
+                const codeConditions = codes.map((_, i) => `LOWER(RTRIM(code)) = LOWER(RTRIM(@ucode_${i}))`).join(' OR ');
+                const deptRequest = pool.request();
+                codes.forEach((c, i) => { deptRequest.input(`ucode_${i}`, sql.NVarChar, c); });
+                const deptResult = await deptRequest.query(`
+                  SELECT id FROM departments WHERE ${codeConditions}
+                `);
+                const lockDeptIds = deptResult.recordset.map(r => r.id);
+                userMatches = lockDeptIds.length > 0 && lockDeptIds.includes(departmentId);
+              }
             } else {
               userMatches = false;
             }
@@ -557,10 +572,13 @@ const handler = rateLimiter('general')(
             };
           }
 
-          // Get distinct KPIs from department_objectives in those departments
+          // Get distinct KPIs from department_objectives in those departments (exclude M&E and M&E MOV)
           const deptIdsStr = departmentIds.join(',');
           const kpiResult = await pool.request().query(`
-            SELECT DISTINCT kpi FROM department_objectives WHERE department_id IN (${deptIdsStr}) ORDER BY kpi
+            SELECT DISTINCT kpi FROM department_objectives 
+            WHERE department_id IN (${deptIdsStr}) 
+              AND type NOT IN ('M&E', 'M&E MOV')
+            ORDER BY kpi
           `);
           const kpis = kpiResult.recordset.map(r => r.kpi);
           
@@ -601,6 +619,7 @@ const handler = rateLimiter('general')(
             SELECT id, activity, kpi, responsible_person, type, department_id
             FROM department_objectives 
             WHERE (${kpiConditions})
+              AND type NOT IN ('M&E', 'M&E MOV')
             ORDER BY activity
           `);
           

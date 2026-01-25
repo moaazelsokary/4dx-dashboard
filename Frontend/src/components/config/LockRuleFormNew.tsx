@@ -56,23 +56,23 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
     enabled: open,
   });
 
-  // Load all KPIs (for when user scope is 'all' or 'none')
+  // Load all KPIs (for when user scope is 'all' or 'none') - exclude M&E and M&E MOV
   const { data: allKPIs = [] } = useQuery({
     queryKey: ['all-kpis'],
     queryFn: async () => {
-      // Get all unique KPIs from department objectives
       const objectives = await getDepartmentObjectives();
       const kpiSet = new Set<string>();
-      objectives.forEach(obj => {
-        if (obj.kpi) {
-          // Handle multiple KPIs separated by ||
-          if (obj.kpi.includes('||')) {
-            obj.kpi.split('||').forEach(k => kpiSet.add(k.trim()));
-          } else {
-            kpiSet.add(obj.kpi.trim());
+      objectives
+        .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV')
+        .forEach(obj => {
+          if (obj.kpi) {
+            if (obj.kpi.includes('||')) {
+              obj.kpi.split('||').forEach(k => kpiSet.add(k.trim()));
+            } else {
+              kpiSet.add(obj.kpi.trim());
+            }
           }
-        }
-      });
+        });
       return Array.from(kpiSet).sort();
     },
     enabled: open && (userScope === 'all' || userScope === 'none'),
@@ -88,19 +88,21 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   // Use appropriate KPI list based on user scope
   const availableKPIs = userScope === 'specific' ? userFilteredKPIs : allKPIs;
 
-  // Load all objectives (for when KPI scope is 'all' or 'none')
+  // Load all objectives (for when KPI scope is 'all' or 'none') - exclude M&E and M&E MOV
   const { data: allObjectives = [] } = useQuery({
     queryKey: ['all-objectives'],
     queryFn: async () => {
       const objectives = await getDepartmentObjectives();
-      return objectives.map(obj => ({
-        id: obj.id,
-        activity: obj.activity,
-        kpi: obj.kpi,
-        responsible_person: obj.responsible_person,
-        type: obj.type || '',
-        department_id: obj.department_id
-      }));
+      return objectives
+        .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV')
+        .map(obj => ({
+          id: obj.id,
+          activity: obj.activity,
+          kpi: obj.kpi,
+          responsible_person: obj.responsible_person,
+          type: obj.type || '',
+          department_id: obj.department_id
+        }));
     },
     enabled: open && (kpiScope === 'all' || kpiScope === 'none'),
   });
