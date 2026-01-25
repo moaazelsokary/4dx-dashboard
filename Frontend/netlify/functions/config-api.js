@@ -202,14 +202,16 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
               if (codes.length === 0) {
                 userMatches = false;
               } else {
-                const codeConditions = codes.map((_, i) => `LOWER(RTRIM(code)) = LOWER(RTRIM(@ucode_${i}))`).join(' OR ');
+                // Match both code and name (users.departments may store either)
+                const codeConditions = codes.map((_, i) => `(LOWER(RTRIM(code)) = LOWER(RTRIM(@ucode_${i})) OR LOWER(RTRIM(name)) = LOWER(RTRIM(@ucode_${i})))`).join(' OR ');
                 const deptRequest = pool.request();
                 codes.forEach((c, i) => { deptRequest.input(`ucode_${i}`, sql.NVarChar, c); });
                 const deptResult = await deptRequest.query(`
                   SELECT id FROM departments WHERE ${codeConditions}
                 `);
                 const lockDeptIds = deptResult.recordset.map(r => r.id);
-                userMatches = lockDeptIds.length > 0 && lockDeptIds.includes(departmentId);
+                const deptIdNum = Number(departmentId);
+                userMatches = lockDeptIds.length > 0 && lockDeptIds.some(id => Number(id) === deptIdNum);
               }
             } else {
               userMatches = false;
@@ -219,7 +221,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
             userMatches = false;
           }
         } else if (lock.user_scope === 'none') {
-          userMatches = false;
+          // 'none' = skip user filter = match all
+          userMatches = true;
         }
 
         if (!userMatches) continue;
@@ -230,8 +233,6 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           try {
             const kpiIds = JSON.parse(lock.kpi_ids);
             if (Array.isArray(kpiIds) && kpiIds.length > 0) {
-              // Check if objective's KPI matches any of the locked KPIs
-              // Handle multiple KPIs separated by ||
               const objectiveKPIs = kpi.includes('||') ? kpi.split('||').map(k => k.trim()) : [kpi];
               kpiMatches = objectiveKPIs.some(objKpi => kpiIds.includes(objKpi));
             } else {
@@ -242,7 +243,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
             kpiMatches = false;
           }
         } else if (lock.kpi_scope === 'none') {
-          kpiMatches = false;
+          // 'none' = skip KPI filter = match all
+          kpiMatches = true;
         }
 
         if (!kpiMatches) continue;
@@ -253,7 +255,7 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           try {
             const objectiveIds = JSON.parse(lock.objective_ids);
             if (Array.isArray(objectiveIds) && objectiveIds.length > 0) {
-              objectiveMatches = objectiveIds.includes(departmentObjectiveId);
+              objectiveMatches = objectiveIds.some(id => Number(id) === Number(departmentObjectiveId));
             } else {
               objectiveMatches = false;
             }
@@ -262,7 +264,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
             objectiveMatches = false;
           }
         } else if (lock.objective_scope === 'none') {
-          objectiveMatches = false;
+          // 'none' = skip objective filter = match all
+          objectiveMatches = true;
         }
 
         if (!objectiveMatches) continue;
@@ -556,8 +559,8 @@ const handler = rateLimiter('general')(
             };
           }
 
-          // Get department IDs from codes (departments.code)
-          const codeConditions = codes.map((_, i) => `LOWER(RTRIM(code)) = LOWER(RTRIM(@code_${i}))`).join(' OR ');
+          // Get department IDs - match both code and name (users.departments may store either)
+          const codeConditions = codes.map((_, i) => `(LOWER(RTRIM(code)) = LOWER(RTRIM(@code_${i})) OR LOWER(RTRIM(name)) = LOWER(RTRIM(@code_${i})))`).join(' OR ');
           const deptRequest = pool.request();
           codes.forEach((c, i) => { deptRequest.input(`code_${i}`, sql.NVarChar, c); });
           const deptResult = await deptRequest.query(`
