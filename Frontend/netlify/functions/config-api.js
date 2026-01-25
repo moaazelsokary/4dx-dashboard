@@ -167,6 +167,11 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
       let matches = false;
       let lockReason = '';
 
+      // Debug: Log lock details for hierarchical locks
+      if (lock.scope_type === 'hierarchical') {
+        logger.info(`[Lock Check] Processing hierarchical lock: id=${lock.id}, user_scope=${lock.user_scope}, user_ids=${lock.user_ids}, current_user_id=${userId}`);
+      }
+
       // New hierarchical scope type
       if (lock.scope_type === 'hierarchical') {
         // Check user scope - match by USER ID (the current user trying to edit)
@@ -176,13 +181,20 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           try {
             const userIds = JSON.parse(lock.user_ids);
             if (Array.isArray(userIds) && userIds.length > 0) {
+              // Ensure both userId and array values are numbers for comparison
+              const currentUserId = Number(userId);
+              const lockedUserIds = userIds.map(id => Number(id));
               // Check if the current user (the one trying to edit) is in the locked users list
-              userMatches = userIds.includes(Number(userId));
+              userMatches = lockedUserIds.includes(currentUserId);
+              
+              // Debug logging
+              logger.info(`[Lock Check] User scope check: lock_id=${lock.id}, current_user_id=${currentUserId}, locked_user_ids=${JSON.stringify(lockedUserIds)}, matches=${userMatches}`);
             } else {
               userMatches = false;
             }
           } catch (err) {
             logger.error('Error parsing user_ids in hierarchical lock', err);
+            logger.error(`[Lock Check] Failed to parse user_ids: ${lock.user_ids}`, err);
             userMatches = false;
           }
         } else if (lock.user_scope === 'none') {
