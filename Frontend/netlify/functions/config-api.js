@@ -759,11 +759,23 @@ const handler = rateLimiter('general')(
           const userId = user.id;
           const month = params.month || null;
 
+          // Debug logging
+          logger.info(`[Lock Check API] Request received: field_type=${fieldType}, objective_id=${departmentObjectiveId}, user_id=${userId}, user_object=${JSON.stringify({ id: user.id, userId: user.userId, username: user.username })}`);
+
           if (!fieldType || !departmentObjectiveId) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({ success: false, error: 'field_type and department_objective_id are required' })
+            };
+          }
+
+          if (!userId) {
+            logger.error(`[Lock Check API] No user ID found! user object: ${JSON.stringify(user)}`);
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'User ID not found in authentication token' })
             };
           }
 
