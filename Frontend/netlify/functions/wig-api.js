@@ -783,11 +783,14 @@ async function checkObjectiveOperationLock(pool, operation, userId, kpi, respons
     const userResult = await userRequest.query('SELECT username FROM users WHERE id = @user_id');
     const currentUserUsername = userResult.recordset.length > 0 ? userResult.recordset[0].username : null;
 
-    // Get all active hierarchical locks
+    // Get all active hierarchical locks that lock this operation
     const lockRequest = pool.request();
+    const operationLockField = operation === 'add' ? 'lock_add_objective' : 'lock_delete_objective';
     const locks = await lockRequest.query(`
       SELECT * FROM field_locks 
-      WHERE is_active = 1 AND scope_type = 'hierarchical'
+      WHERE is_active = 1 
+        AND scope_type = 'hierarchical'
+        AND (${operationLockField} = 1 OR ${operationLockField} = 'true')
       ORDER BY 
         CASE 
           WHEN objective_scope = 'specific' THEN 1
@@ -796,6 +799,8 @@ async function checkObjectiveOperationLock(pool, operation, userId, kpi, respons
           ELSE 4
         END
     `);
+    
+    console.log(`[Lock Operation Check] Found ${locks.recordset.length} lock(s) for ${operation} operation`);
 
     for (const lock of locks.recordset) {
       // Check if this operation is locked
