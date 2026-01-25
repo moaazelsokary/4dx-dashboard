@@ -217,16 +217,51 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
         // If no roles and no id (id === 0), it was never saved, so do nothing
       });
 
-      const results = await Promise.all(promises);
+      // Use Promise.allSettled to handle partial failures
+      const results = await Promise.allSettled(promises);
       console.log('RASCI save results:', results);
       
-      toast({
-        title: 'Success',
-        description: 'RASCI assignments saved successfully',
+      // Process results
+      const successful: any[] = [];
+      const failed: Array<{ department: string; error: Error }> = [];
+      
+      let index = 0;
+      rasciData.forEach((rasci) => {
+        const result = results[index++];
+        if (result.status === 'fulfilled') {
+          successful.push(result.value);
+        } else {
+          const error = result.reason instanceof Error ? result.reason : new Error('Save failed');
+          failed.push({ department: rasci.department, error });
+        }
       });
       
-      // Reload data to reflect deletions and updates
-      await loadRASCIForKPI(selectedKPI);
+      // Show results
+      if (failed.length === 0) {
+        toast({
+          title: 'Success',
+          description: 'RASCI assignments saved successfully',
+        });
+      } else if (successful.length > 0) {
+        toast({
+          title: 'Partial Success',
+          description: `Saved ${successful.length} assignment(s), but ${failed.length} failed. Please try again.`,
+          variant: 'default',
+        });
+        // Log failed departments for debugging
+        console.error('Failed RASCI saves:', failed);
+      } else {
+        toast({
+          title: 'Save Failed',
+          description: 'Failed to save RASCI assignments. Please try again.',
+          variant: 'destructive',
+        });
+      }
+      
+      // Reload data to reflect successful saves (even if some failed)
+      if (successful.length > 0) {
+        await loadRASCIForKPI(selectedKPI);
+      }
     } catch (err) {
       console.error('Error saving RASCI:', err);
       toast({

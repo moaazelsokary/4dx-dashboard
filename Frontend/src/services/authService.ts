@@ -114,12 +114,17 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
 /**
  * Sign out current user
  */
-export const signOut = (): void => {
+export const signOut = (redirect: boolean = true): void => {
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   // Clear CSRF token on sign out
   clearCsrfToken();
   logInfo('User signed out');
+  
+  // Redirect to sign-in page if requested
+  if (redirect && typeof window !== 'undefined') {
+    window.location.href = '/';
+  }
 };
 
 /**

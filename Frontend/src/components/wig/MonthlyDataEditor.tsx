@@ -4,14 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Progress } from '@/components/ui/progress';
 import { getMonthlyData, createOrUpdateMonthlyData, getDepartmentObjectives } from '@/services/wigService';
 import { useBatchLockStatus } from '@/hooks/useLockStatus';
 import { createLockCheckRequest } from '@/services/lockService';
 import { toast } from '@/hooks/use-toast';
 import { isAuthenticated } from '@/services/authService';
 import type { MonthlyData } from '@/types/wig';
-import { Calendar, Loader2, Lock as LockIcon } from 'lucide-react';
+import { Calendar, Loader2, Lock as LockIcon, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { format, parse, addMonths, startOfMonth } from 'date-fns';
+import { getUserFriendlyError } from '@/utils/errorMessages';
 
 interface MonthlyDataEditorProps {
   departmentObjectiveId: number;
@@ -31,6 +33,9 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMonths, setSavingMonths] = useState<Set<string>>(new Set()); // Track which months are currently saving
+  const [saveStatus, setSaveStatus] = useState<Map<string, 'saved' | 'unsaved' | 'error'>>(new Map()); // Track save status per month
+  const [failedMonths, setFailedMonths] = useState<Map<string, Error>>(new Map()); // Track failed months for retry
+  const [saveProgress, setSaveProgress] = useState(0); // Progress percentage
   const [objectiveType, setObjectiveType] = useState<'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '' | null>(null);
 
   // Prepare batch lock checks for all 36 fields (18 months × 2 fields)
@@ -78,6 +83,14 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       // Trust server data - with cache-busting and fresh queries, server has latest data
       setData(dataMap);
       setOriginalData(originalMap);
+      
+      // Initialize save status - all loaded months are saved
+      const statusMap = new Map<string, 'saved' | 'unsaved' | 'error'>();
+      MONTHS.forEach(month => {
+        statusMap.set(month, dataMap.has(month) ? 'saved' : 'unsaved');
+      });
+      setSaveStatus(statusMap);
+      setFailedMonths(new Map());
     } catch (err) {
       toast({
         title: 'Error',
@@ -191,6 +204,20 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     });
     
     setData(updated);
+    
+    // Mark month as unsaved when data changes
+    setSaveStatus(prev => {
+      const updated = new Map(prev);
+      updated.set(month, 'unsaved');
+      return updated;
+    });
+    
+    // Clear any previous error for this month
+    setFailedMonths(prev => {
+      const updated = new Map(prev);
+      updated.delete(month);
+      return updated;
+    });
   };
 
   const saveAll = async () => {
@@ -312,11 +339,63 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       
       console.log(`[MonthlyDataEditor] Saving ${promises.length} months:`, monthsToSave);
       
-      // Save all months in parallel
-      const savedData = await Promise.all(promises);
-      console.log('[MonthlyDataEditor] Saved data response:', savedData);
+      // Track progress
+      let completed = 0;
+      const progressPromises = promises.map((promise, index) => {
+        return promise
+          .then(result => {
+            completed++;
+            setSaveProgress(Math.round((completed / promises.length) * 100));
+            return result;
+          })
+          .catch(error => {
+            completed++;
+            setSaveProgress(Math.round((completed / promises.length) * 100));
+            throw error;
+          });
+      });
       
-      // Update originalData immediately with saved data to prevent re-saving
+      // Save all months in parallel using Promise.allSettled to handle partial failures
+      const results = await Promise.allSettled(progressPromises);
+      console.log('[MonthlyDataEditor] Save results:', results);
+      
+      // Process results
+      const savedData: MonthlyData[] = [];
+      const failed: Array<{ month: string; error: Error }> = [];
+      
+      results.forEach((result, index) => {
+        const month = monthsToSave[index];
+        if (result.status === 'fulfilled') {
+          savedData.push(result.value);
+          // Mark as saved
+          setSaveStatus(prev => {
+            const updated = new Map(prev);
+            updated.set(month, 'saved');
+            return updated;
+          });
+          setFailedMonths(prev => {
+            const updated = new Map(prev);
+            updated.delete(month);
+            return updated;
+          });
+        } else {
+          const error = result.reason instanceof Error ? result.reason : new Error('Save failed');
+          failed.push({ month, error });
+          // Mark as error
+          setSaveStatus(prev => {
+            const updated = new Map(prev);
+            updated.set(month, 'error');
+            return updated;
+          });
+          setFailedMonths(prev => {
+            const updated = new Map(prev);
+            updated.set(month, error);
+            return updated;
+          });
+        }
+      });
+      
+      // Update originalData and data for successfully saved months
       const updatedOriginal = new Map(originalData);
       const updatedData = new Map(data);
       savedData.forEach((saved) => {
@@ -325,37 +404,165 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         updatedData.set(monthKey, { ...saved });
       });
       setOriginalData(updatedOriginal);
-      setData(updatedData); // Update current data immediately
+      setData(updatedData);
       
-      console.log('[MonthlyDataEditor] Updated state with saved data for', savedData.length, 'months');
+      // Update progress
+      setSaveProgress(100);
       
-      toast({
-        title: 'Success',
-        description: `Monthly data saved successfully for ${savedData.length} month(s)`,
-      });
-      
-      // Close modal after successful save
-      setOpen(false);
-    } catch (err) {
-      console.error('[MonthlyDataEditor] Error saving monthly data:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save monthly data';
-      
-      // Provide more helpful error messages
-      if (errorMessage.includes('Authentication required') || errorMessage.includes('401')) {
+      // Show results
+      if (failed.length === 0) {
         toast({
-          title: 'Authentication Required',
-          description: 'Your session may have expired. Please sign in again.',
-          variant: 'destructive',
+          title: 'Success',
+          description: `Monthly data saved successfully for ${savedData.length} month(s)`,
+        });
+        // Close modal after successful save
+        setTimeout(() => setOpen(false), 1000);
+      } else if (savedData.length > 0) {
+        const friendlyErrors = failed.map(f => {
+          const apiError = { message: f.error.message, status: (f.error as any).status };
+          return getUserFriendlyError(apiError);
+        });
+        toast({
+          title: 'Partial Success',
+          description: `Saved ${savedData.length} month(s), but ${failed.length} failed. Click "Retry Failed" to try again.`,
+          variant: 'default',
         });
       } else {
+        const friendlyError = getUserFriendlyError({ 
+          message: failed[0].error.message, 
+          status: (failed[0].error as any).status 
+        });
         toast({
-          title: 'Error',
-          description: errorMessage,
+          title: 'Save Failed',
+          description: friendlyError.description || 'Failed to save monthly data. Please try again.',
           variant: 'destructive',
         });
       }
+    } catch (err) {
+      console.error('[MonthlyDataEditor] Error saving monthly data:', err);
+      const error = err instanceof Error ? err : new Error('Failed to save monthly data');
+      const friendlyError = getUserFriendlyError({ 
+        message: error.message, 
+        status: (error as any).status 
+      });
+      
+      toast({
+        title: friendlyError.title || 'Error',
+        description: friendlyError.description || error.message,
+        variant: 'destructive',
+      });
+      
+      // Reset progress
+      setSaveProgress(0);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Retry failed saves
+  const retryFailed = async () => {
+    if (failedMonths.size === 0) {
+      toast({
+        title: 'No Failed Saves',
+        description: 'All months have been saved successfully.',
+      });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setSaveProgress(0);
+      
+      const retryPromises: Promise<MonthlyData>[] = [];
+      const monthsToRetry: string[] = [];
+      
+      failedMonths.forEach((error, month) => {
+        const monthData = data.get(month);
+        if (!monthData) return;
+        
+        const saveData = {
+          department_objective_id: departmentObjectiveId,
+          month: `${month}-01`,
+          target_value: monthData.target_value,
+          actual_value: monthData.actual_value,
+        };
+        
+        monthsToRetry.push(month);
+        retryPromises.push(createOrUpdateMonthlyData(saveData));
+      });
+      
+      if (retryPromises.length === 0) {
+        setSaving(false);
+        return;
+      }
+      
+      const results = await Promise.allSettled(retryPromises);
+      
+      const saved: MonthlyData[] = [];
+      const stillFailed: Array<{ month: string; error: Error }> = [];
+      
+      results.forEach((result, index) => {
+        const month = monthsToRetry[index];
+        if (result.status === 'fulfilled') {
+          saved.push(result.value);
+          setSaveStatus(prev => {
+            const updated = new Map(prev);
+            updated.set(month, 'saved');
+            return updated;
+          });
+          setFailedMonths(prev => {
+            const updated = new Map(prev);
+            updated.delete(month);
+            return updated;
+          });
+        } else {
+          const error = result.reason instanceof Error ? result.reason : new Error('Save failed');
+          stillFailed.push({ month, error });
+          setFailedMonths(prev => {
+            const updated = new Map(prev);
+            updated.set(month, error);
+            return updated;
+          });
+        }
+      });
+      
+      // Update data for successfully saved months
+      const updatedOriginal = new Map(originalData);
+      const updatedData = new Map(data);
+      saved.forEach((savedItem) => {
+        const monthKey = savedItem.month.substring(0, 7);
+        updatedOriginal.set(monthKey, { ...savedItem });
+        updatedData.set(monthKey, { ...savedItem });
+      });
+      setOriginalData(updatedOriginal);
+      setData(updatedData);
+      
+      if (stillFailed.length === 0) {
+        toast({
+          title: 'Success',
+          description: `All failed months have been saved successfully.`,
+        });
+      } else {
+        toast({
+          title: 'Partial Success',
+          description: `Retried ${saved.length} month(s), but ${stillFailed.length} still failed.`,
+          variant: 'default',
+        });
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Retry failed');
+      const friendlyError = getUserFriendlyError({ 
+        message: error.message, 
+        status: (error as any).status 
+      });
+      toast({
+        title: friendlyError.title || 'Error',
+        description: friendlyError.description || error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+      setSaveProgress(0);
     }
   };
 
@@ -478,8 +685,21 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                           </Tooltip>
                         </TooltipProvider>
                       </div>
-                      <div className="text-right text-sm text-muted-foreground">
+                      <div className="text-right text-sm text-muted-foreground flex items-center justify-end gap-2">
                         {variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(2) : '-'}
+                        {(() => {
+                          const status = saveStatus.get(month);
+                          if (status === 'saved') {
+                            return <CheckCircle2 className="h-4 w-4 text-green-500" title="Saved" />;
+                          } else if (status === 'error') {
+                            return <XCircle className="h-4 w-4 text-red-500" title="Save failed" />;
+                          } else if (savingMonths.has(month)) {
+                            return <Loader2 className="h-4 w-4 animate-spin text-blue-500" title="Saving..." />;
+                          } else if (status === 'unsaved') {
+                            return <AlertCircle className="h-4 w-4 text-yellow-500" title="Unsaved changes" />;
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                   );
@@ -487,31 +707,68 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
               </div>
             </div>
             
-            <div className="flex justify-end gap-2 pt-4 pb-6 px-6 border-t bg-background flex-shrink-0">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving} aria-label="Close calendar" title="Close">
-                Close
-              </Button>
-              <Button 
-                type="button" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  saveAll();
-                }} 
-                disabled={saving} 
-                aria-label="Save all monthly data" 
-                title="Save all monthly data"
-                variant="secondary"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save All'
+            <div className="flex flex-col gap-2 pt-4 pb-6 px-6 border-t bg-background flex-shrink-0">
+              {saving && saveProgress > 0 && (
+                <div className="w-full">
+                  <Progress value={saveProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1 text-center">
+                    Saving... {saveProgress}%
+                  </p>
+                </div>
+              )}
+              
+              {failedMonths.size > 0 && !saving && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3 mb-2">
+                  <p className="text-sm text-destructive font-medium">
+                    {failedMonths.size} month(s) failed to save. Click "Retry Failed" to try again.
+                  </p>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setOpen(false)} 
+                  disabled={saving}
+                  aria-label="Close calendar" 
+                  title="Close"
+                >
+                  Close
+                </Button>
+                {failedMonths.size > 0 && !saving && (
+                  <Button 
+                    type="button" 
+                    onClick={retryFailed}
+                    variant="outline"
+                    aria-label="Retry failed saves"
+                  >
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                    Retry Failed ({failedMonths.size})
+                  </Button>
                 )}
-              </Button>
+                <Button 
+                  type="button" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    saveAll();
+                  }} 
+                  disabled={saving} 
+                  aria-label="Save all monthly data" 
+                  title="Save all monthly data"
+                  variant="secondary"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save All'
+                  )}
+                </Button>
+              </div>
             </div>
           </>
         )}

@@ -223,7 +223,7 @@ export default function ObjectiveFormModal({
   };
 
   // Handle save
-  const handleSave = async () => {
+  const handleSave = async () => {() => {
     if (!validate()) {
       // Scroll to first error
       const firstError = Object.keys(errors)[0];
@@ -277,9 +277,26 @@ export default function ObjectiveFormModal({
       };
 
       await onSave(saveData);
-      onOpenChange(false);
+      
+      // Show success message before closing
+      toast({
+        title: 'Success',
+        description: mode === 'add' ? 'Objective created successfully' : 'Objective updated successfully',
+      });
+      
+      // Wait a moment to show success, then close
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 500);
     } catch (error) {
       console.error('Error saving objective:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save objective';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      // Don't close modal on error - let user retry
     } finally {
       setLoading(false);
     }
@@ -295,8 +312,21 @@ export default function ObjectiveFormModal({
     }
   };
 
+  // Prevent closing during save
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && loading) {
+      toast({
+        title: 'Saving in progress',
+        description: 'Please wait for the save operation to complete.',
+        variant: 'default',
+      });
+      return;
+    }
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent 
         className="max-w-3xl max-h-[90vh] overflow-y-auto"
         onKeyDown={handleKeyDown}

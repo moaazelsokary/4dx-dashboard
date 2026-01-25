@@ -11,12 +11,18 @@ import type {
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
+import { handleApiError, isAuthError, shouldRetry, getRetryDelay, handleAuthError } from '@/utils/apiErrorHandler';
+import { getUserFriendlyError } from '@/utils/errorMessages';
+import { requestQueue } from '@/utils/requestQueue';
 
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
 const API_BASE_URL = isLocalhost
   ? 'http://localhost:3003/api/wig'
   : '/.netlify/functions/wig-api';
+
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+const MAX_RETRIES = 3;
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   // Include CSRF token and auth header for POST, PUT, DELETE requests
@@ -38,38 +44,149 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     url += `${separator}_t=${Date.now()}`;
   }
 
-  const response = await fetch(url, {
-    ...options,
-    cache: 'no-store', // Disable browser caching
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-      ...csrfHeaders,
-      ...authHeaders,
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    let errorMessage = `HTTP error! status: ${response.status}`;
-    try {
-      const error = await response.json();
-      errorMessage = error.error || error.message || errorMessage;
-    } catch {
-      // If response is not JSON, try to get text
-      try {
-        const text = await response.text();
-        if (text) errorMessage = text;
-      } catch {
-        // Keep default error message
-      }
-    }
-    const error = new Error(errorMessage);
-    (error as any).status = response.status;
-    throw error;
+  // Check if offline
+  if (!navigator.onLine) {
+    // Queue request for when connection is restored
+    return new Promise<T>((resolve, reject) => {
+      requestQueue.enqueue(
+        url,
+        {
+          ...options,
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+            ...csrfHeaders,
+            ...authHeaders,
+            ...options?.headers,
+          },
+        },
+        async (response) => {
+          const data = await response.json();
+          resolve(data);
+        },
+        reject
+      );
+    });
   }
 
-  return response.json();
+  // Retry logic
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          ...csrfHeaders,
+          ...authHeaders,
+          ...options?.headers,
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        // Handle error using centralized error handler
+        const apiError = await handleApiError(new Error(`HTTP ${response.status}`), response);
+        
+        // Handle authentication errors
+        if (apiError.isAuthError) {
+          handleAuthError();
+          throw new Error(apiError.message);
+        }
+
+        // Check if should retry
+        if (shouldRetry(apiError, attempt, MAX_RETRIES)) {
+          const delay = getRetryDelay(attempt);
+          console.log(`[WIG Service] Retrying request (attempt ${attempt + 1}/${MAX_RETRIES}) after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Get user-friendly error message
+        const friendlyError = getUserFriendlyError(apiError);
+        const error = new Error(friendlyError.description);
+        (error as any).status = response.status;
+        (error as any).friendlyError = friendlyError;
+        throw error;
+      }
+
+      return response.json();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Request failed');
+      
+      // Handle network errors
+      if (lastError.name === 'AbortError' || lastError.message.includes('timeout')) {
+        const apiError = await handleApiError(lastError);
+        if (shouldRetry(apiError, attempt, MAX_RETRIES)) {
+          const delay = getRetryDelay(attempt);
+          console.log(`[WIG Service] Retrying after timeout (attempt ${attempt + 1}/${MAX_RETRIES}) after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      // If this is the last attempt, throw the error
+      if (attempt === MAX_RETRIES) {
+        // If offline, queue the request
+        if (!navigator.onLine) {
+          return new Promise<T>((resolve, reject) => {
+            requestQueue.enqueue(
+              url,
+              {
+                ...options,
+                cache: 'no-store',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Cache-Control': 'no-cache',
+                  ...csrfHeaders,
+                  ...authHeaders,
+                  ...options?.headers,
+                },
+              },
+              async (response) => {
+                const data = await response.json();
+                resolve(data);
+              },
+              reject
+            );
+          });
+        }
+        
+        const apiError = await handleApiError(lastError);
+        const friendlyError = getUserFriendlyError(apiError);
+        const finalError = new Error(friendlyError.description);
+        (finalError as any).status = apiError.status;
+        (finalError as any).friendlyError = friendlyError;
+        throw finalError;
+      }
+
+      // Check if error is retryable
+      const apiError = await handleApiError(lastError);
+      if (!shouldRetry(apiError, attempt, MAX_RETRIES)) {
+        const friendlyError = getUserFriendlyError(apiError);
+        const finalError = new Error(friendlyError.description);
+        (finalError as any).status = apiError.status;
+        (finalError as any).friendlyError = friendlyError;
+        throw finalError;
+      }
+
+      // Wait before retrying
+      const delay = getRetryDelay(attempt);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // This should never be reached, but TypeScript needs it
+  throw lastError || new Error('Request failed');
 }
 
 // Main Plan Objectives
