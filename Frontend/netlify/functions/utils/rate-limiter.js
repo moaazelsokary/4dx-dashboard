@@ -9,7 +9,7 @@ const rateLimitStore = new Map();
 // Rate limit configurations
 const RATE_LIMITS = {
   login: {
-    maxRequests: 5,
+    maxRequests: 20, // Increased from 5 to 20 to allow for retries and testing
     windowMs: 15 * 60 * 1000, // 15 minutes
   },
   general: {
