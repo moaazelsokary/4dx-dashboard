@@ -223,7 +223,7 @@ export default function ObjectiveFormModal({
   };
 
   // Handle save
-  const handleSave = async () => {() => {
+  const handleSave = async () => {
     if (!validate()) {
       // Scroll to first error
       const firstError = Object.keys(errors)[0];
