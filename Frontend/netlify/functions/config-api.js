@@ -550,7 +550,7 @@ const handler = rateLimiter('general')(
       const queryParams = event.queryStringParameters || {};
 
       // Lock checking endpoints are available to ALL authenticated users
-      const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch');
+      const isLockCheckEndpoint = resource === 'locks' && (action === 'check' || action === 'check-batch' || action === 'check-operation');
       const isHelperEndpoint = resource === 'locks' && (action === 'kpis-by-users' || action === 'objectives-by-kpis' || action === 'objectives-by-users');
       
       // All other endpoints require Admin or CEO role
@@ -1081,10 +1081,11 @@ const handler = rateLimiter('general')(
         }
 
         // GET /api/config/locks/check-operation - Check if add/delete operation is locked
-        else if (path === '/locks/check-operation' && method === 'GET') {
+        if (resource === 'locks' && action === 'check-operation' && method === 'GET') {
           const operation = queryParams.operation; // 'add' or 'delete'
           const kpi = queryParams.kpi || null;
           const departmentId = queryParams.department_id ? parseInt(queryParams.department_id) : null;
+          const userId = user.id;
           
           if (!operation || !userId) {
             return {
