@@ -6,12 +6,99 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { getDepartmentObjectives } from '@/services/wigService';
 import { getMappings, createOrUpdateMapping, type ObjectiveDataSourceMapping, type MappingFormData } from '@/services/configService';
 import { getMetrics, getDistinctProjectsAndMetrics } from '@/services/metricsService';
-import { Save, Loader2, Filter } from 'lucide-react';
+import { Save, Loader2, Filter, Search } from 'lucide-react';
 import type { DepartmentObjective } from '@/types/wig';
+
+// Single-select column filter with optional search (for KPI / Objective)
+function ColumnFilter({
+  columnLabel,
+  options,
+  value,
+  onValueChange,
+  searchable = false,
+  valueToLabel,
+}: {
+  columnLabel: string;
+  options: string[];
+  value: string;
+  onValueChange: (v: string) => void;
+  searchable?: boolean;
+  valueToLabel?: (v: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    if (!searchable || !search.trim()) return options;
+    const q = search.toLowerCase();
+    return options.filter(o => (valueToLabel ? valueToLabel(o) : o).toLowerCase().includes(q));
+  }, [options, search, searchable, valueToLabel]);
+  const hasFilter = !!value;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-auto px-1.5 py-1 ${hasFilter ? 'text-primary' : ''}`}
+          aria-label={`Filter ${columnLabel}`}
+          title={hasFilter ? `${columnLabel}: ${valueToLabel ? valueToLabel(value) : value}` : `Filter ${columnLabel}`}
+        >
+          <Filter className="h-3 w-3" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="min-w-[180px] max-w-[320px] p-0" align="start" side="bottom" sideOffset={4}>
+        <div className="p-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">Filter: {columnLabel}</span>
+            {hasFilter && (
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { onValueChange(''); setOpen(false); }}>
+                Clear
+              </Button>
+            )}
+          </div>
+          {searchable && (
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
+              <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-7 text-xs" />
+            </div>
+          )}
+          <ScrollArea className="max-h-[220px]">
+            <div className="p-1 space-y-0.5">
+              <button
+                type="button"
+                className={`w-full text-left px-2 py-1.5 rounded text-sm ${!value ? 'bg-primary/10 font-medium' : 'hover:bg-muted'}`}
+                onClick={() => { onValueChange(''); setOpen(false); }}
+              >
+                All
+              </button>
+              {filtered.map((opt) => {
+                const label = valueToLabel ? valueToLabel(opt) : opt;
+                const isSelected = value === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`w-full text-left px-2 py-1.5 rounded text-sm truncate ${isSelected ? 'bg-primary/10 font-medium' : 'hover:bg-muted'}`}
+                    title={label}
+                    onClick={() => { onValueChange(opt); setOpen(false); }}
+                  >
+                    {label.length > 45 ? label.slice(0, 45) + '…' : label}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface MappingRow extends DepartmentObjective {
   mapping?: ObjectiveDataSourceMapping;
@@ -19,7 +106,6 @@ interface MappingRow extends DepartmentObjective {
 }
 
 export default function DataSourceMappingList() {
-  const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterKpi, setFilterKpi] = useState('');
   const [filterObjective, setFilterObjective] = useState('');
@@ -108,20 +194,9 @@ export default function DataSourceMappingList() {
     return 'manual';
   }, [editedMappings]);
 
-  // Filter by search + department, KPI, objective, target form, actual form
+  // Filter by department, KPI, objective, target form, actual form
   const filteredRows = useMemo(() => {
     return rows.filter(row => {
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const match =
-          row.kpi?.toLowerCase().includes(term) ||
-          row.activity?.toLowerCase().includes(term) ||
-          row.department_name?.toLowerCase().includes(term) ||
-          row.mapping?.pms_project_name?.toLowerCase().includes(term) ||
-          row.mapping?.pms_metric_name?.toLowerCase().includes(term) ||
-          row.mapping?.odoo_project_name?.toLowerCase().includes(term);
-        if (!match) return false;
-      }
       if (filterDepartment && row.department_name !== filterDepartment) return false;
       if (filterKpi && row.kpi !== filterKpi) return false;
       if (filterObjective && row.activity !== filterObjective) return false;
@@ -129,7 +204,7 @@ export default function DataSourceMappingList() {
       if (filterActualForm && getEffectiveActualSource(row) !== filterActualForm) return false;
       return true;
     });
-  }, [rows, searchTerm, filterDepartment, filterKpi, filterObjective, filterTargetForm, filterActualForm, getEffectiveTargetSource, getEffectiveActualSource]);
+  }, [rows, filterDepartment, filterKpi, filterObjective, filterTargetForm, filterActualForm, getEffectiveTargetSource, getEffectiveActualSource]);
 
   const updateMapping = useCallback((objectiveId: number, field: keyof MappingFormData, value: any) => {
     setEditedMappings(prev => {
@@ -179,17 +254,18 @@ export default function DataSourceMappingList() {
   const saveMutation = useMutation({
     mutationFn: ({ objectiveId, mappingData }: { objectiveId: number; mappingData: MappingFormData }) =>
       createOrUpdateMapping(objectiveId, mappingData),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const objectiveId = variables.objectiveId;
+      setEditedMappings(prev => {
+        const next = { ...prev };
+        delete next[objectiveId];
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: ['objective-mappings'] });
+      queryClient.refetchQueries({ queryKey: ['objective-mappings'] });
       toast({
         title: 'Success',
         description: 'Mapping saved successfully',
-      });
-      // Clear edited state for saved mapping
-      setEditedMappings(prev => {
-        const newState = { ...prev };
-        // Find which objective was saved (we'll need to track this)
-        return newState;
       });
     },
     onError: (error: Error) => {
@@ -238,13 +314,6 @@ export default function DataSourceMappingList() {
       objectiveId,
       mappingData: edited as MappingFormData
     });
-
-    // Clear edited state after save
-    setEditedMappings(prev => {
-      const newState = { ...prev };
-      delete newState[objectiveId];
-      return newState;
-    });
   };
 
   const isLoading = objectivesLoading || mappingsLoading || metricsLoading;
@@ -265,104 +334,76 @@ export default function DataSourceMappingList() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm">Objective Data Source Mapping</CardTitle>
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Search objectives..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 w-64"
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
-          <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-          <Select value={filterDepartment || 'all'} onValueChange={(v) => setFilterDepartment(v === 'all' ? '' : v)}>
-            <SelectTrigger className="h-8 w-[140px]">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All departments</SelectItem>
-              {filterOptions.departments.map(d => (
-                <SelectItem key={d} value={d}>{d}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterKpi || 'all'} onValueChange={(v) => setFilterKpi(v === 'all' ? '' : v)}>
-            <SelectTrigger className="h-8 w-[140px]">
-              <SelectValue placeholder="KPI" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All KPIs</SelectItem>
-              {filterOptions.kpis.map(k => (
-                <SelectItem key={k} value={k}>{k}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterObjective || 'all'} onValueChange={(v) => setFilterObjective(v === 'all' ? '' : v)}>
-            <SelectTrigger className="h-8 w-[180px]">
-              <SelectValue placeholder="Objective" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All objectives</SelectItem>
-              {filterOptions.activities.map(a => (
-                <SelectItem key={a} value={a}>{a.length > 40 ? a.slice(0, 40) + '…' : a}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterTargetForm || 'all'} onValueChange={(v) => setFilterTargetForm(v === 'all' ? '' : v)}>
-            <SelectTrigger className="h-8 w-[120px]">
-              <SelectValue placeholder="Target From" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="manual">Manual</SelectItem>
-              <SelectItem value="pms_target">PMS</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterActualForm || 'all'} onValueChange={(v) => setFilterActualForm(v === 'all' ? '' : v)}>
-            <SelectTrigger className="h-8 w-[140px]">
-              <SelectValue placeholder="Actual From" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="manual">Manual</SelectItem>
-              <SelectItem value="pms_actual">PMS Actual</SelectItem>
-              <SelectItem value="odoo_services_done">Odoo ServicesDone</SelectItem>
-            </SelectContent>
-          </Select>
-          {(filterDepartment || filterKpi || filterObjective || filterTargetForm || filterActualForm) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={() => {
-                setFilterDepartment('');
-                setFilterKpi('');
-                setFilterObjective('');
-                setFilterTargetForm('');
-                setFilterActualForm('');
-              }}
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
+        <CardTitle className="text-sm">Objective Data Source Mapping</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
+        <div className="border rounded-md overflow-x-auto">
+          <Table style={{ tableLayout: 'fixed', width: '100%' }} className="border-collapse">
             <TableHeader>
               <TableRow>
-                <TableHead>Department</TableHead>
-                <TableHead>KPI</TableHead>
-                <TableHead>Activity</TableHead>
-                <TableHead>Target From</TableHead>
-                <TableHead>Actual From</TableHead>
-                <TableHead>PMS Project</TableHead>
-                <TableHead>PMS Metric</TableHead>
-                <TableHead>Odoo Project</TableHead>
+                <TableHead className="border-r border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span>Department</span>
+                    <ColumnFilter
+                      columnLabel="Department"
+                      options={filterOptions.departments}
+                      value={filterDepartment}
+                      onValueChange={setFilterDepartment}
+                    />
+                  </div>
+                </TableHead>
+                <TableHead className="border-r border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span>KPI</span>
+                    <ColumnFilter
+                      columnLabel="KPI"
+                      options={filterOptions.kpis}
+                      value={filterKpi}
+                      onValueChange={setFilterKpi}
+                      searchable
+                    />
+                  </div>
+                </TableHead>
+                <TableHead className="border-r border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span>Activity</span>
+                    <ColumnFilter
+                      columnLabel="Objective"
+                      options={filterOptions.activities}
+                      value={filterObjective}
+                      onValueChange={setFilterObjective}
+                      searchable
+                      valueToLabel={(a) => (a.length > 50 ? a.slice(0, 50) + '…' : a)}
+                    />
+                  </div>
+                </TableHead>
+                <TableHead className="border-r border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span>Target From</span>
+                    <ColumnFilter
+                      columnLabel="Target From"
+                      options={['manual', 'pms_target']}
+                      value={filterTargetForm}
+                      onValueChange={setFilterTargetForm}
+                      valueToLabel={(v) => (v === 'pms_target' ? 'PMS' : 'Manual')}
+                    />
+                  </div>
+                </TableHead>
+                <TableHead className="border-r border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span>Actual From</span>
+                    <ColumnFilter
+                      columnLabel="Actual From"
+                      options={['manual', 'pms_actual', 'odoo_services_done']}
+                      value={filterActualForm}
+                      onValueChange={setFilterActualForm}
+                      valueToLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : 'Manual')}
+                    />
+                  </div>
+                </TableHead>
+                <TableHead className="border-r border-border/50">PMS Project</TableHead>
+                <TableHead className="border-r border-border/50">PMS Metric</TableHead>
+                <TableHead className="border-r border-border/50">Odoo Project</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -387,10 +428,10 @@ export default function DataSourceMappingList() {
 
                   return (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.department_name || '-'}</TableCell>
-                      <TableCell>{row.kpi || '-'}</TableCell>
-                      <TableCell className="max-w-xs truncate">{row.activity || '-'}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-medium border-r border-border/50">{row.department_name || '-'}</TableCell>
+                      <TableCell className="border-r border-border/50">{row.kpi || '-'}</TableCell>
+                      <TableCell className="max-w-xs truncate border-r border-border/50">{row.activity || '-'}</TableCell>
+                      <TableCell className="border-r border-border/50">
                         <Select
                           value={targetSource}
                           onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}
@@ -404,7 +445,7 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border/50">
                         <Select
                           value={actualSource}
                           onValueChange={(value: 'manual' | 'pms_actual' | 'odoo_services_done') => updateMapping(row.id, 'actual_source', value)}
@@ -419,7 +460,7 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border/50">
                         <Select
                           value={edited?.pms_project_name || current?.pms_project_name || ''}
                           onValueChange={(value) => updateMapping(row.id, 'pms_project_name', value)}
@@ -435,7 +476,7 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border/50">
                         <Select
                           value={edited?.pms_metric_name || current?.pms_metric_name || ''}
                           onValueChange={(value) => updateMapping(row.id, 'pms_metric_name', value)}
@@ -451,7 +492,7 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border/50">
                         <Select
                           value={edited?.odoo_project_name || current?.odoo_project_name || ''}
                           onValueChange={(value) => updateMapping(row.id, 'odoo_project_name', value)}
