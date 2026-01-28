@@ -94,11 +94,13 @@ export default function DataSourceMappingList() {
       const base: Partial<MappingFormData> = mapping ? {
         pms_project_name: mapping.pms_project_name || '',
         pms_metric_name: mapping.pms_metric_name || '',
+        target_source: mapping.target_source === 'pms_target' ? 'pms_target' : '',
         actual_source: mapping.actual_source,
         odoo_project_name: mapping.odoo_project_name || '',
       } : {
         pms_project_name: '',
         pms_metric_name: '',
+        target_source: '',
         actual_source: 'pms_actual' as const,
         odoo_project_name: '',
       };
@@ -154,16 +156,6 @@ export default function DataSourceMappingList() {
     const edited = editedMappings[objectiveId];
     if (!edited) return;
 
-    // Validate required fields
-    if (!edited.pms_project_name || !edited.pms_metric_name) {
-      toast({
-        title: 'Error',
-        description: 'PMS Project and Metric are required',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     if (!edited.actual_source) {
       toast({
         title: 'Error',
@@ -176,7 +168,17 @@ export default function DataSourceMappingList() {
     if (edited.actual_source === 'odoo_services_done' && !edited.odoo_project_name) {
       toast({
         title: 'Error',
-        description: 'Odoo Project is required when Actual source is "Odoo ServicesDone"',
+        description: 'Odoo Project is required when Actual From is "Odoo ServicesDone"',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const needsPms = edited.target_source === 'pms_target' || edited.actual_source === 'pms_actual';
+    if (needsPms && (!edited.pms_project_name || !edited.pms_metric_name)) {
+      toast({
+        title: 'Error',
+        description: 'PMS Project and Metric are required when Target From is PMS or Actual From is PMS Actual',
         variant: 'destructive',
       });
       return;
@@ -235,15 +237,16 @@ export default function DataSourceMappingList() {
                 <TableHead>Activity</TableHead>
                 <TableHead>PMS Project</TableHead>
                 <TableHead>PMS Metric</TableHead>
+                <TableHead>Target From</TableHead>
                 <TableHead>Actual From</TableHead>
                 <TableHead>Odoo Project</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRows.length === 0 ? (
+              {                filteredRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     No objectives found
                   </TableCell>
                 </TableRow>
@@ -287,6 +290,20 @@ export default function DataSourceMappingList() {
                             {filteredMetrics.map(metric => (
                               <SelectItem key={metric} value={metric}>{metric}</SelectItem>
                             ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={edited?.target_source ?? current?.target_source ?? ''}
+                          onValueChange={(value: 'pms_target' | '') => updateMapping(row.id, 'target_source', value)}
+                        >
+                          <SelectTrigger className="h-8 w-40">
+                            <SelectValue placeholder="Manual" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Manual</SelectItem>
+                            <SelectItem value="pms_target">PMS</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -344,10 +361,11 @@ export default function DataSourceMappingList() {
           </Table>
         </div>
         <div className="mt-4 text-xs text-muted-foreground">
-          <p>• <strong>PMS Project & Metric:</strong> Used for Target (PMS Target) and optionally for Actual (if Actual From = PMS Actual)</p>
-          <p>• <strong>Actual From:</strong> Choose whether Actual comes from PMS Actual or Odoo ServicesDone</p>
-          <p>• <strong>Odoo Project:</strong> Required only when Actual From = Odoo ServicesDone</p>
-          <p>• Click <strong>Save</strong> to save changes for each objective</p>
+          <p>• <strong>Target From:</strong> PMS = fill monthly target from PMS; Manual = edit target manually.</p>
+          <p>• <strong>Actual From:</strong> PMS Actual or Odoo ServicesDone. You can combine e.g. Target From = PMS and Actual From = Odoo.</p>
+          <p>• <strong>PMS Project & Metric:</strong> Required when Target From = PMS or Actual From = PMS Actual.</p>
+          <p>• <strong>Odoo Project:</strong> Required only when Actual From = Odoo ServicesDone.</p>
+          <p>• Click <strong>Save</strong> to save changes for each objective.</p>
         </div>
       </CardContent>
     </Card>

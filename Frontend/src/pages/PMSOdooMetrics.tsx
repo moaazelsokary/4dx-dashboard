@@ -9,8 +9,43 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import NavigationBar from '@/components/shared/NavigationBar';
 import { getMetrics, refreshMetrics, type MetricsData, getDistinctProjectsAndMetrics } from '@/services/metricsService';
-import { RefreshCw, Calendar, Filter, Download } from 'lucide-react';
+import { RefreshCw, Calendar, Filter } from 'lucide-react';
 import { format } from 'date-fns';
+
+export type UnifiedMetricRow = {
+  source: 'pms' | 'odoo';
+  project: string;
+  metric: string | null;
+  month: string;
+  target: number | null;
+  actual: number | null;
+  servicesCreated: number | null;
+  servicesDone: number | null;
+};
+
+function unifyMetrics(data: MetricsData): UnifiedMetricRow[] {
+  const pmsRows: UnifiedMetricRow[] = (data.pms || []).map(m => ({
+    source: 'pms' as const,
+    project: m.ProjectName,
+    metric: m.MetricName ?? null,
+    month: m.MonthYear,
+    target: m.Target ?? null,
+    actual: m.Actual ?? null,
+    servicesCreated: null,
+    servicesDone: null,
+  }));
+  const odooRows: UnifiedMetricRow[] = (data.odoo || []).map(m => ({
+    source: 'odoo' as const,
+    project: m.Project,
+    metric: null,
+    month: m.Month,
+    target: null,
+    actual: null,
+    servicesCreated: m.ServicesCreated ?? null,
+    servicesDone: m.ServicesDone ?? null,
+  }));
+  return [...pmsRows, ...odooRows];
+}
 
 const PMSOdooMetrics = () => {
   const [user, setUser] = useState<any>(null);
@@ -20,9 +55,9 @@ const PMSOdooMetrics = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Filters
-  const [selectedPmsProject, setSelectedPmsProject] = useState<string>('all');
-  const [selectedOdooProject, setSelectedOdooProject] = useState<string>('all');
+  // Filters: source (all | pms | odoo), project, month, search
+  const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -65,7 +100,6 @@ const PMSOdooMetrics = () => {
         title: 'Success',
         description: 'Refresh started. Data will update shortly.',
       });
-      // Wait a bit then reload data
       setTimeout(() => {
         loadData();
       }, 2000);
@@ -81,25 +115,23 @@ const PMSOdooMetrics = () => {
     }
   };
 
-  // Get distinct values for filters
+  const unified = data ? unifyMetrics(data) : [];
   const { pmsProjects, odooProjects } = data ? getDistinctProjectsAndMetrics(data) : { pmsProjects: [], pmsMetrics: [], odooProjects: [] };
-  const allMonths = data ? [...new Set([...data.pms.map(m => m.MonthYear), ...data.odoo.map(m => m.Month)])].sort().reverse() : [];
+  const allProjects = [...new Set([...pmsProjects, ...odooProjects])].sort();
+  const allMonths = [...new Set(unified.map(r => r.month))].sort().reverse();
 
-  // Filter data
-  const filteredPms = data?.pms.filter(row => {
-    if (selectedPmsProject !== 'all' && row.ProjectName !== selectedPmsProject) return false;
-    if (selectedMonth !== 'all' && row.MonthYear !== selectedMonth) return false;
-    if (searchTerm && !row.ProjectName.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        !row.MetricName?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+  const filteredRows = unified.filter(row => {
+    if (selectedSource !== 'all' && row.source !== selectedSource) return false;
+    if (selectedProject !== 'all' && row.project !== selectedProject) return false;
+    if (selectedMonth !== 'all' && row.month !== selectedMonth) return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchProject = row.project?.toLowerCase().includes(term);
+      const matchMetric = row.metric?.toLowerCase().includes(term);
+      if (!matchProject && !matchMetric) return false;
+    }
     return true;
-  }) || [];
-
-  const filteredOdoo = data?.odoo.filter(row => {
-    if (selectedOdooProject !== 'all' && row.Project !== selectedOdooProject) return false;
-    if (selectedMonth !== 'all' && row.Month !== selectedMonth) return false;
-    if (searchTerm && !row.Project.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    return true;
-  }) || [];
+  });
 
   if (!user) {
     return null;
@@ -150,7 +182,6 @@ const PMSOdooMetrics = () => {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Filters */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
@@ -170,28 +201,27 @@ const PMSOdooMetrics = () => {
                 />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">PMS Project</label>
-                <Select value={selectedPmsProject} onValueChange={setSelectedPmsProject}>
+                <label className="text-xs text-muted-foreground mb-1 block">Source</label>
+                <Select value={selectedSource} onValueChange={setSelectedSource}>
                   <SelectTrigger className="h-8">
-                    <SelectValue placeholder="All projects" />
+                    <SelectValue placeholder="All sources" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All projects</SelectItem>
-                    {pmsProjects.map(project => (
-                      <SelectItem key={project} value={project}>{project}</SelectItem>
-                    ))}
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="pms">PMS</SelectItem>
+                    <SelectItem value="odoo">Odoo</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Odoo Project</label>
-                <Select value={selectedOdooProject} onValueChange={setSelectedOdooProject}>
+                <label className="text-xs text-muted-foreground mb-1 block">Project</label>
+                <Select value={selectedProject} onValueChange={setSelectedProject}>
                   <SelectTrigger className="h-8">
                     <SelectValue placeholder="All projects" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All projects</SelectItem>
-                    {odooProjects.map(project => (
+                    {allProjects.map(project => (
                       <SelectItem key={project} value={project}>{project}</SelectItem>
                     ))}
                   </SelectContent>
@@ -232,93 +262,66 @@ const PMSOdooMetrics = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
-            {/* PMS Metrics Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <span>PMS Metrics</span>
-                  <Badge variant="secondary">{filteredPms.length} rows</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center justify-between">
+                <span>Metrics</span>
+                <Badge variant="secondary">{filteredRows.length} rows</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead>Metric</TableHead>
+                      <TableHead>Month</TableHead>
+                      <TableHead className="text-right">Target</TableHead>
+                      <TableHead className="text-right">Actual</TableHead>
+                      <TableHead className="text-right">Services Created</TableHead>
+                      <TableHead className="text-right">Services Done</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRows.length === 0 ? (
                       <TableRow>
-                        <TableHead>Project</TableHead>
-                        <TableHead>Metric</TableHead>
-                        <TableHead>Month</TableHead>
-                        <TableHead className="text-right">Target</TableHead>
-                        <TableHead className="text-right">Actual</TableHead>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                          No data found
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredPms.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                            No PMS data found
+                    ) : (
+                      filteredRows.map((row, index) => (
+                        <TableRow key={`${row.source}-${index}-${row.project}-${row.month}`}>
+                          <TableCell>
+                            <Badge variant={row.source === 'pms' ? 'default' : 'secondary'}>
+                              {row.source.toUpperCase()}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">{row.project}</TableCell>
+                          <TableCell>{row.metric ?? '-'}</TableCell>
+                          <TableCell>{row.month}</TableCell>
+                          <TableCell className="text-right">
+                            {row.target != null ? row.target.toLocaleString() : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.actual != null ? row.actual.toLocaleString() : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.servicesCreated != null ? row.servicesCreated.toLocaleString() : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.servicesDone != null ? row.servicesDone.toLocaleString() : '-'}
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        filteredPms.map((row, index) => (
-                          <TableRow key={`pms-${index}`}>
-                            <TableCell className="font-medium">{row.ProjectName}</TableCell>
-                            <TableCell>{row.MetricName || '-'}</TableCell>
-                            <TableCell>{row.MonthYear}</TableCell>
-                            <TableCell className="text-right">{row.Target?.toLocaleString() || '-'}</TableCell>
-                            <TableCell className="text-right">{row.Actual?.toLocaleString() || '-'}</TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Odoo Metrics Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <span>Odoo Metrics</span>
-                  <Badge variant="secondary">{filteredOdoo.length} rows</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Project</TableHead>
-                        <TableHead>Month</TableHead>
-                        <TableHead className="text-right">Services Created</TableHead>
-                        <TableHead className="text-right">Services Done</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredOdoo.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                            No Odoo data found
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredOdoo.map((row, index) => (
-                          <TableRow key={`odoo-${index}`}>
-                            <TableCell className="font-medium">{row.Project}</TableCell>
-                            <TableCell>{row.Month}</TableCell>
-                            <TableCell className="text-right">{row.ServicesCreated?.toLocaleString() || '-'}</TableCell>
-                            <TableCell className="text-right">{row.ServicesDone?.toLocaleString() || '-'}</TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
