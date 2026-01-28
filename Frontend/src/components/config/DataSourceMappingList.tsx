@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { getDepartmentObjectives } from '@/services/wigService';
 import { getMappings, createOrUpdateMapping, type ObjectiveDataSourceMapping, type MappingFormData } from '@/services/configService';
-import { getMetrics, getDistinctProjectsAndMetrics, type MetricsData } from '@/services/metricsService';
-import { Save, Search, Loader2 } from 'lucide-react';
+import { getMetrics, getDistinctProjectsAndMetrics } from '@/services/metricsService';
+import { Save, Loader2, Filter } from 'lucide-react';
 import type { DepartmentObjective } from '@/types/wig';
 
 interface MappingRow extends DepartmentObjective {
@@ -20,6 +20,11 @@ interface MappingRow extends DepartmentObjective {
 
 export default function DataSourceMappingList() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterKpi, setFilterKpi] = useState('');
+  const [filterObjective, setFilterObjective] = useState('');
+  const [filterTargetForm, setFilterTargetForm] = useState('');
+  const [filterActualForm, setFilterActualForm] = useState('');
   const [editedMappings, setEditedMappings] = useState<Record<number, Partial<MappingFormData>>>({});
   const queryClient = useQueryClient();
 
@@ -41,51 +46,92 @@ export default function DataSourceMappingList() {
     queryFn: () => getMetrics(),
   });
 
-  // Create mapping index
-  const mappingIndex: Record<number, ObjectiveDataSourceMapping> = {};
-  mappings.forEach(m => {
-    mappingIndex[m.department_objective_id] = m;
-  });
+  // Memoized mapping index and derived data
+  const mappingIndex = useMemo(() => {
+    const index: Record<number, ObjectiveDataSourceMapping> = {};
+    mappings.forEach(m => { index[m.department_objective_id] = m; });
+    return index;
+  }, [mappings]);
 
-  // Combine objectives with mappings
-  const rows: MappingRow[] = objectives.map(obj => ({
-    ...obj,
-    mapping: mappingIndex[obj.id],
-    editedMapping: editedMappings[obj.id]
-  }));
+  const { pmsProjects, pmsMetrics, odooProjects } = useMemo(
+    () => metricsData ? getDistinctProjectsAndMetrics(metricsData) : { pmsProjects: [], pmsMetrics: [], odooProjects: [] },
+    [metricsData]
+  );
 
-  // Filter by search term
-  const filteredRows = rows.filter(row => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      row.kpi?.toLowerCase().includes(term) ||
-      row.activity?.toLowerCase().includes(term) ||
-      row.department_name?.toLowerCase().includes(term) ||
-      row.mapping?.pms_project_name?.toLowerCase().includes(term) ||
-      row.mapping?.pms_metric_name?.toLowerCase().includes(term) ||
-      row.mapping?.odoo_project_name?.toLowerCase().includes(term)
-    );
-  });
+  // Precomputed PMS metrics by project for fast per-row lookup (avoids recalc every render)
+  const pmsMetricsByProject = useMemo(() => {
+    if (!metricsData?.pms) return {} as Record<string, string[]>;
+    const byProject: Record<string, string[]> = {};
+    for (const m of metricsData.pms) {
+      const name = m.ProjectName ?? '';
+      if (!byProject[name]) byProject[name] = [];
+      if (m.MetricName) byProject[name].push(m.MetricName);
+    }
+    Object.keys(byProject).forEach(p => { byProject[p] = [...new Set(byProject[p])].sort(); });
+    return byProject;
+  }, [metricsData]);
 
-  // Get distinct values for dropdowns
-  const { pmsProjects, pmsMetrics, odooProjects } = metricsData 
-    ? getDistinctProjectsAndMetrics(metricsData) 
-    : { pmsProjects: [], pmsMetrics: [], odooProjects: [] };
-
-  // Filter PMS metrics by selected project
-  const getFilteredPmsMetrics = (selectedProject: string | undefined) => {
+  const getFilteredPmsMetrics = useCallback((selectedProject: string | undefined) => {
     if (!selectedProject || selectedProject === '') return pmsMetrics;
-    if (!metricsData) return [];
-    return [...new Set(
-      metricsData.pms
-        .filter(m => m.ProjectName === selectedProject)
-        .map(m => m.MetricName)
-        .filter(Boolean)
-    )].sort();
-  };
+    return pmsMetricsByProject[selectedProject] ?? [];
+  }, [pmsMetrics, pmsMetricsByProject]);
 
-  const updateMapping = (objectiveId: number, field: keyof MappingFormData, value: any) => {
+  // Combine objectives with mappings (memoized)
+  const rows = useMemo<MappingRow[]>(() =>
+    objectives.map(obj => ({
+      ...obj,
+      mapping: mappingIndex[obj.id],
+      editedMapping: editedMappings[obj.id],
+    })),
+    [objectives, mappingIndex, editedMappings]
+  );
+
+  // Distinct values for filter dropdowns (from objectives)
+  const filterOptions = useMemo(() => {
+    const departments = [...new Set(objectives.map(o => o.department_name).filter(Boolean))].sort() as string[];
+    const kpis = [...new Set(objectives.map(o => o.kpi).filter(Boolean))].sort() as string[];
+    const activities = [...new Set(objectives.map(o => o.activity).filter(Boolean))].sort() as string[];
+    return { departments, kpis, activities };
+  }, [objectives]);
+
+  // Effective target/actual source for a row (for filtering)
+  const getEffectiveTargetSource = useCallback((row: MappingRow): 'manual' | 'pms_target' => {
+    const edited = editedMappings[row.id];
+    const current = edited ?? row.mapping;
+    return current?.target_source === 'pms_target' ? 'pms_target' : 'manual';
+  }, [editedMappings]);
+
+  const getEffectiveActualSource = useCallback((row: MappingRow): 'manual' | 'pms_actual' | 'odoo_services_done' => {
+    const edited = editedMappings[row.id];
+    const current = edited ?? row.mapping;
+    if (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done') return current.actual_source;
+    return 'manual';
+  }, [editedMappings]);
+
+  // Filter by search + department, KPI, objective, target form, actual form
+  const filteredRows = useMemo(() => {
+    return rows.filter(row => {
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const match =
+          row.kpi?.toLowerCase().includes(term) ||
+          row.activity?.toLowerCase().includes(term) ||
+          row.department_name?.toLowerCase().includes(term) ||
+          row.mapping?.pms_project_name?.toLowerCase().includes(term) ||
+          row.mapping?.pms_metric_name?.toLowerCase().includes(term) ||
+          row.mapping?.odoo_project_name?.toLowerCase().includes(term);
+        if (!match) return false;
+      }
+      if (filterDepartment && row.department_name !== filterDepartment) return false;
+      if (filterKpi && row.kpi !== filterKpi) return false;
+      if (filterObjective && row.activity !== filterObjective) return false;
+      if (filterTargetForm && getEffectiveTargetSource(row) !== filterTargetForm) return false;
+      if (filterActualForm && getEffectiveActualSource(row) !== filterActualForm) return false;
+      return true;
+    });
+  }, [rows, searchTerm, filterDepartment, filterKpi, filterObjective, filterTargetForm, filterActualForm, getEffectiveTargetSource, getEffectiveActualSource]);
+
+  const updateMapping = useCallback((objectiveId: number, field: keyof MappingFormData, value: any) => {
     setEditedMappings(prev => {
       const current = prev[objectiveId] || {};
       const mapping = mappingIndex[objectiveId];
@@ -128,7 +174,7 @@ export default function DataSourceMappingList() {
 
       return { ...prev, [objectiveId]: updated };
     });
-  };
+  }, [mappingIndex, getFilteredPmsMetrics]);
 
   const saveMutation = useMutation({
     mutationFn: ({ objectiveId, mappingData }: { objectiveId: number; mappingData: MappingFormData }) =>
@@ -230,6 +276,79 @@ export default function DataSourceMappingList() {
             />
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
+          <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Select value={filterDepartment || 'all'} onValueChange={(v) => setFilterDepartment(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All departments</SelectItem>
+              {filterOptions.departments.map(d => (
+                <SelectItem key={d} value={d}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterKpi || 'all'} onValueChange={(v) => setFilterKpi(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue placeholder="KPI" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All KPIs</SelectItem>
+              {filterOptions.kpis.map(k => (
+                <SelectItem key={k} value={k}>{k}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterObjective || 'all'} onValueChange={(v) => setFilterObjective(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-[180px]">
+              <SelectValue placeholder="Objective" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All objectives</SelectItem>
+              {filterOptions.activities.map(a => (
+                <SelectItem key={a} value={a}>{a.length > 40 ? a.slice(0, 40) + '…' : a}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterTargetForm || 'all'} onValueChange={(v) => setFilterTargetForm(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-[120px]">
+              <SelectValue placeholder="Target From" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="pms_target">PMS</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterActualForm || 'all'} onValueChange={(v) => setFilterActualForm(v === 'all' ? '' : v)}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue placeholder="Actual From" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="pms_actual">PMS Actual</SelectItem>
+              <SelectItem value="odoo_services_done">Odoo ServicesDone</SelectItem>
+            </SelectContent>
+          </Select>
+          {(filterDepartment || filterKpi || filterObjective || filterTargetForm || filterActualForm) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                setFilterDepartment('');
+                setFilterKpi('');
+                setFilterObjective('');
+                setFilterTargetForm('');
+                setFilterActualForm('');
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="rounded-md border overflow-x-auto">
@@ -263,7 +382,8 @@ export default function DataSourceMappingList() {
                   const actualSource = edited?.actual_source ?? (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done' ? current?.actual_source : 'manual');
                   const pmsEnabled = targetSource === 'pms_target' || actualSource === 'pms_actual';
                   const odooEnabled = actualSource === 'odoo_services_done';
-                  const filteredMetrics = getFilteredPmsMetrics(edited?.pms_project_name || current?.pms_project_name || undefined);
+                  const pmsProject = edited?.pms_project_name || current?.pms_project_name || '';
+                  const filteredMetrics = pmsProject ? (pmsMetricsByProject[pmsProject] ?? []) : pmsMetrics;
 
                   return (
                     <TableRow key={row.id}>
