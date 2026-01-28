@@ -265,71 +265,62 @@ async function fetchOdooData() {
   return result;
 }
 
-// Write data to cache table
+// Write data to cache table (bulk insert to stay under 30s Netlify limit)
 async function writeToCache(pmsData, odooData) {
   const pool = await getCachePool();
   const transaction = new sql.Transaction(pool);
-  
+
   try {
     await transaction.begin();
-    
+
     // Clear existing cache
     const clearRequest = new sql.Request(transaction);
     await clearRequest.query('DELETE FROM dbo.pms_odoo_cache');
     logger.info('Cleared existing cache');
-    
-    // Insert PMS data
-    if (pmsData && pmsData.length > 0) {
-      const seenPmsKeys = new Set();
-      for (const row of pmsData) {
-        // Enforce uniqueness on (source, project_name, metric_name, month)
-        const key = `pms|${row.ProjectName}|${row.MetricName}|${row.MonthYear}`;
-        if (seenPmsKeys.has(key)) {
-          logger.warn('Duplicate PMS cache key detected, skipping row', { key, row });
-          continue;
-        }
-        seenPmsKeys.add(key);
 
-        const insertRequest = new sql.Request(transaction);
-        insertRequest.input('source', sql.NVarChar, 'pms');
-        insertRequest.input('project_name', sql.NVarChar, row.ProjectName);
-        insertRequest.input('metric_name', sql.NVarChar, row.MetricName);
-        insertRequest.input('month', sql.NVarChar, row.MonthYear);
-        insertRequest.input('target_value', sql.Decimal(18, 2), row.Target);
-        insertRequest.input('actual_value', sql.Decimal(18, 2), row.Actual);
-        
-        await insertRequest.query(`
-          INSERT INTO dbo.pms_odoo_cache (source, project_name, metric_name, month, target_value, actual_value, updated_at)
-          VALUES (@source, @project_name, @metric_name, @month, @target_value, @actual_value, GETDATE())
-        `);
+    const table = new sql.Table('pms_odoo_cache');
+    table.columns.add('source', sql.NVarChar(10), { nullable: false });
+    table.columns.add('project_name', sql.NVarChar(255), { nullable: false });
+    table.columns.add('metric_name', sql.NVarChar(255), { nullable: true });
+    table.columns.add('month', sql.NVarChar(7), { nullable: false });
+    table.columns.add('target_value', sql.Decimal(18, 2), { nullable: true });
+    table.columns.add('actual_value', sql.Decimal(18, 2), { nullable: true });
+    table.columns.add('services_created', sql.Int, { nullable: true });
+    table.columns.add('services_done', sql.Int, { nullable: true });
+    table.columns.add('updated_at', sql.DateTime, { nullable: false });
+
+    const seenPmsKeys = new Set();
+    let pmsRowsAdded = 0;
+
+    if (pmsData && pmsData.length > 0) {
+      for (const row of pmsData) {
+        const key = `pms|${row.ProjectName}|${row.MetricName}|${row.MonthYear}`;
+        if (seenPmsKeys.has(key)) continue;
+        seenPmsKeys.add(key);
+        table.rows.add('pms', row.ProjectName, row.MetricName, row.MonthYear, row.Target, row.Actual, null, null, new Date());
+        pmsRowsAdded++;
       }
-      logger.info('Inserted PMS data', { rowCount: pmsData.length });
+      logger.info('PMS rows prepared for bulk insert', { rowCount: pmsRowsAdded, duplicatesSkipped: pmsData.length - pmsRowsAdded });
     }
-    
-    // Insert Odoo data
+
     if (odooData && odooData.length > 0) {
       for (const row of odooData) {
-        const insertRequest = new sql.Request(transaction);
-        insertRequest.input('source', sql.NVarChar, 'odoo');
-        insertRequest.input('project_name', sql.NVarChar, row.Project);
-        insertRequest.input('metric_name', sql.NVarChar, null);
-        insertRequest.input('month', sql.NVarChar, row.Month);
-        insertRequest.input('services_created', sql.Int, row.ServicesCreated || 0);
-        insertRequest.input('services_done', sql.Int, row.ServicesDone || 0);
-        
-        await insertRequest.query(`
-          INSERT INTO dbo.pms_odoo_cache (source, project_name, metric_name, month, services_created, services_done, updated_at)
-          VALUES (@source, @project_name, @metric_name, @month, @services_created, @services_done, GETDATE())
-        `);
+        table.rows.add('odoo', row.Project, null, row.Month, null, null, row.ServicesCreated || 0, row.ServicesDone || 0, new Date());
       }
-      logger.info('Inserted Odoo data', { rowCount: odooData.length });
+      logger.info('Odoo rows prepared for bulk insert', { rowCount: odooData.length });
     }
-    
+
+    if (table.rows.length > 0) {
+      const bulkRequest = new sql.Request(transaction);
+      await bulkRequest.bulk(table);
+      logger.info('Bulk insert completed', { totalRows: table.rows.length });
+    }
+
     await transaction.commit();
     logger.info('Cache update completed successfully');
-    
+
     return {
-      pmsRows: pmsData ? pmsData.length : 0,
+      pmsRows: pmsRowsAdded,
       odooRows: odooData ? odooData.length : 0
     };
   } catch (error) {
