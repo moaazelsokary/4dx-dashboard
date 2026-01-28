@@ -324,30 +324,41 @@ async function writeToCache(pmsData, odooData) {
   } catch (error) {
     await transaction.rollback();
     logger.error('Error writing to cache', error);
+    if (error.message && error.message.includes('Invalid object name') && error.message.includes('pms_odoo_cache')) {
+      throw new Error('Table pms_odoo_cache does not exist. Run migration: Frontend/database/migrate-pms-odoo-cache.sql on the DataWarehouse database.');
+    }
     throw error;
   }
 }
 
-// Main sync function
+// Main sync function – fetch each source independently so one failure doesn't block the other
 async function syncPmsOdoo() {
+  logger.info('Starting PMS/Odoo sync');
+
+  let pmsData = [];
+  let odooData = [];
+
   try {
-    logger.info('Starting PMS/Odoo sync');
-    
-    // Fetch data from both sources in parallel
-    const [pmsData, odooData] = await Promise.all([
-      fetchPmsData(),
-      fetchOdooData()
-    ]);
-    
-    // Write to cache
-    const result = await writeToCache(pmsData, odooData);
-    
-    logger.info('PMS/Odoo sync completed', result);
-    return result;
+    pmsData = await fetchPmsData();
   } catch (error) {
-    logger.error('PMS/Odoo sync failed', error);
-    throw error;
+    logger.error('PMS fetch failed (will write Odoo only if available)', error);
   }
+
+  try {
+    odooData = await fetchOdooData();
+  } catch (error) {
+    logger.error('Odoo fetch failed (will write PMS only if available)', error);
+  }
+
+  if (pmsData.length === 0 && odooData.length === 0) {
+    const msg = 'No data from PMS or Odoo – check env (PMS_*, ODOO_TOKEN), migration, and Netlify logs.';
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+
+  const result = await writeToCache(pmsData, odooData);
+  logger.info('PMS/Odoo sync completed', result);
+  return result;
 }
 
 exports.handler = async (event, context) => {
