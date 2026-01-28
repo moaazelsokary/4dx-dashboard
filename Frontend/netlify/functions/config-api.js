@@ -1929,14 +1929,14 @@ const handler = rateLimiter('general')(
           // target_source: 'pms_target' = fill target from PMS; null/empty = manual
           const targetSourceValue = (target_source === 'pms_target') ? 'pms_target' : null;
 
-          // Validate required fields
-          if (!actual_source || !['pms_actual', 'odoo_services_done'].includes(actual_source)) {
+          // actual_source: 'manual' | 'pms_actual' | 'odoo_services_done'
+          if (!actual_source || !['manual', 'pms_actual', 'odoo_services_done'].includes(actual_source)) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({
                 success: false,
-                error: 'actual_source is required and must be "pms_actual" or "odoo_services_done"'
+                error: 'actual_source is required and must be "manual", "pms_actual", or "odoo_services_done"'
               })
             };
           }

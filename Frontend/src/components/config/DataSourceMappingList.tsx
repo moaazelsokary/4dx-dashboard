@@ -94,16 +94,17 @@ export default function DataSourceMappingList() {
       const base: Partial<MappingFormData> = mapping ? {
         pms_project_name: mapping.pms_project_name || '',
         pms_metric_name: mapping.pms_metric_name || '',
-        // Backend stores 'pms_target' or NULL; NULL = Manual
         target_source: mapping.target_source === 'pms_target' ? 'pms_target' : 'manual',
-        actual_source: mapping.actual_source,
+        // Backend: 'manual' | 'pms_actual' | 'odoo_services_done'; default display Manual
+        actual_source: (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done')
+          ? mapping.actual_source
+          : 'manual',
         odoo_project_name: mapping.odoo_project_name || '',
       } : {
         pms_project_name: '',
         pms_metric_name: '',
-        // Default to Manual
         target_source: 'manual',
-        actual_source: 'pms_actual' as const,
+        actual_source: 'manual',
         odoo_project_name: '',
       };
 
@@ -158,16 +159,17 @@ export default function DataSourceMappingList() {
     const edited = editedMappings[objectiveId];
     if (!edited) return;
 
-    if (!edited.actual_source) {
+    const actualSource = edited.actual_source ?? 'manual';
+    if (!['manual', 'pms_actual', 'odoo_services_done'].includes(actualSource)) {
       toast({
         title: 'Error',
-        description: 'Actual source is required',
+        description: 'Actual From is required',
         variant: 'destructive',
       });
       return;
     }
 
-    if (edited.actual_source === 'odoo_services_done' && !edited.odoo_project_name) {
+    if (actualSource === 'odoo_services_done' && !edited.odoo_project_name) {
       toast({
         title: 'Error',
         description: 'Odoo Project is required when Actual From is "Odoo ServicesDone"',
@@ -176,7 +178,7 @@ export default function DataSourceMappingList() {
       return;
     }
 
-    const needsPms = edited.target_source === 'pms_target' || edited.actual_source === 'pms_actual';
+    const needsPms = edited.target_source === 'pms_target' || actualSource === 'pms_actual';
     if (needsPms && (!edited.pms_project_name || !edited.pms_metric_name)) {
       toast({
         title: 'Error',
@@ -237,10 +239,10 @@ export default function DataSourceMappingList() {
                 <TableHead>Department</TableHead>
                 <TableHead>KPI</TableHead>
                 <TableHead>Activity</TableHead>
-                <TableHead>PMS Project</TableHead>
-                <TableHead>PMS Metric</TableHead>
                 <TableHead>Target From</TableHead>
                 <TableHead>Actual From</TableHead>
+                <TableHead>PMS Project</TableHead>
+                <TableHead>PMS Metric</TableHead>
                 <TableHead>Odoo Project</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -257,6 +259,10 @@ export default function DataSourceMappingList() {
                   const edited = editedMappings[row.id];
                   const current = edited || row.mapping;
                   const hasChanges = edited !== undefined;
+                  const targetSource = edited?.target_source ?? (current?.target_source === 'pms_target' ? 'pms_target' : 'manual');
+                  const actualSource = edited?.actual_source ?? (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done' ? current?.actual_source : 'manual');
+                  const pmsEnabled = targetSource === 'pms_target' || actualSource === 'pms_actual';
+                  const odooEnabled = actualSource === 'odoo_services_done';
                   const filteredMetrics = getFilteredPmsMetrics(edited?.pms_project_name || current?.pms_project_name || undefined);
 
                   return (
@@ -266,8 +272,38 @@ export default function DataSourceMappingList() {
                       <TableCell className="max-w-xs truncate">{row.activity || '-'}</TableCell>
                       <TableCell>
                         <Select
+                          value={targetSource}
+                          onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}
+                        >
+                          <SelectTrigger className="h-8 w-40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="pms_target">PMS</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={actualSource}
+                          onValueChange={(value: 'manual' | 'pms_actual' | 'odoo_services_done') => updateMapping(row.id, 'actual_source', value)}
+                        >
+                          <SelectTrigger className="h-8 w-40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="pms_actual">PMS Actual</SelectItem>
+                            <SelectItem value="odoo_services_done">Odoo ServicesDone</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
                           value={edited?.pms_project_name || current?.pms_project_name || ''}
                           onValueChange={(value) => updateMapping(row.id, 'pms_project_name', value)}
+                          disabled={!pmsEnabled}
                         >
                           <SelectTrigger className="h-8 w-48">
                             <SelectValue placeholder="Select project" />
@@ -283,7 +319,7 @@ export default function DataSourceMappingList() {
                         <Select
                           value={edited?.pms_metric_name || current?.pms_metric_name || ''}
                           onValueChange={(value) => updateMapping(row.id, 'pms_metric_name', value)}
-                          disabled={!edited?.pms_project_name && !current?.pms_project_name}
+                          disabled={!pmsEnabled || (!edited?.pms_project_name && !current?.pms_project_name)}
                         >
                           <SelectTrigger className="h-8 w-48">
                             <SelectValue placeholder="Select metric" />
@@ -297,40 +333,9 @@ export default function DataSourceMappingList() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={
-                            edited?.target_source ??
-                            (current?.target_source === 'pms_target' ? 'pms_target' : 'manual')
-                          }
-                          onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}
-                        >
-                          <SelectTrigger className="h-8 w-40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="manual">Manual</SelectItem>
-                            <SelectItem value="pms_target">PMS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={edited?.actual_source || current?.actual_source || 'pms_actual'}
-                          onValueChange={(value: 'pms_actual' | 'odoo_services_done') => updateMapping(row.id, 'actual_source', value)}
-                        >
-                          <SelectTrigger className="h-8 w-40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pms_actual">PMS Actual</SelectItem>
-                            <SelectItem value="odoo_services_done">Odoo ServicesDone</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select
                           value={edited?.odoo_project_name || current?.odoo_project_name || ''}
                           onValueChange={(value) => updateMapping(row.id, 'odoo_project_name', value)}
-                          disabled={(edited?.actual_source || current?.actual_source || 'pms_actual') !== 'odoo_services_done'}
+                          disabled={!odooEnabled}
                         >
                           <SelectTrigger className="h-8 w-48">
                             <SelectValue placeholder="Select project" />
@@ -366,10 +371,9 @@ export default function DataSourceMappingList() {
           </Table>
         </div>
         <div className="mt-4 text-xs text-muted-foreground">
-          <p>• <strong>Target From:</strong> PMS = fill monthly target from PMS; Manual = edit target manually.</p>
-          <p>• <strong>Actual From:</strong> PMS Actual or Odoo ServicesDone. You can combine e.g. Target From = PMS and Actual From = Odoo.</p>
-          <p>• <strong>PMS Project & Metric:</strong> Required when Target From = PMS or Actual From = PMS Actual.</p>
-          <p>• <strong>Odoo Project:</strong> Required only when Actual From = Odoo ServicesDone.</p>
+          <p>• Choose <strong>Target From</strong> first (default Manual), then <strong>Actual From</strong> (default Manual).</p>
+          <p>• <strong>PMS Project &amp; Metric</strong> are editable when Target From = PMS or Actual From = PMS Actual; required when either is from PMS.</p>
+          <p>• <strong>Odoo Project</strong> is editable and required only when Actual From = Odoo ServicesDone.</p>
           <p>• Click <strong>Save</strong> to save changes for each objective.</p>
         </div>
       </CardContent>
