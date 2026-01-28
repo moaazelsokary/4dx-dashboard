@@ -312,13 +312,40 @@ async function writeToCache(pmsData, odooData) {
     if (odooData && odooData.length > 0) {
       let odooAdded = 0;
       for (const row of odooData) {
-        const project = row.Project != null && String(row.Project).trim() !== '' ? String(row.Project).trim() : null;
-        const month = row.Month != null && String(row.Month).trim() !== '' ? String(row.Month).trim() : null;
+        // Support both object ({ Project, Month, ServicesCreated, ServicesDone })
+        // and array format ([Project, Month, ServicesCreated, ServicesDone])
+        const projectRaw = (row && typeof row === 'object' && !Array.isArray(row))
+          ? row.Project
+          : (Array.isArray(row) ? row[0] : null);
+        const monthRaw = (row && typeof row === 'object' && !Array.isArray(row))
+          ? row.Month
+          : (Array.isArray(row) ? row[1] : null);
+        const servicesCreatedRaw = (row && typeof row === 'object' && !Array.isArray(row))
+          ? row.ServicesCreated
+          : (Array.isArray(row) ? row[2] : null);
+        const servicesDoneRaw = (row && typeof row === 'object' && !Array.isArray(row))
+          ? row.ServicesDone
+          : (Array.isArray(row) ? row[3] : null);
+
+        const project = projectRaw != null && String(projectRaw).trim() !== '' ? String(projectRaw).trim() : null;
+        const month = monthRaw != null && String(monthRaw).trim() !== '' ? String(monthRaw).trim() : null;
+
         if (!project || !month) {
           logger.warn('Odoo row skipped: missing Project or Month', { row });
           continue;
         }
-        table.rows.add('odoo', project, null, month, null, null, row.ServicesCreated || 0, row.ServicesDone || 0, new Date());
+
+        table.rows.add(
+          'odoo',
+          project,
+          null,
+          month,
+          null,
+          null,
+          servicesCreatedRaw != null ? Number(servicesCreatedRaw) : 0,
+          servicesDoneRaw != null ? Number(servicesDoneRaw) : 0,
+          new Date()
+        );
         odooAdded++;
       }
       logger.info('Odoo rows prepared for bulk insert', { rowCount: odooAdded, skipped: odooData.length - odooAdded });
