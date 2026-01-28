@@ -294,20 +294,34 @@ async function writeToCache(pmsData, odooData) {
 
     if (pmsData && pmsData.length > 0) {
       for (const row of pmsData) {
-        const key = `pms|${row.ProjectName}|${row.MetricName}|${row.MonthYear}`;
+        const project = row.ProjectName != null ? String(row.ProjectName).trim() : '';
+        const month = row.MonthYear != null ? String(row.MonthYear).trim() : '';
+        if (!project || !month) {
+          logger.warn('PMS row skipped: missing ProjectName or MonthYear', { row });
+          continue;
+        }
+        const key = `pms|${project}|${row.MetricName}|${month}`;
         if (seenPmsKeys.has(key)) continue;
         seenPmsKeys.add(key);
-        table.rows.add('pms', row.ProjectName, row.MetricName, row.MonthYear, row.Target, row.Actual, null, null, new Date());
+        table.rows.add('pms', project, row.MetricName != null ? String(row.MetricName) : null, month, row.Target, row.Actual, null, null, new Date());
         pmsRowsAdded++;
       }
-      logger.info('PMS rows prepared for bulk insert', { rowCount: pmsRowsAdded, duplicatesSkipped: pmsData.length - pmsRowsAdded });
+      logger.info('PMS rows prepared for bulk insert', { rowCount: pmsRowsAdded, skipped: pmsData.length - pmsRowsAdded });
     }
 
     if (odooData && odooData.length > 0) {
+      let odooAdded = 0;
       for (const row of odooData) {
-        table.rows.add('odoo', row.Project, null, row.Month, null, null, row.ServicesCreated || 0, row.ServicesDone || 0, new Date());
+        const project = row.Project != null && String(row.Project).trim() !== '' ? String(row.Project).trim() : null;
+        const month = row.Month != null && String(row.Month).trim() !== '' ? String(row.Month).trim() : null;
+        if (!project || !month) {
+          logger.warn('Odoo row skipped: missing Project or Month', { row });
+          continue;
+        }
+        table.rows.add('odoo', project, null, month, null, null, row.ServicesCreated || 0, row.ServicesDone || 0, new Date());
+        odooAdded++;
       }
-      logger.info('Odoo rows prepared for bulk insert', { rowCount: odooData.length });
+      logger.info('Odoo rows prepared for bulk insert', { rowCount: odooAdded, skipped: odooData.length - odooAdded });
     }
 
     if (table.rows.length > 0) {
