@@ -209,8 +209,8 @@ async function fillLockedValuesFromCache(pool, lock) {
         const objInfo = objInfoResult.recordset[0];
         if (!objInfo) continue;
 
-        // Compute target_value if monthly_target is locked
-        if (lock.lock_monthly_target && mapping.pms_project_name && mapping.pms_metric_name) {
+        // Compute target_value if monthly_target is locked and target_source is PMS (not manual)
+        if (lock.lock_monthly_target && mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
           const pmsRow = pms.find(r => 
             r.ProjectName === mapping.pms_project_name &&
             r.MetricName === mapping.pms_metric_name &&
@@ -1858,6 +1858,7 @@ const handler = rateLimiter('general')(
               d.name AS department_name,
               m.pms_project_name,
               m.pms_metric_name,
+              m.target_source,
               m.actual_source,
               m.odoo_project_name,
               m.created_at,
@@ -1888,6 +1889,7 @@ const handler = rateLimiter('general')(
               d.name AS department_name,
               m.pms_project_name,
               m.pms_metric_name,
+              m.target_source,
               m.actual_source,
               m.odoo_project_name,
               m.created_at,
@@ -1919,9 +1921,13 @@ const handler = rateLimiter('general')(
           const {
             pms_project_name,
             pms_metric_name,
+            target_source,
             actual_source,
             odoo_project_name
           } = body;
+
+          // target_source: 'pms_target' = fill target from PMS; null/empty = manual
+          const targetSourceValue = (target_source === 'pms_target') ? 'pms_target' : null;
 
           // Validate required fields
           if (!actual_source || !['pms_actual', 'odoo_services_done'].includes(actual_source)) {
@@ -1947,22 +1953,24 @@ const handler = rateLimiter('general')(
             };
           }
 
-          // Validate: pms_project_name and pms_metric_name are required (for target and potentially actual)
-          if (!pms_project_name || !pms_metric_name) {
+          // Validate: pms_project_name and pms_metric_name required when target from PMS or actual from PMS
+          const needsPms = targetSourceValue === 'pms_target' || actual_source === 'pms_actual';
+          if (needsPms && (!pms_project_name || !pms_metric_name)) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({
                 success: false,
-                error: 'pms_project_name and pms_metric_name are required'
+                error: 'pms_project_name and pms_metric_name are required when Target From is PMS or Actual From is PMS Actual'
               })
             };
           }
 
           const request = pool.request();
           request.input('department_objective_id', sql.Int, id);
-          request.input('pms_project_name', sql.NVarChar, pms_project_name);
-          request.input('pms_metric_name', sql.NVarChar, pms_metric_name);
+          request.input('pms_project_name', sql.NVarChar, pms_project_name || null);
+          request.input('pms_metric_name', sql.NVarChar, pms_metric_name || null);
+          request.input('target_source', sql.NVarChar, targetSourceValue);
           request.input('actual_source', sql.NVarChar, actual_source);
           request.input('odoo_project_name', sql.NVarChar, odoo_project_name || null);
 
@@ -1975,12 +1983,13 @@ const handler = rateLimiter('general')(
               UPDATE SET
                 pms_project_name = @pms_project_name,
                 pms_metric_name = @pms_metric_name,
+                target_source = @target_source,
                 actual_source = @actual_source,
                 odoo_project_name = @odoo_project_name,
                 updated_at = GETDATE()
             WHEN NOT MATCHED THEN
-              INSERT (department_objective_id, pms_project_name, pms_metric_name, actual_source, odoo_project_name, created_at, updated_at)
-              VALUES (@department_objective_id, @pms_project_name, @pms_metric_name, @actual_source, @odoo_project_name, GETDATE(), GETDATE());
+              INSERT (department_objective_id, pms_project_name, pms_metric_name, target_source, actual_source, odoo_project_name, created_at, updated_at)
+              VALUES (@department_objective_id, @pms_project_name, @pms_metric_name, @target_source, @actual_source, @odoo_project_name, GETDATE(), GETDATE());
           `);
 
           // Log activity
@@ -1990,7 +1999,7 @@ const handler = rateLimiter('general')(
             action_type: 'update_mapping',
             target_field: 'objective_data_source_mapping',
             department_objective_id: id,
-            metadata: { pms_project_name, pms_metric_name, actual_source, odoo_project_name }
+            metadata: { pms_project_name, pms_metric_name, target_source: targetSourceValue, actual_source, odoo_project_name }
           });
 
           // Return updated mapping

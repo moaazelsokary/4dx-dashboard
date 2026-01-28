@@ -73,6 +73,7 @@ The schedule is defined in `netlify.toml`: `[functions."sync-pms-odoo"] schedule
 Run these SQL migrations on your DataWarehouse database:
 - `database/migrate-pms-odoo-cache.sql` - Creates `pms_odoo_cache` table
 - `database/migrate-objective-data-source-mapping.sql` - Creates `objective_data_source_mapping` table
+- `database/migrate-objective-data-source-mapping-target-source.sql` - Adds `target_source` column (PMS | Manual)
 
 ### 6. Deployment Steps
 
