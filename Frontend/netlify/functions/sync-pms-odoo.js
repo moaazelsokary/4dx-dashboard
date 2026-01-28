@@ -117,7 +117,8 @@ async function getPmsPool() {
   if (!pmsPool) {
     try {
       const config = getPmsDbConfig();
-      pmsPool = await sql.connect(config);
+      // IMPORTANT: use a dedicated pool (do NOT use sql.connect global pool)
+      pmsPool = await new sql.ConnectionPool(config).connect();
       logger.info('Connected to PMS SQL Server', { server: config.server, database: config.database });
     } catch (error) {
       logger.error('PMS database connection error', error);
@@ -131,7 +132,8 @@ async function getCachePool() {
   if (!cachePool) {
     try {
       const config = getCacheDbConfig();
-      cachePool = await sql.connect(config);
+      // IMPORTANT: use a dedicated pool (do NOT use sql.connect global pool)
+      cachePool = await new sql.ConnectionPool(config).connect();
       logger.info('Connected to DataWarehouse for cache', { server: config.server, database: config.database });
     } catch (error) {
       logger.error('Cache database connection error', error);
