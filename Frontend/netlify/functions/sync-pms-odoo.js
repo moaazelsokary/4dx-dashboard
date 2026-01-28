@@ -280,7 +280,16 @@ async function writeToCache(pmsData, odooData) {
     
     // Insert PMS data
     if (pmsData && pmsData.length > 0) {
+      const seenPmsKeys = new Set();
       for (const row of pmsData) {
+        // Enforce uniqueness on (source, project_name, metric_name, month)
+        const key = `pms|${row.ProjectName}|${row.MetricName}|${row.MonthYear}`;
+        if (seenPmsKeys.has(key)) {
+          logger.warn('Duplicate PMS cache key detected, skipping row', { key, row });
+          continue;
+        }
+        seenPmsKeys.add(key);
+
         const insertRequest = new sql.Request(transaction);
         insertRequest.input('source', sql.NVarChar, 'pms');
         insertRequest.input('project_name', sql.NVarChar, row.ProjectName);
