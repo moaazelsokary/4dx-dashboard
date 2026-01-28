@@ -139,6 +139,28 @@ export interface LogStats {
   recent_activity: ActivityLog[];
 }
 
+export interface ObjectiveDataSourceMapping {
+  department_objective_id: number;
+  pms_project_name: string | null;
+  pms_metric_name: string | null;
+  actual_source: 'pms_actual' | 'odoo_services_done';
+  odoo_project_name: string | null;
+  created_at?: string;
+  updated_at?: string;
+  // Denormalized fields for display
+  kpi?: string;
+  activity?: string;
+  department_id?: number;
+  department_name?: string;
+}
+
+export interface MappingFormData {
+  pms_project_name: string;
+  pms_metric_name: string;
+  actual_source: 'pms_actual' | 'odoo_services_done';
+  odoo_project_name?: string; // Required when actual_source = 'odoo_services_done'
+}
+
 export interface PermissionFormData {
   user_id: number;
   department_id?: number | null;

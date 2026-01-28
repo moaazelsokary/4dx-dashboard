@@ -27,6 +27,7 @@ const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const Settings = lazy(() => import("./pages/Settings"));
 const CMSDashboard = lazy(() => import("./pages/admin/CMSDashboard"));
 const Configuration = lazy(() => import("./pages/admin/Configuration"));
+const PMSOdooMetrics = lazy(() => import("./pages/PMSOdooMetrics"));
 
 const queryClient = new QueryClient();
 
@@ -93,6 +94,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/admin/cms" element={<CMSDashboard />} />
             <Route path="/admin/configuration" element={<Configuration />} />
+            <Route path="/pms-odoo-metrics" element={<PMSOdooMetrics />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>

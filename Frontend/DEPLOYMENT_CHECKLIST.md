@@ -44,29 +44,57 @@ Set these in Netlify Dashboard → Site Settings → Environment Variables:
 - `VITE_Sawa` - Power BI embed URL
 - `VITE_FRONTEX` - Power BI embed URL
 
+#### For PMS/Odoo Integration (NEW)
+- `PMS_SERVER` or `VITE_PMS_SERVER` - PMS SQL Server address (e.g., `74.235.174.170`)
+- `PMS_DATABASE` or `VITE_PMS_DATABASE` - PMS database name (e.g., `LM_PMS`)
+- `PMS_UID` or `VITE_PMS_UID` - PMS database username
+- `PMS_PWD` or `VITE_PMS_PWD` - PMS database password
+- `ODOO_TOKEN` or `VITE_Odoo_Token` - Odoo Power BI SQL API token (server-side only, never expose to frontend)
+
 ### 4. Netlify Functions
 All functions are in `netlify/functions/`:
 - ✅ `wig-api.js` - WIG plan API endpoints
 - ✅ `get_excel_data_from_onedrive_url.js` - OneDrive Excel data fetcher
 - ✅ `sharepoint-proxy.js` - SharePoint API proxy
 - ✅ `auth-api.js` - User authentication API (database-based)
+- ✅ `config-api.js` - Configuration API (locks, logs, permissions, mappings)
+- ✅ `metrics-api.js` - Fast read API for PMS/Odoo combined data (reads from cache)
+- ✅ `sync-pms-odoo.js` - Scheduled sync function (runs every 5-10 minutes)
+- ✅ `scheduled-backup.js` - Scheduled backup function
 - ✅ `test.js` - Test function
 - ✅ `db.cjs` - Database connection module
 
-### 5. Deployment Steps
+### 4a. Scheduled Functions Configuration
+Configure in Netlify Dashboard → Site Settings → Functions → Scheduled Functions:
+- **sync-pms-odoo**: Schedule `rate(10 minutes)` or `cron(0 */10 * * * *)` (every 10 minutes)
+  - This function fetches data from PMS and Odoo and writes to `pms_odoo_cache` table
+
+### 5. Database Migrations
+Run these SQL migrations on your DataWarehouse database:
+- `database/migrate-pms-odoo-cache.sql` - Creates `pms_odoo_cache` table
+- `database/migrate-objective-data-source-mapping.sql` - Creates `objective_data_source_mapping` table
+
+### 6. Deployment Steps
 
 1. **Set Environment Variables in Netlify:**
    - Go to Netlify Dashboard → Your Site → Site Settings → Environment Variables
-   - Add all required variables listed above
+   - Add all required variables listed above (including new PMS/Odoo variables)
    - **Important:** Variables for Netlify Functions should NOT have `VITE_` prefix
    - Variables for frontend build should have `VITE_` prefix
+   - **PMS/Odoo variables:** Use `PMS_SERVER`, `PMS_DATABASE`, `PMS_UID`, `PMS_PWD`, `ODOO_TOKEN` (no VITE_ prefix for server-side functions)
 
-2. **Deploy:**
+2. **Configure Scheduled Function:**
+   - Go to Netlify Dashboard → Site Settings → Functions → Scheduled Functions
+   - Add new scheduled function: `sync-pms-odoo`
+   - Schedule: `rate(10 minutes)` or `cron(0 */10 * * * *)`
+   - This will automatically sync PMS and Odoo data every 10 minutes
+
+3. **Deploy:**
    - Push to your connected Git repository, OR
    - Use Netlify CLI: `netlify deploy --prod`
    - Or drag & drop the `dist` folder in Netlify Dashboard
 
-3. **Verify Deployment:**
+4. **Verify Deployment:**
    - Check build logs for errors
    - Test all pages:
      - Sign-in page
@@ -78,9 +106,14 @@ All functions are in `netlify/functions/`:
    - Test API endpoints:
      - `/.netlify/functions/wig-api/main-objectives`
      - `/.netlify/functions/auth-api` (POST with username/password)
+     - `/.netlify/functions/metrics-api` (GET - should return cached PMS/Odoo data)
+     - `/.netlify/functions/config-api/mappings` (GET - should return objective mappings)
      - `/.netlify/functions/test`
+   - Test new pages:
+     - `/pms-odoo-metrics` - Combined PMS/Odoo metrics table
+     - `/admin/configuration` → "DataSource Mapping" tab
 
-### 6. Post-Deployment Verification
+### 7. Post-Deployment Verification
 
 - [ ] Site loads correctly
 - [ ] Sign-in works
@@ -89,8 +122,11 @@ All functions are in `netlify/functions/`:
 - [ ] OneDrive data loading works
 - [ ] Power BI dashboards load (if configured)
 - [ ] All routes redirect correctly (SPA routing)
+- [ ] PMS/Odoo metrics page loads (`/pms-odoo-metrics`)
+- [ ] DataSource mapping tab works in Configuration page
+- [ ] Scheduled sync function runs successfully (check function logs)
 
-### 7. Important Notes
+### 8. Important Notes
 
 ⚠️ **Environment Variables:**
 - Netlify Functions use `process.env.VARIABLE_NAME` (no VITE_ prefix)
@@ -106,7 +142,7 @@ All functions are in `netlify/functions/`:
 - Build creates `dist/` folder
 - Make sure `netlify.toml` points to `dist` as publish directory
 
-### 8. Troubleshooting
+### 9. Troubleshooting
 
 If deployment fails:
 1. Check build logs in Netlify Dashboard

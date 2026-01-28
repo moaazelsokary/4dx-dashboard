@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Lock, FileText, Users } from 'lucide-react';
+import { ArrowLeft, Lock, FileText, Users, Database } from 'lucide-react';
 import NavigationBar from '@/components/shared/NavigationBar';
 import LockRuleList from '@/components/config/LockRuleList';
 import LogViewer from '@/components/config/LogViewer';
 import PermissionList from '@/components/config/PermissionList';
+import DataSourceMappingList from '@/components/config/DataSourceMappingList';
 
 export default function Configuration() {
   const [user, setUser] = useState<any>(null);
@@ -70,7 +71,7 @@ export default function Configuration() {
 
       <div className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3 mb-6">
+          <TabsList className="grid w-full max-w-3xl grid-cols-4 mb-6">
             <TabsTrigger value="locks">
               <Lock className="w-4 h-4 mr-2" />
               Lock Management
@@ -82,6 +83,10 @@ export default function Configuration() {
             <TabsTrigger value="permissions">
               <Users className="w-4 h-4 mr-2" />
               User Permissions
+            </TabsTrigger>
+            <TabsTrigger value="mappings">
+              <Database className="w-4 h-4 mr-2" />
+              DataSource Mapping
             </TabsTrigger>
           </TabsList>
 
@@ -95,6 +100,10 @@ export default function Configuration() {
 
           <TabsContent value="permissions" className="mt-0">
             <PermissionList />
+          </TabsContent>
+
+          <TabsContent value="mappings" className="mt-0">
+            <DataSourceMappingList />
           </TabsContent>
         </Tabs>
       </div>
