@@ -273,7 +273,7 @@ async function writeToCache(pmsData, odooData) {
     
     // Clear existing cache
     const clearRequest = new sql.Request(transaction);
-    await clearRequest.query('DELETE FROM pms_odoo_cache');
+    await clearRequest.query('DELETE FROM dbo.pms_odoo_cache');
     logger.info('Cleared existing cache');
     
     // Insert PMS data
@@ -288,7 +288,7 @@ async function writeToCache(pmsData, odooData) {
         insertRequest.input('actual_value', sql.Decimal(18, 2), row.Actual);
         
         await insertRequest.query(`
-          INSERT INTO pms_odoo_cache (source, project_name, metric_name, month, target_value, actual_value, updated_at)
+          INSERT INTO dbo.pms_odoo_cache (source, project_name, metric_name, month, target_value, actual_value, updated_at)
           VALUES (@source, @project_name, @metric_name, @month, @target_value, @actual_value, GETDATE())
         `);
       }
@@ -307,7 +307,7 @@ async function writeToCache(pmsData, odooData) {
         insertRequest.input('services_done', sql.Int, row.ServicesDone || 0);
         
         await insertRequest.query(`
-          INSERT INTO pms_odoo_cache (source, project_name, metric_name, month, services_created, services_done, updated_at)
+          INSERT INTO dbo.pms_odoo_cache (source, project_name, metric_name, month, services_created, services_done, updated_at)
           VALUES (@source, @project_name, @metric_name, @month, @services_created, @services_done, GETDATE())
         `);
       }
@@ -323,7 +323,7 @@ async function writeToCache(pmsData, odooData) {
     };
   } catch (error) {
     await transaction.rollback();
-    logger.error('Error writing to cache', error);
+    logger.error('Error writing to cache', { message: error?.message, code: error?.code, stack: error?.stack });
     if (error.message && error.message.includes('Invalid object name') && error.message.includes('pms_odoo_cache')) {
       throw new Error('Table pms_odoo_cache does not exist. Run migration: Frontend/database/migrate-pms-odoo-cache.sql on the DataWarehouse database.');
     }
@@ -341,13 +341,13 @@ async function syncPmsOdoo() {
   try {
     pmsData = await fetchPmsData();
   } catch (error) {
-    logger.error('PMS fetch failed (will write Odoo only if available)', error);
+    logger.error('PMS fetch failed (will write Odoo only if available)', { message: error?.message, code: error?.code, stack: error?.stack });
   }
 
   try {
     odooData = await fetchOdooData();
   } catch (error) {
-    logger.error('Odoo fetch failed (will write PMS only if available)', error);
+    logger.error('Odoo fetch failed (will write PMS only if available)', { message: error?.message, code: error?.code, stack: error?.stack });
   }
 
   if (pmsData.length === 0 && odooData.length === 0) {

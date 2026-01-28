@@ -24,7 +24,7 @@ async function getMetricsFromCache() {
       target_value AS Target,
       actual_value AS Actual,
       updated_at AS UpdatedAt
-    FROM pms_odoo_cache
+    FROM dbo.pms_odoo_cache
     WHERE source = 'pms'
     ORDER BY project_name, metric_name, month
   `);
@@ -37,7 +37,7 @@ async function getMetricsFromCache() {
       services_created AS ServicesCreated,
       services_done AS ServicesDone,
       updated_at AS UpdatedAt
-    FROM pms_odoo_cache
+    FROM dbo.pms_odoo_cache
     WHERE source = 'odoo'
     ORDER BY month DESC, project_name
   `);
@@ -45,7 +45,7 @@ async function getMetricsFromCache() {
   // Get last updated timestamp
   const lastUpdatedResult = await request.query(`
     SELECT MAX(updated_at) AS last_updated
-    FROM pms_odoo_cache
+    FROM dbo.pms_odoo_cache
   `);
   
   const lastUpdated = lastUpdatedResult.recordset[0]?.last_updated || null;
