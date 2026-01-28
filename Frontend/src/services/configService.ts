@@ -11,6 +11,8 @@ import type {
   LogFilters,
   LogStats,
   PermissionFormData,
+  ObjectiveDataSourceMapping,
+  MappingFormData,
 } from '@/types/config';
 import { getAuthHeader } from './authService';
 import { getCsrfHeader } from '@/utils/csrf';
@@ -466,4 +468,24 @@ export interface User {
 
 export async function getUsers(): Promise<User[]> {
   return fetchAPI<User[]>('/users');
+}
+
+// ========== OBJECTIVE DATA SOURCE MAPPINGS ==========
+
+export async function getMappings(): Promise<ObjectiveDataSourceMapping[]> {
+  return fetchAPI<ObjectiveDataSourceMapping[]>('/mappings');
+}
+
+export async function getMapping(departmentObjectiveId: number): Promise<ObjectiveDataSourceMapping> {
+  return fetchAPI<ObjectiveDataSourceMapping>(`/mappings/${departmentObjectiveId}`);
+}
+
+export async function createOrUpdateMapping(
+  departmentObjectiveId: number,
+  mappingData: MappingFormData
+): Promise<ObjectiveDataSourceMapping> {
+  return fetchAPI<ObjectiveDataSourceMapping>(`/mappings/${departmentObjectiveId}`, {
+    method: 'PUT',
+    body: JSON.stringify(mappingData),
+  });
 }

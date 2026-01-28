@@ -72,6 +72,231 @@ async function getPool() {
   return pool;
 }
 
+// Helper function to fill locked values from PMS/Odoo cache
+// Called after lock rule is created/updated
+async function fillLockedValuesFromCache(pool, lock) {
+  try {
+    // Only fill if monthly_target or monthly_actual is locked
+    if (!lock.lock_monthly_target && !lock.lock_monthly_actual) {
+      return; // No monthly fields locked, nothing to fill
+    }
+
+    // Resolve affected department_objective_ids based on lock scope
+    const request = pool.request();
+    let objectivesQuery = `
+      SELECT DISTINCT do.id AS department_objective_id
+      FROM department_objectives do
+      WHERE 1=1
+    `;
+
+    // Apply user scope filter
+    if (lock.user_scope === 'specific' && lock.user_ids) {
+      try {
+        const userIds = JSON.parse(lock.user_ids);
+        if (Array.isArray(userIds) && userIds.length > 0) {
+          request.input('user_ids', sql.NVarChar, JSON.stringify(userIds));
+          objectivesQuery += `
+            AND do.department_id IN (
+              SELECT DISTINCT department_id FROM users WHERE id IN (${userIds.map((_, i) => `@user_id_${i}`).join(',')})
+            )
+          `;
+          userIds.forEach((uid, i) => {
+            request.input(`user_id_${i}`, sql.Int, uid);
+          });
+        }
+      } catch (e) {
+        logger.error('Error parsing user_ids for fillLockedValues', e);
+      }
+    }
+
+    // Apply KPI scope filter
+    if (lock.kpi_scope === 'specific' && lock.kpi_ids) {
+      try {
+        const kpiIds = JSON.parse(lock.kpi_ids);
+        if (Array.isArray(kpiIds) && kpiIds.length > 0) {
+          request.input('kpi_ids', sql.NVarChar, JSON.stringify(kpiIds));
+          objectivesQuery += ` AND (${kpiIds.map((_, i) => {
+            request.input(`kpi_${i}`, sql.NVarChar, kpiIds[i]);
+            return `do.kpi LIKE '%' + @kpi_${i} + '%'`;
+          }).join(' OR ')})`;
+        }
+      } catch (e) {
+        logger.error('Error parsing kpi_ids for fillLockedValues', e);
+      }
+    }
+
+    // Apply objective scope filter
+    if (lock.objective_scope === 'specific' && lock.objective_ids) {
+      try {
+        const objectiveIds = JSON.parse(lock.objective_ids);
+        if (Array.isArray(objectiveIds) && objectiveIds.length > 0) {
+          request.input('objective_ids', sql.NVarChar, JSON.stringify(objectiveIds));
+          objectivesQuery += ` AND do.id IN (${objectiveIds.map((_, i) => {
+            request.input(`obj_id_${i}`, sql.Int, objectiveIds[i]);
+            return `@obj_id_${i}`;
+          }).join(',')})`;
+        }
+      } catch (e) {
+        logger.error('Error parsing objective_ids for fillLockedValues', e);
+      }
+    }
+
+    const objectivesResult = await request.query(objectivesQuery);
+    const objectiveIds = objectivesResult.recordset.map(r => r.department_objective_id);
+    
+    if (objectiveIds.length === 0) {
+      logger.info('No objectives found for lock, skipping value fill');
+      return;
+    }
+
+    // Load mappings for these objectives
+    const mappingRequest = pool.request();
+    mappingRequest.input('objective_ids', sql.NVarChar, JSON.stringify(objectiveIds));
+    const mappingsResult = await mappingRequest.query(`
+      SELECT * FROM objective_data_source_mapping
+      WHERE department_objective_id IN (${objectiveIds.map((_, i) => {
+        mappingRequest.input(`obj_id_${i}`, sql.Int, objectiveIds[i]);
+        return `@obj_id_${i}`;
+      }).join(',')})
+    `);
+    
+    const mappings = {};
+    mappingsResult.recordset.forEach(m => {
+      mappings[m.department_objective_id] = m;
+    });
+
+    // Fetch metrics from cache (via metrics-api)
+    const metricsApiUrl = process.env.NETLIFY_URL 
+      ? `${process.env.NETLIFY_URL}/.netlify/functions/metrics-api`
+      : 'http://localhost:8888/.netlify/functions/metrics-api';
+    
+    const metricsResponse = await fetch(metricsApiUrl);
+    if (!metricsResponse.ok) {
+      logger.warn('Failed to fetch metrics from cache, skipping value fill');
+      return;
+    }
+    
+    const metricsData = await metricsResponse.json();
+    if (!metricsData.success || !metricsData.data) {
+      logger.warn('Metrics API returned no data, skipping value fill');
+      return;
+    }
+
+    const { pms, odoo } = metricsData.data;
+
+    // Months to fill (2026-01 to 2027-06)
+    const months = [];
+    for (let year = 2026; year <= 2027; year++) {
+      const startMonth = year === 2026 ? 1 : 1;
+      const endMonth = year === 2027 ? 6 : 12;
+      for (let month = startMonth; month <= endMonth; month++) {
+        months.push(`${year}-${String(month).padStart(2, '0')}`);
+      }
+    }
+
+    // For each objective with mapping, compute and write values
+    for (const objectiveId of objectiveIds) {
+      const mapping = mappings[objectiveId];
+      if (!mapping) continue; // Skip objectives without mapping
+
+      for (const month of months) {
+        // Get objective info for logging
+        const objInfoRequest = pool.request();
+        objInfoRequest.input('objective_id', sql.Int, objectiveId);
+        const objInfoResult = await objInfoRequest.query(`
+          SELECT kpi, department_id FROM department_objectives WHERE id = @objective_id
+        `);
+        const objInfo = objInfoResult.recordset[0];
+        if (!objInfo) continue;
+
+        // Compute target_value if monthly_target is locked
+        if (lock.lock_monthly_target && mapping.pms_project_name && mapping.pms_metric_name) {
+          const pmsRow = pms.find(r => 
+            r.ProjectName === mapping.pms_project_name &&
+            r.MetricName === mapping.pms_metric_name &&
+            r.MonthYear === month
+          );
+          
+          if (pmsRow && pmsRow.Target !== null && pmsRow.Target !== undefined) {
+            // Write directly to department_monthly_data (config-api has database access)
+            try {
+              const writeRequest = pool.request();
+              writeRequest.input('department_objective_id', sql.Int, objectiveId);
+              writeRequest.input('month', sql.Date, `${month}-01`);
+              writeRequest.input('target_value', sql.Decimal(18, 2), pmsRow.Target);
+              writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
+              writeRequest.input('department_id', sql.Int, objInfo.department_id);
+
+              await writeRequest.query(`
+                MERGE department_monthly_data AS target
+                USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
+                ON target.department_objective_id = source.department_objective_id AND target.month = source.month
+                WHEN MATCHED THEN
+                  UPDATE SET target_value = @target_value, kpi = @kpi, department_id = @department_id
+                WHEN NOT MATCHED THEN
+                  INSERT (department_objective_id, month, target_value, kpi, department_id)
+                  VALUES (@department_objective_id, @month, @target_value, @kpi, @department_id);
+              `);
+            } catch (e) {
+              logger.error(`Failed to write target_value for objective ${objectiveId}, month ${month}`, e);
+            }
+          }
+        }
+
+        // Compute actual_value if monthly_actual is locked
+        if (lock.lock_monthly_actual) {
+          let actualValue = null;
+          
+          if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
+            const pmsRow = pms.find(r => 
+              r.ProjectName === mapping.pms_project_name &&
+              r.MetricName === mapping.pms_metric_name &&
+              r.MonthYear === month
+            );
+            actualValue = pmsRow?.Actual;
+          } else if (mapping.actual_source === 'odoo_services_done' && mapping.odoo_project_name) {
+            const odooRow = odoo.find(r => 
+              r.Project === mapping.odoo_project_name &&
+              r.Month === month
+            );
+            actualValue = odooRow?.ServicesDone;
+          }
+
+          if (actualValue !== null && actualValue !== undefined) {
+            // Write directly to department_monthly_data
+            try {
+              const writeRequest = pool.request();
+              writeRequest.input('department_objective_id', sql.Int, objectiveId);
+              writeRequest.input('month', sql.Date, `${month}-01`);
+              writeRequest.input('actual_value', sql.Decimal(18, 2), actualValue);
+              writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
+              writeRequest.input('department_id', sql.Int, objInfo.department_id);
+
+              await writeRequest.query(`
+                MERGE department_monthly_data AS target
+                USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
+                ON target.department_objective_id = source.department_objective_id AND target.month = source.month
+                WHEN MATCHED THEN
+                  UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
+                WHEN NOT MATCHED THEN
+                  INSERT (department_objective_id, month, actual_value, kpi, department_id)
+                  VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
+              `);
+            } catch (e) {
+              logger.error(`Failed to write actual_value for objective ${objectiveId}, month ${month}`, e);
+            }
+          }
+        }
+      }
+    }
+
+    logger.info(`Filled locked values for ${objectiveIds.length} objectives`);
+  } catch (error) {
+    // Don't fail lock save if value fill fails
+    logger.error('Error filling locked values from cache', error);
+  }
+}
+
 // Helper function to log activity
 async function logActivity(pool, logData) {
   try {
@@ -1369,6 +1594,11 @@ const handler = rateLimiter('general')(
             metadata: { lock_id: newLock.id, scope_type, lock_type }
           });
 
+          // Fill locked values from PMS/Odoo cache (non-blocking)
+          fillLockedValuesFromCache(pool, newLock).catch(err => {
+            logger.error('Background fillLockedValuesFromCache failed', err);
+          });
+
           return {
             statusCode: 201,
             headers,
@@ -1456,6 +1686,11 @@ const handler = rateLimiter('general')(
             username: user.username,
             action_type: 'lock_updated',
             metadata: { lock_id: id }
+          });
+
+          // Fill locked values from PMS/Odoo cache (non-blocking)
+          fillLockedValuesFromCache(pool, updatedLock).catch(err => {
+            logger.error('Background fillLockedValuesFromCache failed', err);
           });
 
           return {
@@ -1606,6 +1841,170 @@ const handler = rateLimiter('general')(
               body: JSON.stringify({ success: true, message: `${ids.length} locks deactivated` })
             };
           }
+        }
+      }
+
+      // ========== OBJECTIVE DATA SOURCE MAPPING ENDPOINTS ==========
+      if (resource === 'mappings') {
+        // GET /api/config/mappings - Get all mappings
+        if (method === 'GET' && !action) {
+          const request = pool.request();
+          const result = await request.query(`
+            SELECT 
+              m.department_objective_id,
+              do.kpi,
+              do.activity,
+              do.department_id,
+              d.name AS department_name,
+              m.pms_project_name,
+              m.pms_metric_name,
+              m.actual_source,
+              m.odoo_project_name,
+              m.created_at,
+              m.updated_at
+            FROM objective_data_source_mapping m
+            INNER JOIN department_objectives do ON m.department_objective_id = do.id
+            LEFT JOIN departments d ON do.department_id = d.id
+            ORDER BY do.department_id, do.kpi, do.activity
+          `);
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset })
+          };
+        }
+
+        // GET /api/config/mappings/:department_objective_id - Get specific mapping
+        if (method === 'GET' && id) {
+          const request = pool.request();
+          request.input('department_objective_id', sql.Int, id);
+          const result = await request.query(`
+            SELECT 
+              m.department_objective_id,
+              do.kpi,
+              do.activity,
+              do.department_id,
+              d.name AS department_name,
+              m.pms_project_name,
+              m.pms_metric_name,
+              m.actual_source,
+              m.odoo_project_name,
+              m.created_at,
+              m.updated_at
+            FROM objective_data_source_mapping m
+            INNER JOIN department_objectives do ON m.department_objective_id = do.id
+            LEFT JOIN departments d ON do.department_id = d.id
+            WHERE m.department_objective_id = @department_objective_id
+          `);
+
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Mapping not found' })
+            };
+          }
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset[0] })
+          };
+        }
+
+        // PUT /api/config/mappings/:department_objective_id - Create or update mapping
+        if (method === 'PUT' && id) {
+          const body = JSON.parse(event.body || '{}');
+          const {
+            pms_project_name,
+            pms_metric_name,
+            actual_source,
+            odoo_project_name
+          } = body;
+
+          // Validate required fields
+          if (!actual_source || !['pms_actual', 'odoo_services_done'].includes(actual_source)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'actual_source is required and must be "pms_actual" or "odoo_services_done"'
+              })
+            };
+          }
+
+          // Validate: if actual_source is 'odoo_services_done', odoo_project_name is required
+          if (actual_source === 'odoo_services_done' && !odoo_project_name) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'odoo_project_name is required when actual_source is "odoo_services_done"'
+              })
+            };
+          }
+
+          // Validate: pms_project_name and pms_metric_name are required (for target and potentially actual)
+          if (!pms_project_name || !pms_metric_name) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'pms_project_name and pms_metric_name are required'
+              })
+            };
+          }
+
+          const request = pool.request();
+          request.input('department_objective_id', sql.Int, id);
+          request.input('pms_project_name', sql.NVarChar, pms_project_name);
+          request.input('pms_metric_name', sql.NVarChar, pms_metric_name);
+          request.input('actual_source', sql.NVarChar, actual_source);
+          request.input('odoo_project_name', sql.NVarChar, odoo_project_name || null);
+
+          // Use MERGE to handle both insert and update
+          await request.query(`
+            MERGE objective_data_source_mapping AS target
+            USING (SELECT @department_objective_id AS department_objective_id) AS source
+            ON target.department_objective_id = source.department_objective_id
+            WHEN MATCHED THEN
+              UPDATE SET
+                pms_project_name = @pms_project_name,
+                pms_metric_name = @pms_metric_name,
+                actual_source = @actual_source,
+                odoo_project_name = @odoo_project_name,
+                updated_at = GETDATE()
+            WHEN NOT MATCHED THEN
+              INSERT (department_objective_id, pms_project_name, pms_metric_name, actual_source, odoo_project_name, created_at, updated_at)
+              VALUES (@department_objective_id, @pms_project_name, @pms_metric_name, @actual_source, @odoo_project_name, GETDATE(), GETDATE());
+          `);
+
+          // Log activity
+          await logActivity(pool, {
+            user_id: user.id,
+            username: user.username,
+            action_type: 'update_mapping',
+            target_field: 'objective_data_source_mapping',
+            department_objective_id: id,
+            metadata: { pms_project_name, pms_metric_name, actual_source, odoo_project_name }
+          });
+
+          // Return updated mapping
+          const getRequest = pool.request();
+          getRequest.input('department_objective_id', sql.Int, id);
+          const getResult = await getRequest.query(`
+            SELECT * FROM objective_data_source_mapping WHERE department_objective_id = @department_objective_id
+          `);
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: getResult.recordset[0] })
+          };
         }
       }
 

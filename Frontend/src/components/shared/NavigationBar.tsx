@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight, Settings } from 'lucide-react';
+import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight, Settings, TrendingUp } from 'lucide-react';
 import { hasPowerBIAccess } from '@/config/powerbi';
 
 interface NavigationBarProps {
@@ -82,6 +82,19 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         >
           <Power className="w-3 h-3 mr-1" />
           Power BI Dashboards
+        </Button>
+      )}
+
+      {/* PMS & Odoo Metrics (Admin/CEO only) */}
+      {canAccessAdmin && shouldShowButton('/pms-odoo-metrics') && (
+        <Button
+          variant={location.pathname === '/pms-odoo-metrics' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => navigate('/pms-odoo-metrics')}
+          className="h-7 px-2 text-xs whitespace-nowrap"
+        >
+          <TrendingUp className="w-3 h-3 mr-1" />
+          PMS & Odoo Metrics
         </Button>
       )}
 
