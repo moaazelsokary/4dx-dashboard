@@ -75,6 +75,7 @@ Run these SQL migrations on your DataWarehouse database:
 - `database/migrate-objective-data-source-mapping.sql` - Creates `objective_data_source_mapping` table
 - `database/migrate-objective-data-source-mapping-target-source.sql` - Adds `target_source` column (PMS | Manual)
 - `database/migrate-objective-data-source-mapping-actual-manual.sql` - Allows `actual_source` = Manual
+- `database/migrate-objective-data-source-mapping-odoo-services-created.sql` - Adds `actual_source` = Odoo ServicesCreated
 
 ### 6. Deployment Steps
 

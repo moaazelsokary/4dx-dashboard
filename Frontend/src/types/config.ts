@@ -145,8 +145,8 @@ export interface ObjectiveDataSourceMapping {
   pms_metric_name: string | null;
   /** 'pms_target' = fill monthly target from PMS; null = manual (user edits) */
   target_source: 'pms_target' | null;
-  /** 'manual' = edit actual manually; 'pms_actual' | 'odoo_services_done' = fill from source */
-  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done';
+  /** 'manual' = edit actual manually; 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' = fill from source */
+  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created';
   odoo_project_name: string | null;
   created_at?: string;
   updated_at?: string;
@@ -162,9 +162,9 @@ export interface MappingFormData {
   pms_metric_name: string;
   /** 'pms_target' = from PMS; 'manual' or null = Manual (edit manually) */
   target_source: 'pms_target' | 'manual' | null;
-  /** 'manual' = edit actual manually (default); 'pms_actual' | 'odoo_services_done' = fill from source */
-  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done';
-  odoo_project_name?: string; // Required when actual_source = 'odoo_services_done'
+  /** 'manual' = edit actual manually (default); 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' = fill from source */
+  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created';
+  odoo_project_name?: string; // Required when actual_source is Odoo-based
 }
 
 export interface PermissionFormData {
