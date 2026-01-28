@@ -159,8 +159,8 @@ export interface ObjectiveDataSourceMapping {
 export interface MappingFormData {
   pms_project_name: string;
   pms_metric_name: string;
-  /** 'pms_target' = from PMS; '' or null = Manual (edit manually) */
-  target_source: 'pms_target' | '' | null;
+  /** 'pms_target' = from PMS; 'manual' or null = Manual (edit manually) */
+  target_source: 'pms_target' | 'manual' | null;
   actual_source: 'pms_actual' | 'odoo_services_done';
   odoo_project_name?: string; // Required when actual_source = 'odoo_services_done'
 }

@@ -94,13 +94,15 @@ export default function DataSourceMappingList() {
       const base: Partial<MappingFormData> = mapping ? {
         pms_project_name: mapping.pms_project_name || '',
         pms_metric_name: mapping.pms_metric_name || '',
-        target_source: mapping.target_source === 'pms_target' ? 'pms_target' : '',
+        // Backend stores 'pms_target' or NULL; NULL = Manual
+        target_source: mapping.target_source === 'pms_target' ? 'pms_target' : 'manual',
         actual_source: mapping.actual_source,
         odoo_project_name: mapping.odoo_project_name || '',
       } : {
         pms_project_name: '',
         pms_metric_name: '',
-        target_source: '',
+        // Default to Manual
+        target_source: 'manual',
         actual_source: 'pms_actual' as const,
         odoo_project_name: '',
       };
@@ -295,14 +297,17 @@ export default function DataSourceMappingList() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={edited?.target_source ?? current?.target_source ?? ''}
-                          onValueChange={(value: 'pms_target' | '') => updateMapping(row.id, 'target_source', value)}
+                          value={
+                            edited?.target_source ??
+                            (current?.target_source === 'pms_target' ? 'pms_target' : 'manual')
+                          }
+                          onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}
                         >
                           <SelectTrigger className="h-8 w-40">
-                            <SelectValue placeholder="Manual" />
+                            <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Manual</SelectItem>
+                            <SelectItem value="manual">Manual</SelectItem>
                             <SelectItem value="pms_target">PMS</SelectItem>
                           </SelectContent>
                         </Select>
