@@ -297,6 +297,23 @@ async function fillLockedValuesFromCache(pool, lock) {
   }
 }
 
+// Normalize string for comparison (trim; optional lower for case-insensitive)
+function norm(s) {
+  if (s == null) return '';
+  return String(s).trim();
+}
+function normMonth(m) {
+  const s = norm(m);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  if (s instanceof Date || (typeof s === 'string' && s.length >= 7)) {
+    try {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    } catch (_) {}
+  }
+  return s;
+}
+
 // Fill monthly target/actual from cache for a single objective (after mapping create/update).
 // Does not require a lock rule; fills based on mapping only.
 async function fillValuesFromCacheForObjective(pool, objectiveId) {
@@ -307,7 +324,10 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
       SELECT * FROM objective_data_source_mapping WHERE department_objective_id = @objective_id
     `);
     const mapping = mappingResult.recordset[0];
-    if (!mapping) return;
+    if (!mapping) {
+      logger.info(`fillValuesFromCacheForObjective: no mapping for objective ${objectiveId}`);
+      return;
+    }
 
     const objInfoRequest = pool.request();
     objInfoRequest.input('objective_id', sql.Int, objectiveId);
@@ -319,12 +339,21 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
 
     const metricsApiUrl = process.env.NETLIFY_URL
       ? `${process.env.NETLIFY_URL}/.netlify/functions/metrics-api`
-      : 'http://localhost:8888/.netlify/functions/metrics-api';
-    const metricsResponse = await fetch(metricsApiUrl);
-    if (!metricsResponse.ok) return;
+      : (process.env.URL || 'http://localhost:8888');
+    const base = metricsApiUrl.replace(/\/$/, '');
+    const url = base.includes('localhost') ? `${base}/.netlify/functions/metrics-api` : `${base}/.netlify/functions/metrics-api`;
+    const metricsResponse = await fetch(url);
+    if (!metricsResponse.ok) {
+      logger.warn(`fillValuesFromCacheForObjective: metrics API returned ${metricsResponse.status} for ${url}`);
+      return;
+    }
     const metricsData = await metricsResponse.json();
-    if (!metricsData.success || !metricsData.data) return;
-    const { pms, odoo } = metricsData.data;
+    if (!metricsData.success || !metricsData.data) {
+      logger.warn('fillValuesFromCacheForObjective: metrics API returned no data', { success: metricsData?.success });
+      return;
+    }
+    const { pms = [], odoo = [] } = metricsData.data;
+    logger.info(`fillValuesFromCacheForObjective: objective ${objectiveId} actual_source=${mapping.actual_source} pms rows=${pms.length} odoo rows=${odoo.length}`);
 
     const months = [];
     for (let year = 2026; year <= 2027; year++) {
@@ -334,19 +363,24 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
       }
     }
 
-    for (const month of months) {
+    const mapProj = (r) => norm(r);
+    const mapMonth = (r) => normMonth(r?.MonthYear ?? r?.Month ?? r?.month);
+
+    for (const monthStr of months) {
+      const monthDate = new Date(monthStr + '-01');
+
       // Target from PMS if mapping says so
       if (mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
-        const pmsRow = pms && pms.find(r =>
-          r.ProjectName === mapping.pms_project_name &&
-          r.MetricName === mapping.pms_metric_name &&
-          r.MonthYear === month
+        const pmsRow = pms.find(r =>
+          mapProj(r.ProjectName) === mapProj(mapping.pms_project_name) &&
+          mapProj(r.MetricName) === mapProj(mapping.pms_metric_name) &&
+          mapMonth(r) === monthStr
         );
         if (pmsRow && pmsRow.Target != null) {
           try {
             const wr = pool.request();
             wr.input('department_objective_id', sql.Int, objectiveId);
-            wr.input('month', sql.Date, `${month}-01`);
+            wr.input('month', sql.Date, monthDate);
             wr.input('target_value', sql.Decimal(18, 2), pmsRow.Target);
             wr.input('kpi', sql.NVarChar, objInfo.kpi);
             wr.input('department_id', sql.Int, objInfo.department_id);
@@ -359,24 +393,24 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
               VALUES (@department_objective_id, @month, @target_value, @kpi, @department_id);
             `);
           } catch (e) {
-            logger.error(`fillValuesFromCacheForObjective target ${objectiveId} ${month}`, e);
+            logger.error(`fillValuesFromCacheForObjective target ${objectiveId} ${monthStr}`, e);
           }
         }
       }
 
       // Actual from PMS or Odoo if mapping says so
       if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
-        const pmsRow = pms && pms.find(r =>
-          r.ProjectName === mapping.pms_project_name &&
-          r.MetricName === mapping.pms_metric_name &&
-          r.MonthYear === month
+        const pmsRow = pms.find(r =>
+          mapProj(r.ProjectName) === mapProj(mapping.pms_project_name) &&
+          mapProj(r.MetricName) === mapProj(mapping.pms_metric_name) &&
+          mapMonth(r) === monthStr
         );
         const actualValue = pmsRow?.Actual;
         if (actualValue != null) {
           try {
             const wr = pool.request();
             wr.input('department_objective_id', sql.Int, objectiveId);
-            wr.input('month', sql.Date, `${month}-01`);
+            wr.input('month', sql.Date, monthDate);
             wr.input('actual_value', sql.Decimal(18, 2), actualValue);
             wr.input('kpi', sql.NVarChar, objInfo.kpi);
             wr.input('department_id', sql.Int, objInfo.department_id);
@@ -389,17 +423,17 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
               VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
             `);
           } catch (e) {
-            logger.error(`fillValuesFromCacheForObjective actual PMS ${objectiveId} ${month}`, e);
+            logger.error(`fillValuesFromCacheForObjective actual PMS ${objectiveId} ${monthStr}`, e);
           }
         }
       } else if (mapping.actual_source === 'odoo_services_done' && mapping.odoo_project_name) {
-        const odooRow = odoo && odoo.find(r => r.Project === mapping.odoo_project_name && r.Month === month);
+        const odooRow = odoo.find(r => mapProj(r.Project) === mapProj(mapping.odoo_project_name) && mapMonth(r) === monthStr);
         const actualValue = odooRow?.ServicesDone;
         if (actualValue != null) {
           try {
             const wr = pool.request();
             wr.input('department_objective_id', sql.Int, objectiveId);
-            wr.input('month', sql.Date, `${month}-01`);
+            wr.input('month', sql.Date, monthDate);
             wr.input('actual_value', sql.Decimal(18, 2), actualValue);
             wr.input('kpi', sql.NVarChar, objInfo.kpi);
             wr.input('department_id', sql.Int, objInfo.department_id);
@@ -412,7 +446,7 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
               VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
             `);
           } catch (e) {
-            logger.error(`fillValuesFromCacheForObjective actual Odoo ${objectiveId} ${month}`, e);
+            logger.error(`fillValuesFromCacheForObjective actual Odoo ${objectiveId} ${monthStr}`, e);
           }
         }
       }
@@ -2129,9 +2163,7 @@ const handler = rateLimiter('general')(
           });
 
           // Fill monthly target/actual from cache for this objective (so monthly actual updates without needing a lock rule)
-          fillValuesFromCacheForObjective(pool, id).catch(err => {
-            logger.error('Background fillValuesFromCacheForObjective failed', err);
-          });
+          await fillValuesFromCacheForObjective(pool, id);
 
           // Return updated mapping
           const getRequest = pool.request();
