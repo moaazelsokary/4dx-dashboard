@@ -243,48 +243,44 @@ async function fillLockedValuesFromCache(pool, lock) {
           }
         }
 
-        // Compute actual_value if monthly_actual is locked
-        if (lock.lock_monthly_actual) {
+        // Compute actual_value if monthly_actual is locked and mapping uses a source; write value or null for every month (so switching source clears months with no data)
+        const actualFromSource = mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created';
+        if (lock.lock_monthly_actual && actualFromSource) {
           let actualValue = null;
-          
           if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
-            const pmsRow = pms.find(r => 
+            const pmsRow = pms.find(r =>
               r.ProjectName === mapping.pms_project_name &&
               r.MetricName === mapping.pms_metric_name &&
               r.MonthYear === month
             );
             actualValue = pmsRow?.Actual;
           } else if (mapping.actual_source === 'odoo_services_done' && mapping.odoo_project_name) {
-            const odooRow = odoo.find(r => 
-              r.Project === mapping.odoo_project_name &&
-              r.Month === month
-            );
+            const odooRow = odoo.find(r => r.Project === mapping.odoo_project_name && r.Month === month);
             actualValue = odooRow?.ServicesDone;
+          } else if (mapping.actual_source === 'odoo_services_created' && mapping.odoo_project_name) {
+            const odooRow = odoo.find(r => r.Project === mapping.odoo_project_name && r.Month === month);
+            actualValue = odooRow?.ServicesCreated;
           }
 
-          if (actualValue !== null && actualValue !== undefined) {
-            // Write directly to department_monthly_data
-            try {
-              const writeRequest = pool.request();
-              writeRequest.input('department_objective_id', sql.Int, objectiveId);
-              writeRequest.input('month', sql.Date, `${month}-01`);
-              writeRequest.input('actual_value', sql.Decimal(18, 2), actualValue);
-              writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
-              writeRequest.input('department_id', sql.Int, objInfo.department_id);
-
-              await writeRequest.query(`
-                MERGE department_monthly_data AS target
-                USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
-                ON target.department_objective_id = source.department_objective_id AND target.month = source.month
-                WHEN MATCHED THEN
-                  UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
-                WHEN NOT MATCHED THEN
-                  INSERT (department_objective_id, month, actual_value, kpi, department_id)
-                  VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
-              `);
-            } catch (e) {
-              logger.error(`Failed to write actual_value for objective ${objectiveId}, month ${month}`, e);
-            }
+          try {
+            const writeRequest = pool.request();
+            writeRequest.input('department_objective_id', sql.Int, objectiveId);
+            writeRequest.input('month', sql.Date, `${month}-01`);
+            writeRequest.input('actual_value', sql.Decimal(18, 2), actualValue);
+            writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
+            writeRequest.input('department_id', sql.Int, objInfo.department_id);
+            await writeRequest.query(`
+              MERGE department_monthly_data AS target
+              USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
+              ON target.department_objective_id = source.department_objective_id AND target.month = source.month
+              WHEN MATCHED THEN
+                UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
+              WHEN NOT MATCHED THEN
+                INSERT (department_objective_id, month, actual_value, kpi, department_id)
+                VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
+            `);
+          } catch (e) {
+            logger.error(`Failed to write actual_value for objective ${objectiveId}, month ${month}`, e);
           }
         }
       }
@@ -398,56 +394,41 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
         }
       }
 
-      // Actual from PMS or Odoo if mapping says so
+      // Actual from PMS or Odoo: write value or null for every month (so switching source clears months with no data)
+      let actualValue = null;
       if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
         const pmsRow = pms.find(r =>
           mapProj(r.ProjectName) === mapProj(mapping.pms_project_name) &&
           mapProj(r.MetricName) === mapProj(mapping.pms_metric_name) &&
           mapMonth(r) === monthStr
         );
-        const actualValue = pmsRow?.Actual;
-        if (actualValue != null) {
-          try {
-            const wr = pool.request();
-            wr.input('department_objective_id', sql.Int, objectiveId);
-            wr.input('month', sql.Date, monthDate);
-            wr.input('actual_value', sql.Decimal(18, 2), actualValue);
-            wr.input('kpi', sql.NVarChar, objInfo.kpi);
-            wr.input('department_id', sql.Int, objInfo.department_id);
-            await wr.query(`
-              MERGE department_monthly_data AS target
-              USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
-              ON target.department_objective_id = source.department_objective_id AND target.month = source.month
-              WHEN MATCHED THEN UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
-              WHEN NOT MATCHED THEN INSERT (department_objective_id, month, actual_value, kpi, department_id)
-              VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
-            `);
-          } catch (e) {
-            logger.error(`fillValuesFromCacheForObjective actual PMS ${objectiveId} ${monthStr}`, e);
-          }
-        }
+        actualValue = pmsRow?.Actual;
       } else if (mapping.actual_source === 'odoo_services_done' && mapping.odoo_project_name) {
         const odooRow = odoo.find(r => mapProj(r.Project) === mapProj(mapping.odoo_project_name) && mapMonth(r) === monthStr);
-        const actualValue = odooRow?.ServicesDone;
-        if (actualValue != null) {
-          try {
-            const wr = pool.request();
-            wr.input('department_objective_id', sql.Int, objectiveId);
-            wr.input('month', sql.Date, monthDate);
-            wr.input('actual_value', sql.Decimal(18, 2), actualValue);
-            wr.input('kpi', sql.NVarChar, objInfo.kpi);
-            wr.input('department_id', sql.Int, objInfo.department_id);
-            await wr.query(`
-              MERGE department_monthly_data AS target
-              USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
-              ON target.department_objective_id = source.department_objective_id AND target.month = source.month
-              WHEN MATCHED THEN UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
-              WHEN NOT MATCHED THEN INSERT (department_objective_id, month, actual_value, kpi, department_id)
-              VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
-            `);
-          } catch (e) {
-            logger.error(`fillValuesFromCacheForObjective actual Odoo ${objectiveId} ${monthStr}`, e);
-          }
+        actualValue = odooRow?.ServicesDone;
+      } else if (mapping.actual_source === 'odoo_services_created' && mapping.odoo_project_name) {
+        const odooRow = odoo.find(r => mapProj(r.Project) === mapProj(mapping.odoo_project_name) && mapMonth(r) === monthStr);
+        actualValue = odooRow?.ServicesCreated;
+      }
+
+      if (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created') {
+        try {
+          const wr = pool.request();
+          wr.input('department_objective_id', sql.Int, objectiveId);
+          wr.input('month', sql.Date, monthDate);
+          wr.input('actual_value', actualValue != null ? sql.Decimal(18, 2) : sql.Decimal(18, 2), actualValue);
+          wr.input('kpi', sql.NVarChar, objInfo.kpi);
+          wr.input('department_id', sql.Int, objInfo.department_id);
+          await wr.query(`
+            MERGE department_monthly_data AS target
+            USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
+            ON target.department_objective_id = source.department_objective_id AND target.month = source.month
+            WHEN MATCHED THEN UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
+            WHEN NOT MATCHED THEN INSERT (department_objective_id, month, actual_value, kpi, department_id)
+            VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
+          `);
+        } catch (e) {
+          logger.error(`fillValuesFromCacheForObjective actual ${objectiveId} ${monthStr}`, e);
         }
       }
     }
@@ -2089,26 +2070,26 @@ const handler = rateLimiter('general')(
           // target_source: 'pms_target' = fill target from PMS; null/empty = manual
           const targetSourceValue = (target_source === 'pms_target') ? 'pms_target' : null;
 
-          // actual_source: 'manual' | 'pms_actual' | 'odoo_services_done'
-          if (!actual_source || !['manual', 'pms_actual', 'odoo_services_done'].includes(actual_source)) {
+          // actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created'
+          if (!actual_source || !['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created'].includes(actual_source)) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({
                 success: false,
-                error: 'actual_source is required and must be "manual", "pms_actual", or "odoo_services_done"'
+                error: 'actual_source is required and must be "manual", "pms_actual", "odoo_services_done", or "odoo_services_created"'
               })
             };
           }
 
-          // Validate: if actual_source is 'odoo_services_done', odoo_project_name is required
-          if (actual_source === 'odoo_services_done' && !odoo_project_name) {
+          // Validate: if actual_source is Odoo-based, odoo_project_name is required
+          if ((actual_source === 'odoo_services_done' || actual_source === 'odoo_services_created') && !odoo_project_name) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({
                 success: false,
-                error: 'odoo_project_name is required when actual_source is "odoo_services_done"'
+                error: 'odoo_project_name is required when Actual From is Odoo ServicesDone or Odoo ServicesCreated'
               })
             };
           }
