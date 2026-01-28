@@ -67,8 +67,6 @@
   status = 301
   force = true
 
-# Scheduled Functions Configuration
-# Note: Scheduled functions must be configured in Netlify Dashboard:
-# Site Settings → Functions → Scheduled Functions
-# Add: sync-pms-odoo with schedule: rate(10 minutes) or cron(0 */10 * * * *)
-# Alternatively, use @netlify/plugin-scheduled-functions plugin
+# Scheduled Functions
+[functions."sync-pms-odoo"]
+schedule = "*/10 * * * *"
