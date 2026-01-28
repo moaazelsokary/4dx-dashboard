@@ -65,9 +65,9 @@ All functions are in `netlify/functions/`:
 - ✅ `db.cjs` - Database connection module
 
 ### 4a. Scheduled Functions Configuration
-Configure in Netlify Dashboard → Site Settings → Functions → Scheduled Functions:
-- **sync-pms-odoo**: Schedule `rate(10 minutes)` or `cron(0 */10 * * * *)` (every 10 minutes)
-  - This function fetches data from PMS and Odoo and writes to `pms_odoo_cache` table
+The schedule is defined in `netlify.toml`: `[functions."sync-pms-odoo"] schedule = "*/10 * * * *"` (every 10 minutes).
+- **sync-pms-odoo** fetches data from PMS and Odoo and writes to `pms_odoo_cache` table.
+- Runs only on **production** deploys (not branch/deploy previews). Has a **30-second** execution limit.
 
 ### 5. Database Migrations
 Run these SQL migrations on your DataWarehouse database:
@@ -155,6 +155,14 @@ If functions don't work:
 1. Check function logs in Netlify Dashboard
 2. Verify environment variables are set (without VITE_ prefix)
 3. Test function directly: `/.netlify/functions/test`
+
+**No data in `pms_odoo_cache` table:**
+1. **Run the migration** – Execute `Frontend/database/migrate-pms-odoo-cache.sql` on the **DataWarehouse** database (same DB as other functions). If the table doesn't exist, the sync will fail with a clear error.
+2. **Cache DB connection** – The sync uses the same env as other functions: `SERVER`, `DATABASE`, `DB_USER` (or `UID`), `DB_PASSWORD` (or `PWD`). Ensure these are set in Netlify.
+3. **PMS / Odoo env** – Set `PMS_SERVER`, `PMS_DATABASE`, `PMS_UID`, `PMS_PWD` for PMS; `ODOO_TOKEN` for Odoo. If one source fails, the other is still written (partial cache).
+4. **30-second limit** – Netlify scheduled functions have a 30s execution limit. If PMS or Odoo is slow, the sync may time out before writing. Check function logs; consider reducing data or optimizing queries.
+5. **Manual sync** – As Admin/CEO, POST to `/.netlify/functions/metrics-api/refresh` to trigger a sync, then check function logs for `sync-pms-odoo` or metrics-api errors.
+6. **Schedule in `netlify.toml`** – The sync runs every 10 minutes via `[functions."sync-pms-odoo"] schedule = "*/10 * * * *"`. Scheduled functions run only on **production** deploys, not branch deploys.
 
 ## 🚀 Ready to Deploy!
 

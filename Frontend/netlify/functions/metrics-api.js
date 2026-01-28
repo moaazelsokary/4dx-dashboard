@@ -130,8 +130,8 @@ const handler = rateLimiter('general')(
 
       // POST /refresh: Trigger immediate sync
       if (method === 'POST' && path === '/refresh') {
-        // Check auth for refresh (Admin/CEO only)
-        const user = context.user;
+        // Check auth for refresh (Admin/CEO only) – user is set by auth middleware on event
+        const user = event.user;
         if (!user || !['Admin', 'CEO'].includes(user.role)) {
           return {
             statusCode: 403,
