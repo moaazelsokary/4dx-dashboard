@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -105,6 +105,18 @@ interface MappingRow extends DepartmentObjective {
   editedMapping?: Partial<MappingFormData>;
 }
 
+const DEFAULT_COLUMN_WIDTHS = {
+  department: 160,
+  kpi: 180,
+  activity: 280,
+  targetFrom: 140,
+  actualFrom: 160,
+  pmsProject: 200,
+  pmsMetric: 200,
+  odooProject: 200,
+  actions: 100,
+};
+
 export default function DataSourceMappingList() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterKpi, setFilterKpi] = useState('');
@@ -112,7 +124,34 @@ export default function DataSourceMappingList() {
   const [filterTargetForm, setFilterTargetForm] = useState('');
   const [filterActualForm, setFilterActualForm] = useState('');
   const [editedMappings, setEditedMappings] = useState<Record<number, Partial<MappingFormData>>>({});
+  const [columnWidths, setColumnWidths] = useState(DEFAULT_COLUMN_WIDTHS);
+  const [resizingColumn, setResizingColumn] = useState<keyof typeof DEFAULT_COLUMN_WIDTHS | null>(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
   const queryClient = useQueryClient();
+
+  const handleResizeStart = (column: keyof typeof DEFAULT_COLUMN_WIDTHS, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColumn(column);
+    setResizeStartX(e.clientX);
+    setResizeStartWidth(columnWidths[column]);
+  };
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!resizingColumn) return;
+    const diff = e.clientX - resizeStartX;
+    setColumnWidths(prev => ({ ...prev, [resizingColumn]: Math.max(80, resizeStartWidth + diff) }));
+  }, [resizingColumn, resizeStartX, resizeStartWidth]);
+  const handleResizeEnd = useCallback(() => { setResizingColumn(null); }, []);
+  useEffect(() => {
+    if (!resizingColumn) return;
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
   // Load department objectives
   const { data: objectives = [], isLoading: objectivesLoading } = useQuery({
@@ -341,70 +380,51 @@ export default function DataSourceMappingList() {
           <Table style={{ tableLayout: 'fixed', width: '100%' }} className="border-collapse">
             <TableHeader>
               <TableRow>
-                <TableHead className="border-r border-border/50">
+                <TableHead style={{ width: columnWidths.department, minWidth: columnWidths.department, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Department</span>
-                    <ColumnFilter
-                      columnLabel="Department"
-                      options={filterOptions.departments}
-                      value={filterDepartment}
-                      onValueChange={setFilterDepartment}
-                    />
+                    <ColumnFilter columnLabel="Department" options={filterOptions.departments} value={filterDepartment} onValueChange={setFilterDepartment} />
                   </div>
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('department', e)} />
                 </TableHead>
-                <TableHead className="border-r border-border/50">
+                <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>KPI</span>
-                    <ColumnFilter
-                      columnLabel="KPI"
-                      options={filterOptions.kpis}
-                      value={filterKpi}
-                      onValueChange={setFilterKpi}
-                      searchable
-                    />
+                    <ColumnFilter columnLabel="KPI" options={filterOptions.kpis} value={filterKpi} onValueChange={setFilterKpi} searchable />
                   </div>
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('kpi', e)} />
                 </TableHead>
-                <TableHead className="border-r border-border/50">
+                <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Activity</span>
-                    <ColumnFilter
-                      columnLabel="Objective"
-                      options={filterOptions.activities}
-                      value={filterObjective}
-                      onValueChange={setFilterObjective}
-                      searchable
-                      valueToLabel={(a) => (a.length > 50 ? a.slice(0, 50) + '…' : a)}
-                    />
+                    <ColumnFilter columnLabel="Objective" options={filterOptions.activities} value={filterObjective} onValueChange={setFilterObjective} searchable valueToLabel={(a) => (a.length > 50 ? a.slice(0, 50) + '…' : a)} />
                   </div>
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('activity', e)} />
                 </TableHead>
-                <TableHead className="border-r border-border/50">
+                <TableHead style={{ width: columnWidths.targetFrom, minWidth: columnWidths.targetFrom, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Target From</span>
-                    <ColumnFilter
-                      columnLabel="Target From"
-                      options={['manual', 'pms_target']}
-                      value={filterTargetForm}
-                      onValueChange={setFilterTargetForm}
-                      valueToLabel={(v) => (v === 'pms_target' ? 'PMS' : 'Manual')}
-                    />
+                    <ColumnFilter columnLabel="Target From" options={['manual', 'pms_target']} value={filterTargetForm} onValueChange={setFilterTargetForm} valueToLabel={(v) => (v === 'pms_target' ? 'PMS' : 'Manual')} />
                   </div>
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('targetFrom', e)} />
                 </TableHead>
-                <TableHead className="border-r border-border/50">
+                <TableHead style={{ width: columnWidths.actualFrom, minWidth: columnWidths.actualFrom, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Actual From</span>
-                    <ColumnFilter
-                      columnLabel="Actual From"
-                      options={['manual', 'pms_actual', 'odoo_services_done']}
-                      value={filterActualForm}
-                      onValueChange={setFilterActualForm}
-                      valueToLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : 'Manual')}
-                    />
+                    <ColumnFilter columnLabel="Actual From" options={['manual', 'pms_actual', 'odoo_services_done']} value={filterActualForm} onValueChange={setFilterActualForm} valueToLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : 'Manual')} />
                   </div>
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('actualFrom', e)} />
                 </TableHead>
-                <TableHead className="border-r border-border/50">PMS Project</TableHead>
-                <TableHead className="border-r border-border/50">PMS Metric</TableHead>
-                <TableHead className="border-r border-border/50">Odoo Project</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead style={{ width: columnWidths.pmsProject, minWidth: columnWidths.pmsProject, position: 'relative' }} className="border-r border-border/50">PMS Project
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('pmsProject', e)} />
+                </TableHead>
+                <TableHead style={{ width: columnWidths.pmsMetric, minWidth: columnWidths.pmsMetric, position: 'relative' }} className="border-r border-border/50">PMS Metric
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('pmsMetric', e)} />
+                </TableHead>
+                <TableHead style={{ width: columnWidths.odooProject, minWidth: columnWidths.odooProject, position: 'relative' }} className="border-r border-border/50">Odoo Project
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('odooProject', e)} />
+                </TableHead>
+                <TableHead style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -428,15 +448,12 @@ export default function DataSourceMappingList() {
 
                   return (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium border-r border-border/50">{row.department_name || '-'}</TableCell>
-                      <TableCell className="border-r border-border/50">{row.kpi || '-'}</TableCell>
-                      <TableCell className="max-w-xs truncate border-r border-border/50">{row.activity || '-'}</TableCell>
-                      <TableCell className="border-r border-border/50">
-                        <Select
-                          value={targetSource}
-                          onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}
-                        >
-                          <SelectTrigger className="h-8 w-40">
+                      <TableCell style={{ width: columnWidths.department, minWidth: columnWidths.department }} className="font-medium border-r border-border/50">{row.department_name || '-'}</TableCell>
+                      <TableCell style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }} className="border-r border-border/50">{row.kpi || '-'}</TableCell>
+                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="truncate border-r border-border/50" title={row.activity || ''}>{row.activity || '-'}</TableCell>
+                      <TableCell style={{ width: columnWidths.targetFrom, minWidth: columnWidths.targetFrom }} className="border-r border-border/50">
+                        <Select value={targetSource} onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}>
+                          <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -445,12 +462,9 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="border-r border-border/50">
-                        <Select
-                          value={actualSource}
-                          onValueChange={(value: 'manual' | 'pms_actual' | 'odoo_services_done') => updateMapping(row.id, 'actual_source', value)}
-                        >
-                          <SelectTrigger className="h-8 w-40">
+                      <TableCell style={{ width: columnWidths.actualFrom, minWidth: columnWidths.actualFrom }} className="border-r border-border/50">
+                        <Select value={actualSource} onValueChange={(value: 'manual' | 'pms_actual' | 'odoo_services_done') => updateMapping(row.id, 'actual_source', value)}>
+                          <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -460,13 +474,9 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="border-r border-border/50">
-                        <Select
-                          value={edited?.pms_project_name || current?.pms_project_name || ''}
-                          onValueChange={(value) => updateMapping(row.id, 'pms_project_name', value)}
-                          disabled={!pmsEnabled}
-                        >
-                          <SelectTrigger className="h-8 w-48">
+                      <TableCell style={{ width: columnWidths.pmsProject, minWidth: columnWidths.pmsProject }} className="border-r border-border/50">
+                        <Select value={edited?.pms_project_name || current?.pms_project_name || ''} onValueChange={(value) => updateMapping(row.id, 'pms_project_name', value)} disabled={!pmsEnabled}>
+                          <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue placeholder="Select project" />
                           </SelectTrigger>
                           <SelectContent>
@@ -476,13 +486,9 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="border-r border-border/50">
-                        <Select
-                          value={edited?.pms_metric_name || current?.pms_metric_name || ''}
-                          onValueChange={(value) => updateMapping(row.id, 'pms_metric_name', value)}
-                          disabled={!pmsEnabled || (!edited?.pms_project_name && !current?.pms_project_name)}
-                        >
-                          <SelectTrigger className="h-8 w-48">
+                      <TableCell style={{ width: columnWidths.pmsMetric, minWidth: columnWidths.pmsMetric }} className="border-r border-border/50">
+                        <Select value={edited?.pms_metric_name || current?.pms_metric_name || ''} onValueChange={(value) => updateMapping(row.id, 'pms_metric_name', value)} disabled={!pmsEnabled || (!edited?.pms_project_name && !current?.pms_project_name)}>
+                          <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue placeholder="Select metric" />
                           </SelectTrigger>
                           <SelectContent>
@@ -492,13 +498,9 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="border-r border-border/50">
-                        <Select
-                          value={edited?.odoo_project_name || current?.odoo_project_name || ''}
-                          onValueChange={(value) => updateMapping(row.id, 'odoo_project_name', value)}
-                          disabled={!odooEnabled}
-                        >
-                          <SelectTrigger className="h-8 w-48">
+                      <TableCell style={{ width: columnWidths.odooProject, minWidth: columnWidths.odooProject }} className="border-r border-border/50">
+                        <Select value={edited?.odoo_project_name || current?.odoo_project_name || ''} onValueChange={(value) => updateMapping(row.id, 'odoo_project_name', value)} disabled={!odooEnabled}>
+                          <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue placeholder="Select project" />
                           </SelectTrigger>
                           <SelectContent>
@@ -508,7 +510,7 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
                         {hasChanges && (
                           <Button
                             size="sm"
