@@ -846,7 +846,33 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
         user_ids: l.user_ids
       }))
     });
-    
+
+    // Lock by data source mapping: if target/actual comes from PMS or Odoo, treat as locked (independent per field)
+    if (fieldType === 'monthly_target' || fieldType === 'monthly_actual') {
+      const mapReq = pool.request();
+      mapReq.input('department_objective_id', sql.Int, departmentObjectiveId);
+      const mapResult = await mapReq.query(`
+        SELECT target_source, actual_source FROM objective_data_source_mapping WHERE department_objective_id = @department_objective_id
+      `);
+      const mapping = mapResult.recordset[0];
+      if (mapping) {
+        if (fieldType === 'monthly_target' && mapping.target_source === 'pms_target') {
+          return { is_locked: true, lock_reason: 'Value from data source (PMS Target)', scope_type: 'data_source_mapping' };
+        }
+        if (fieldType === 'monthly_actual') {
+          if (mapping.actual_source === 'pms_actual') {
+            return { is_locked: true, lock_reason: 'Value from data source (PMS Actual)', scope_type: 'data_source_mapping' };
+          }
+          if (mapping.actual_source === 'odoo_services_done') {
+            return { is_locked: true, lock_reason: 'Value from data source (Odoo Services Done)', scope_type: 'data_source_mapping' };
+          }
+          if (mapping.actual_source === 'odoo_services_created') {
+            return { is_locked: true, lock_reason: 'Value from data source (Odoo Services Created)', scope_type: 'data_source_mapping' };
+          }
+        }
+      }
+    }
+
     return { is_locked: false };
   } catch (error) {
     logger.error('Error checking lock status', error);

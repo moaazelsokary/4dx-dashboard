@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { getMonthlyData, createOrUpdateMonthlyData, getDepartmentObjectives } from '@/services/wigService';
+import { getMapping } from '@/services/configService';
 import { useBatchLockStatus } from '@/hooks/useLockStatus';
 import { createLockCheckRequest } from '@/services/lockService';
 import { toast } from '@/hooks/use-toast';
 import { isAuthenticated } from '@/services/authService';
 import type { MonthlyData } from '@/types/wig';
-import { Calendar, Loader2, Lock as LockIcon, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Calendar, Loader2, Lock as LockIcon, CheckCircle2, XCircle, AlertCircle, Database, Cloud } from 'lucide-react';
 import { format, parse, addMonths, startOfMonth } from 'date-fns';
 import { getUserFriendlyError } from '@/utils/errorMessages';
 
@@ -47,6 +50,14 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   ]);
 
   const { getLockStatus, isLoading: locksLoading } = useBatchLockStatus(lockChecks, open && !!objectiveType);
+
+  // Fetch data source mapping for this objective (for source badges: PMS / Odoo)
+  const { data: mapping } = useQuery({
+    queryKey: ['mapping', departmentObjectiveId],
+    queryFn: () => getMapping(departmentObjectiveId),
+    enabled: open,
+    staleTime: 0,
+  });
 
   // Load department objective to check type
   useEffect(() => {
@@ -620,14 +631,18 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                   const isTargetLocked = targetLockInfo.is_locked;
                   const isActualLocked = actualLockInfo.is_locked;
 
+                  const targetFromPms = mapping?.target_source === 'pms_target';
+                  const actualFromPms = mapping?.actual_source === 'pms_actual';
+                  const actualFromOdoo = mapping?.actual_source === 'odoo_services_done' || mapping?.actual_source === 'odoo_services_created';
+
                   return (
                     <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
                       <div className="font-medium">{monthLabel}</div>
-                      <div className="relative">
+                      <div className="relative flex items-center gap-2">
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="relative">
+                              <div className="relative flex-1 min-w-0">
                                 <Input
                                   type="number"
                                   id={`target-${month}`}
@@ -653,12 +668,18 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                             )}
                           </Tooltip>
                         </TooltipProvider>
+                        {targetFromPms && (
+                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-normal">
+                            <Database className="h-3 w-3" />
+                            PMS
+                          </Badge>
+                        )}
                       </div>
-                      <div className="relative">
+                      <div className="relative flex items-center gap-2">
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="relative">
+                              <div className="relative flex-1 min-w-0">
                                 <Input
                                   type="number"
                                   id={`actual-${month}`}
@@ -684,6 +705,18 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                             )}
                           </Tooltip>
                         </TooltipProvider>
+                        {actualFromPms && (
+                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-normal">
+                            <Database className="h-3 w-3" />
+                            PMS
+                          </Badge>
+                        )}
+                        {actualFromOdoo && (
+                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-normal">
+                            <Cloud className="h-3 w-3" />
+                            Odoo
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-right text-sm text-muted-foreground flex items-center justify-end gap-2">
                         {variance !== null ? (variance >= 0 ? '+' : '') + variance.toFixed(2) : '-'}
