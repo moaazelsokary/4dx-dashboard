@@ -83,11 +83,13 @@ function cacheData(data: MetricsData): void {
 // Fetch metrics from API
 async function fetchMetricsFromAPI(): Promise<MetricsData> {
   const url = `${API_BASE_URL}?_t=${Date.now()}`;
+  const authHeaders = getAuthHeader();
   
   const response = await fetch(url, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
     },
   });
 
@@ -191,9 +193,11 @@ export function getDistinctProjectsAndMetrics(data: MetricsData): {
   pmsMetrics: string[];
   odooProjects: string[];
 } {
-  const pmsProjects = [...new Set(data.pms.map(m => m.ProjectName))].sort();
-  const pmsMetrics = [...new Set(data.pms.map(m => m.MetricName).filter(Boolean))].sort();
-  const odooProjects = [...new Set(data.odoo.map(m => m.Project))].sort();
+  const pms = data?.pms ?? [];
+  const odoo = data?.odoo ?? [];
+  const pmsProjects = [...new Set(pms.map(m => m.ProjectName).filter(Boolean))].sort();
+  const pmsMetrics = [...new Set(pms.map(m => m.MetricName).filter(Boolean))].sort();
+  const odooProjects = [...new Set(odoo.map(m => m.Project).filter(Boolean))].sort();
   
   return {
     pmsProjects,
