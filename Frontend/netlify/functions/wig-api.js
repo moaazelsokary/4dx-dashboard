@@ -2192,52 +2192,18 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     `);
 
     if (updateByDeptObjResult.rowsAffected[0] === 0) {
-      // No record found with this department_objective_id and month
-      // Check if a record exists with same kpi, department_id, and month (unique constraint)
-      const checkRequest = pool.request();
-      checkRequest.input('kpi', sql.NVarChar, kpi);
-      checkRequest.input('department_id', sql.Int, department_id);
-      checkRequest.input('month', sql.Date, body.month);
-      
-      const existingRecord = await checkRequest.query(`
-        SELECT id, department_objective_id 
-        FROM department_monthly_data 
-        WHERE kpi = @kpi AND department_id = @department_id AND month = @month
+      // No row for this department_objective_id + month: insert a new row (do not reassign rows from other objectives)
+      const insertRequest = pool.request();
+      insertRequest.input('kpi', sql.NVarChar, kpi);
+      insertRequest.input('department_id', sql.Int, department_id);
+      insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
+      insertRequest.input('month', sql.Date, body.month);
+      insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
+      insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
+      await insertRequest.query(`
+        INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
+        VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
       `);
-
-      if (existingRecord.recordset.length > 0) {
-        // Update existing record to use this department_objective_id
-        const updateExistingRequest = pool.request();
-        updateExistingRequest.input('kpi', sql.NVarChar, kpi);
-        updateExistingRequest.input('department_id', sql.Int, department_id);
-        updateExistingRequest.input('department_objective_id', sql.Int, body.department_objective_id);
-        updateExistingRequest.input('month', sql.Date, body.month);
-        updateExistingRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
-        updateExistingRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
-        
-        await updateExistingRequest.query(`
-          UPDATE department_monthly_data
-          SET target_value = @target_value,
-              actual_value = @actual_value,
-              department_objective_id = @department_objective_id,
-              updated_at = GETDATE()
-          WHERE kpi = @kpi AND department_id = @department_id AND month = @month
-        `);
-      } else {
-        // No existing record, safe to insert
-        const insertRequest = pool.request();
-        insertRequest.input('kpi', sql.NVarChar, kpi);
-        insertRequest.input('department_id', sql.Int, department_id);
-        insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
-        insertRequest.input('month', sql.Date, body.month);
-        insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
-        insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
-        
-        await insertRequest.query(`
-          INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
-          VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
-        `);
-      }
     }
 
     // Select the updated/inserted record using department_objective_id
@@ -2250,29 +2216,12 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     `);
 
     if (selectResult.recordset.length === 0) {
-      // If not found by department_objective_id, try by kpi and department_id
-      const fallbackRequest = pool.request();
-      fallbackRequest.input('kpi', sql.NVarChar, kpi);
-      fallbackRequest.input('department_id', sql.Int, department_id);
-      fallbackRequest.input('month', sql.Date, body.month);
-      const fallbackResult = await fallbackRequest.query(`
-        SELECT * FROM department_monthly_data 
-        WHERE kpi = @kpi AND department_id = @department_id AND month = @month
-      `);
-      
-      if (fallbackResult.recordset.length === 0) {
-        console.error('[createOrUpdateMonthlyData] Failed to retrieve saved monthly data');
-        console.error('[createOrUpdateMonthlyData] Searched by:', {
-          department_objective_id: body.department_objective_id,
-          month: body.month,
-          kpi,
-          department_id
-        });
-        throw new Error('Failed to retrieve saved monthly data');
-      }
-      
-      console.log('[createOrUpdateMonthlyData] Found record via fallback query');
-      return fallbackResult.recordset[0];
+      console.error('[createOrUpdateMonthlyData] Failed to retrieve saved monthly data after save');
+      console.error('[createOrUpdateMonthlyData] Searched by department_objective_id + month:', {
+        department_objective_id: body.department_objective_id,
+        month: body.month
+      });
+      throw new Error('Failed to retrieve saved monthly data');
     }
 
     console.log('[createOrUpdateMonthlyData] Successfully saved and retrieved:', {
