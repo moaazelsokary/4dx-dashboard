@@ -2177,16 +2177,20 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     const department_name = deptNameResult.recordset.length > 0 ? deptNameResult.recordset[0].name : null;
 
     const request = pool.request();
+    request.input('kpi', sql.NVarChar, kpi);
+    request.input('department_id', sql.Int, department_id);
     request.input('department_objective_id', sql.Int, body.department_objective_id);
     request.input('month', sql.Date, monthDate);
     request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-    // First try to update by department_objective_id + month (table has only these columns in init.sql)
+    // First try to update by department_objective_id + month
     const updateByDeptObjResult = await request.query(`
       UPDATE department_monthly_data
       SET target_value = @target_value,
           actual_value = @actual_value,
+          kpi = @kpi,
+          department_id = @department_id,
           updated_at = GETDATE()
       WHERE department_objective_id = @department_objective_id AND month = @month
     `);
@@ -2194,13 +2198,15 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     if (updateByDeptObjResult.rowsAffected[0] === 0) {
       // No row for this department_objective_id + month: insert a new row (do not reassign rows from other objectives)
       const insertRequest = pool.request();
+      insertRequest.input('kpi', sql.NVarChar, kpi);
+      insertRequest.input('department_id', sql.Int, department_id);
       insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
       insertRequest.input('month', sql.Date, monthDate);
       insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
       insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
       await insertRequest.query(`
-        INSERT INTO department_monthly_data (department_objective_id, month, target_value, actual_value)
-        VALUES (@department_objective_id, @month, @target_value, @actual_value)
+        INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
+        VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
       `);
     }
 
