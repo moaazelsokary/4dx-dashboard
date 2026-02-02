@@ -2282,6 +2282,14 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     console.error('[createOrUpdateMonthlyData] Error:', error.message);
     console.error('[createOrUpdateMonthlyData] Body:', JSON.stringify(body));
     console.error('[createOrUpdateMonthlyData] Error stack:', error.stack);
+    // Tell user to run migration when DB still has old (kpi, department_id, month) unique constraint
+    if (error.message && error.message.includes('UQ_department_monthly_data_kpi_dept_month')) {
+      throw new Error(
+        'Database uses old unique constraint (one row per KPI+department+month). ' +
+        'Run migration: Frontend/database/migrate-monthly-data-to-objective-id.sql ' +
+        'to allow one row per objective per month. See plan: monthly_data_save_by_objective_7a1392dc.'
+      );
+    }
     throw error;
   }
 }
