@@ -301,6 +301,7 @@ export default function DataSourceMappingList() {
         return next;
       });
       queryClient.invalidateQueries({ queryKey: ['objective-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['mapping', objectiveId] });
       queryClient.refetchQueries({ queryKey: ['objective-mappings'] });
       toast({
         title: 'Success',

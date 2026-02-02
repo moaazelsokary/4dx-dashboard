@@ -54,9 +54,16 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
   // Fetch data source mapping for this objective (for source badges: PMS / Odoo)
   const { data: mapping } = useQuery({
     queryKey: ['mapping', departmentObjectiveId],
-    queryFn: () => getMapping(departmentObjectiveId),
+    queryFn: async () => {
+      try {
+        return await getMapping(departmentObjectiveId);
+      } catch {
+        return null;
+      }
+    },
     enabled: open,
     staleTime: 0,
+    retry: false,
   });
 
   // Load department objective to check type

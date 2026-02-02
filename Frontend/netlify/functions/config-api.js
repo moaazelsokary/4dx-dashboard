@@ -959,8 +959,10 @@ const handler = rateLimiter('general')(
         userId: user.id
       });
       
+      // GET /mappings/:id is allowed for any authenticated user (so Monthly Data Editor can show source badges)
+      const isGetSingleMapping = resource === 'mappings' && method === 'GET' && id;
       // All other endpoints require Admin or CEO role
-      if (!isLockCheckEndpoint && !isHelperEndpoint) {
+      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping) {
         const isAdmin = user.role === 'Admin' || user.role === 'CEO';
         if (!isAdmin) {
           logger.warn(`[Config API] Access denied:`, {
