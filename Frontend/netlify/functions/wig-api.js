@@ -2129,6 +2129,11 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     if (!body.department_objective_id || !body.month) {
       throw new Error('Missing required fields: department_objective_id or month');
     }
+    // Normalize month to YYYY-MM-DD for SQL Server DATE (frontend may send "2026-01")
+    const monthStr = String(body.month).trim();
+    const monthDate = monthStr.length === 7 && /^\d{4}-\d{2}$/.test(monthStr)
+      ? `${monthStr}-01`
+      : monthStr;
 
     // First, get the kpi and department_id from department_objectives
     const deptObjRequest = pool.request();
@@ -2154,7 +2159,7 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     // Get old values before updating (for logging)
     const oldValueRequest = pool.request();
     oldValueRequest.input('department_objective_id', sql.Int, body.department_objective_id);
-    oldValueRequest.input('month', sql.Date, body.month);
+    oldValueRequest.input('month', sql.Date, monthDate);
     const oldValueResult = await oldValueRequest.query(`
       SELECT target_value, actual_value 
       FROM department_monthly_data 
@@ -2172,21 +2177,16 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     const department_name = deptNameResult.recordset.length > 0 ? deptNameResult.recordset[0].name : null;
 
     const request = pool.request();
-    request.input('kpi', sql.NVarChar, kpi);
-    request.input('department_id', sql.Int, department_id);
     request.input('department_objective_id', sql.Int, body.department_objective_id);
-    request.input('month', sql.Date, body.month);
+    request.input('month', sql.Date, monthDate);
     request.input('target_value', sql.Decimal(18, 2), body.target_value || null);
     request.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
 
-    // Use MERGE to handle both update and insert, and handle unique constraint
-    // First try to update by department_objective_id
+    // First try to update by department_objective_id + month (table has only these columns in init.sql)
     const updateByDeptObjResult = await request.query(`
       UPDATE department_monthly_data
       SET target_value = @target_value,
           actual_value = @actual_value,
-          kpi = @kpi,
-          department_id = @department_id,
           updated_at = GETDATE()
       WHERE department_objective_id = @department_objective_id AND month = @month
     `);
@@ -2194,22 +2194,20 @@ async function createOrUpdateMonthlyData(pool, body, event = null) {
     if (updateByDeptObjResult.rowsAffected[0] === 0) {
       // No row for this department_objective_id + month: insert a new row (do not reassign rows from other objectives)
       const insertRequest = pool.request();
-      insertRequest.input('kpi', sql.NVarChar, kpi);
-      insertRequest.input('department_id', sql.Int, department_id);
       insertRequest.input('department_objective_id', sql.Int, body.department_objective_id);
-      insertRequest.input('month', sql.Date, body.month);
+      insertRequest.input('month', sql.Date, monthDate);
       insertRequest.input('target_value', sql.Decimal(18, 2), body.target_value || null);
       insertRequest.input('actual_value', sql.Decimal(18, 2), body.actual_value || null);
       await insertRequest.query(`
-        INSERT INTO department_monthly_data (kpi, department_id, department_objective_id, month, target_value, actual_value)
-        VALUES (@kpi, @department_id, @department_objective_id, @month, @target_value, @actual_value)
+        INSERT INTO department_monthly_data (department_objective_id, month, target_value, actual_value)
+        VALUES (@department_objective_id, @month, @target_value, @actual_value)
       `);
     }
 
     // Select the updated/inserted record using department_objective_id
     const selectRequest = pool.request();
     selectRequest.input('department_objective_id', sql.Int, body.department_objective_id);
-    selectRequest.input('month', sql.Date, body.month);
+    selectRequest.input('month', sql.Date, monthDate);
     const selectResult = await selectRequest.query(`
       SELECT * FROM department_monthly_data 
       WHERE department_objective_id = @department_objective_id AND month = @month
