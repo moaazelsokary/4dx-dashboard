@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { getMonthlyData, createOrUpdateMonthlyData, getDepartmentObjectives } from '@/services/wigService';
 import { getMapping } from '@/services/configService';
 import { useBatchLockStatus } from '@/hooks/useLockStatus';
@@ -609,8 +608,30 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
               <div className="space-y-4">
                 <div className="grid grid-cols-4 gap-4 p-2 font-medium border-b sticky top-0 bg-background z-10">
                   <div>Month</div>
-                  <div className="text-right">Target</div>
-                  <div className="text-right">Actual</div>
+                  <div className="flex items-center justify-end gap-2">
+                    <span>Target</span>
+                    {(mapping?.target_source === 'pms_target') && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200">
+                        <Database className="h-3 w-3" aria-hidden />
+                        PMS
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <span>Actual</span>
+                    {(mapping?.actual_source === 'pms_actual') && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200">
+                        <Database className="h-3 w-3" aria-hidden />
+                        PMS
+                      </span>
+                    )}
+                    {(mapping?.actual_source === 'odoo_services_done' || mapping?.actual_source === 'odoo_services_created') && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+                        <Cloud className="h-3 w-3" aria-hidden />
+                        Odoo
+                      </span>
+                    )}
+                  </div>
                   <div className="text-right">Variance</div>
                 </div>
                 
@@ -638,9 +659,9 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                   const isTargetLocked = targetLockInfo.is_locked;
                   const isActualLocked = actualLockInfo.is_locked;
 
-                  const targetFromPms = mapping?.target_source === 'pms_target';
-                  const actualFromPms = mapping?.actual_source === 'pms_actual';
-                  const actualFromOdoo = mapping?.actual_source === 'odoo_services_done' || mapping?.actual_source === 'odoo_services_created';
+                  const targetFromPms = mapping?.target_source === 'pms_target' || (isTargetLocked && targetLockInfo.lock_reason?.includes('PMS Target'));
+                  const actualFromPms = mapping?.actual_source === 'pms_actual' || (isActualLocked && actualLockInfo.lock_reason?.includes('PMS Actual'));
+                  const actualFromOdoo = (mapping?.actual_source === 'odoo_services_done' || mapping?.actual_source === 'odoo_services_created') || (isActualLocked && actualLockInfo.lock_reason?.toLowerCase().includes('odoo'));
 
                   return (
                     <div key={month} className="grid grid-cols-4 gap-4 p-2 border-b">
@@ -676,10 +697,10 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                           </Tooltip>
                         </TooltipProvider>
                         {targetFromPms && (
-                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-normal">
-                            <Database className="h-3 w-3" />
-                            PMS
-                          </Badge>
+                          <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border border-blue-200 dark:border-blue-700">
+                            <Database className="h-3.5 w-3.5" aria-hidden />
+                            <span>PMS</span>
+                          </span>
                         )}
                       </div>
                       <div className="relative flex items-center gap-2">
@@ -713,16 +734,16 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
                           </Tooltip>
                         </TooltipProvider>
                         {actualFromPms && (
-                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-normal">
-                            <Database className="h-3 w-3" />
-                            PMS
-                          </Badge>
+                          <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border border-blue-200 dark:border-blue-700">
+                            <Database className="h-3.5 w-3.5" aria-hidden />
+                            <span>PMS</span>
+                          </span>
                         )}
                         {actualFromOdoo && (
-                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-normal">
-                            <Cloud className="h-3 w-3" />
-                            Odoo
-                          </Badge>
+                          <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-700">
+                            <Cloud className="h-3.5 w-3.5" aria-hidden />
+                            <span>Odoo</span>
+                          </span>
                         )}
                       </div>
                       <div className="text-right text-sm text-muted-foreground flex items-center justify-end gap-2">
