@@ -145,7 +145,7 @@ export default function KPISelector({
             />
           </div>
         </div>
-        <div className="flex-1 overflow-auto" style={{ minHeight: 0, maxHeight: '300px' }}>
+        <ScrollArea className="flex-1" style={{ minHeight: 0, maxHeight: '300px' }}>
           <div className="space-y-1 p-2">
               {filteredKPIs.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
@@ -170,7 +170,7 @@ export default function KPISelector({
                 })
               )}
             </div>
-        </div>
+        </ScrollArea>
         <div className="p-2 border-t flex-shrink-0 bg-background">
           {selectedKPIs.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2 max-h-20 overflow-y-auto">
