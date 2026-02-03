@@ -89,16 +89,24 @@ const SelectContent = React.forwardRef<
             "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
         )}
         style={{
-          // Enable smooth scrolling and ensure pointer events work
           pointerEvents: 'auto',
           overflowY: 'auto',
           maxHeight: 'var(--radix-select-content-available-height, 300px)',
-          // Ensure wheel scrolling works
           WebkitOverflowScrolling: 'touch'
         }}
-        onWheel={(e) => {
-          // Allow natural scrolling - don't prevent default
-          // The viewport will handle scrolling naturally
+        onWheelCapture={(e) => {
+          const el = e.currentTarget
+          const { scrollTop, scrollHeight, clientHeight } = el
+          const maxScroll = scrollHeight - clientHeight
+          if (e.deltaY > 0 && scrollTop < maxScroll) {
+            el.scrollTop = Math.min(scrollTop + e.deltaY, maxScroll)
+            e.preventDefault()
+            e.stopPropagation()
+          } else if (e.deltaY < 0 && scrollTop > 0) {
+            el.scrollTop = Math.max(scrollTop + e.deltaY, 0)
+            e.preventDefault()
+            e.stopPropagation()
+          }
         }}
       >
         {children}

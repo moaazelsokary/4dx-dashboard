@@ -13,31 +13,24 @@ const ScrollArea = React.forwardRef<
     const viewport = viewportRef.current;
     if (!viewport) return;
 
-    // Handle wheel events to ensure scrolling works
+    // Handle wheel in capture phase so we run before Radix/document handlers that block scroll
     const handleWheel = (e: WheelEvent) => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
       const maxScroll = scrollHeight - clientHeight;
-      
-      // If we can scroll in the direction of the wheel, do it
+
       if (e.deltaY > 0 && scrollTop < maxScroll) {
-        // Scrolling down and not at bottom
         viewport.scrollTop = Math.min(scrollTop + e.deltaY, maxScroll);
         e.preventDefault();
         e.stopPropagation();
       } else if (e.deltaY < 0 && scrollTop > 0) {
-        // Scrolling up and not at top
         viewport.scrollTop = Math.max(scrollTop + e.deltaY, 0);
         e.preventDefault();
         e.stopPropagation();
       }
-      // If at boundaries, let the event bubble (don't prevent default)
     };
 
-    viewport.addEventListener('wheel', handleWheel, { passive: false });
-    
-    return () => {
-      viewport.removeEventListener('wheel', handleWheel);
-    };
+    viewport.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    return () => viewport.removeEventListener('wheel', handleWheel, { capture: true });
   }, []);
 
   return (
