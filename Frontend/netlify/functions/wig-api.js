@@ -1053,30 +1053,7 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
     const newKpi = body.kpi;
     const newType = body.type !== undefined ? body.type : currentType;
 
-    // Only validate RASCI if KPI is actually being changed - handle multiple KPIs separated by ||
-    // Skip RASCI validation for M&E type objectives
-    // For multi-KPI objectives: require at least one KPI in the list to have RASCI (not every single one)
-    if (newKpi !== undefined && newKpi !== currentKpi && newType !== 'M&E') {
-      const kpiDelimiter = '||';
-      const kpiList = newKpi.includes(kpiDelimiter) 
-        ? newKpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
-        : [newKpi];
-      
-      let atLeastOneHasRasci = false;
-      for (const kpi of kpiList) {
-        const rasciCheck = pool.request();
-        rasciCheck.input('kpi', sql.NVarChar, kpi);
-        const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
-        if (rasciResult.recordset[0].count > 0) {
-          atLeastOneHasRasci = true;
-          break;
-        }
-      }
-      if (!atLeastOneHasRasci) {
-        const firstKpi = kpiList[0];
-        throw new Error(`KPI "${firstKpi}" must have at least one RASCI assignment`);
-      }
-    }
+    // RASCI is not validated on update: users can change to a single KPI (or merge/split KPIs) and add RASCI later.
 
     // Auto-link to main objective if:
     // 1. main_objective_id is not explicitly set in body (or set to null)
