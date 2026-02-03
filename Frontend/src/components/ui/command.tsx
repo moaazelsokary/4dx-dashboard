@@ -61,6 +61,20 @@ const CommandList = React.forwardRef<
   <CommandPrimitive.List
     ref={ref}
     className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
+    onWheelCapture={(e: React.WheelEvent) => {
+      const el = e.currentTarget
+      const { scrollTop, scrollHeight, clientHeight } = el
+      const maxScroll = scrollHeight - clientHeight
+      if (e.deltaY > 0 && scrollTop < maxScroll) {
+        el.scrollTop = Math.min(scrollTop + e.deltaY, maxScroll)
+        e.preventDefault();
+        e.stopPropagation()
+      } else if (e.deltaY < 0 && scrollTop > 0) {
+        el.scrollTop = Math.max(scrollTop + e.deltaY, 0)
+        e.preventDefault();
+        e.stopPropagation()
+      }
+    }}
     {...props}
   />
 ))
