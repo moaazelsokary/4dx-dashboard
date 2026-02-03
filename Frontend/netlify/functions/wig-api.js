@@ -922,18 +922,25 @@ async function createDepartmentObjective(pool, body) {
       }
     }
 
+  // type column is NVARCHAR(50) - store first type only when multiple (e.g. "In direct||In direct||..." -> "In direct")
+  let typeForDb = body.type;
+  if (typeForDb && typeof typeForDb === 'string' && typeForDb.includes('||')) {
+    const first = typeForDb.split('||').map(t => t.trim()).filter(Boolean)[0];
+    if (first) typeForDb = first;
+  }
+
   const request = pool.request();
   request.input('main_objective_id', sql.Int, mainObjectiveId);
   request.input('department_id', sql.Int, body.department_id);
   request.input('kpi', sql.NVarChar, body.kpi);
   request.input('activity', sql.NVarChar, body.activity);
-  request.input('type', sql.NVarChar, body.type);
+  request.input('type', sql.NVarChar, typeForDb);
   request.input('activity_target', sql.Decimal(18, 2), body.activity_target);
   request.input('responsible_person', sql.NVarChar, body.responsible_person);
   request.input('mov', sql.NVarChar, body.mov);
 
-  // Only include M&E fields if type is M&E or M&E MOV and columns exist
-  const isME = body.type === 'M&E' || body.type === 'M&E MOV';
+  // Only include M&E fields if type is M&E or M&E MOV and columns exist (use normalized type)
+  const isME = typeForDb === 'M&E' || typeForDb === 'M&E MOV';
   let meFields = '';
   let meValues = '';
   let meInputs = '';
@@ -1085,6 +1092,12 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
           console.log(`[updateDepartmentObjective] Auto-linked KPI "${kpiToCheck}" to main_objective_id: ${body.main_objective_id}`);
         }
       }
+    }
+
+    // type column is NVARCHAR(50) - store first type only when multiple (e.g. "In direct||In direct||..." -> "In direct")
+    if (body.type !== undefined && typeof body.type === 'string' && body.type.includes('||')) {
+      const first = body.type.split('||').map(t => t.trim()).filter(Boolean)[0];
+      if (first) body.type = first;
     }
 
     const request = pool.request();
