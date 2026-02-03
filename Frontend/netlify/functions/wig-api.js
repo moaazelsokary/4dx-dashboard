@@ -889,21 +889,26 @@ async function createDepartmentObjective(pool, body) {
   // This requires the user context which may not always be available
   
   // Skip RASCI validation for M&E type objectives (including M&E MOV)
+  // For multi-KPI objectives: require at least one KPI in the list to have RASCI (not every single one)
   if (body.type !== 'M&E' && body.type !== 'M&E MOV') {
-    // Validate KPI(s) have RASCI - handle multiple KPIs separated by ||
     const kpiDelimiter = '||';
     const kpiList = body.kpi.includes(kpiDelimiter) 
       ? body.kpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
       : [body.kpi];
     
+    let atLeastOneHasRasci = false;
     for (const kpi of kpiList) {
       const rasciCheck = pool.request();
       rasciCheck.input('kpi', sql.NVarChar, kpi);
       const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
-      
-      if (rasciResult.recordset[0].count === 0) {
-        throw new Error(`KPI "${kpi}" must have at least one RASCI assignment`);
+      if (rasciResult.recordset[0].count > 0) {
+        atLeastOneHasRasci = true;
+        break;
       }
+    }
+    if (!atLeastOneHasRasci) {
+      const firstKpi = kpiList[0];
+      throw new Error(`KPI "${firstKpi}" must have at least one RASCI assignment`);
     }
   }
 
@@ -1043,20 +1048,26 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
 
     // Only validate RASCI if KPI is actually being changed - handle multiple KPIs separated by ||
     // Skip RASCI validation for M&E type objectives
+    // For multi-KPI objectives: require at least one KPI in the list to have RASCI (not every single one)
     if (newKpi !== undefined && newKpi !== currentKpi && newType !== 'M&E') {
       const kpiDelimiter = '||';
       const kpiList = newKpi.includes(kpiDelimiter) 
         ? newKpi.split(kpiDelimiter).map(k => k.trim()).filter(k => k)
         : [newKpi];
       
+      let atLeastOneHasRasci = false;
       for (const kpi of kpiList) {
         const rasciCheck = pool.request();
         rasciCheck.input('kpi', sql.NVarChar, kpi);
         const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
-        
-        if (rasciResult.recordset[0].count === 0) {
-          throw new Error(`KPI "${kpi}" must have at least one RASCI assignment`);
+        if (rasciResult.recordset[0].count > 0) {
+          atLeastOneHasRasci = true;
+          break;
         }
+      }
+      if (!atLeastOneHasRasci) {
+        const firstKpi = kpiList[0];
+        throw new Error(`KPI "${firstKpi}" must have at least one RASCI assignment`);
       }
     }
 
