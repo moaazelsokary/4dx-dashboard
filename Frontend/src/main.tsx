@@ -5,9 +5,13 @@ import { getCsrfToken } from './utils/csrf'
 import { initSentry } from './utils/sentry'
 import { initVersionCheck } from './utils/versionCheck'
 import { registerServiceWorker } from './utils/serviceWorker'
+import { installScrollWheelCapture } from './lib/scrollWheelCapture'
 
 // Initialize CSRF token on app load
 getCsrfToken();
+
+// Ensure wheel/trackpad scroll works in dropdowns and filters (runs before any other listener)
+installScrollWheelCapture();
 
 // Initialize Sentry error tracking (optional)
 initSentry().catch(console.error);
