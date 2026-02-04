@@ -11,8 +11,13 @@ function findScrollable(el: HTMLElement | null): HTMLElement | null {
     const overflowX = style.overflowX;
     const canScrollY = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
     const canScrollX = overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay';
-    if (canScrollY && el.scrollHeight > el.clientHeight) return el;
-    if (canScrollX && el.scrollWidth > el.clientWidth) return el;
+    // Radix Scroll Area viewport can have overflowY: hidden until scrollbar is enabled
+    const isRadixViewport = el.hasAttribute?.('data-radix-scroll-area-viewport');
+    const hasOverflowY = el.scrollHeight > el.clientHeight;
+    const hasOverflowX = el.scrollWidth > el.clientWidth;
+    if (canScrollY && hasOverflowY) return el;
+    if (canScrollX && hasOverflowX) return el;
+    if (isRadixViewport && hasOverflowY) return el;
     el = el.parentElement;
   }
   return null;
@@ -24,9 +29,11 @@ function isPageScrollRoot(el: HTMLElement): boolean {
 
 export function installScrollWheelCapture(): () => void {
   const handler = (e: WheelEvent) => {
-    const target = e.target as Node;
-    if (!target || !document.body.contains(target)) return;
-    const scrollable = findScrollable(e.target as HTMLElement);
+    // Use pointer position so we find the list under the cursor (e.g. in a portaled
+    // popover), not the focused element (e.g. the filter button) which e.target can be.
+    const elementUnderPointer = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    if (!elementUnderPointer || !document.body.contains(elementUnderPointer)) return;
+    const scrollable = findScrollable(elementUnderPointer);
     if (!scrollable || isPageScrollRoot(scrollable)) return;
 
     const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = scrollable;
