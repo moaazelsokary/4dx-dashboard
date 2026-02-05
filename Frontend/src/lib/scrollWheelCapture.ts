@@ -18,8 +18,9 @@ function findScrollable(el: HTMLElement | null): HTMLElement | null {
     const hasOverflowX = el.scrollWidth > el.clientWidth;
     if (canScrollY && hasOverflowY) return el;
     if (canScrollX && hasOverflowX) return el;
-    // Radix Scroll Area viewport can have overflowY: hidden until scrollbar is enabled
-    if (el.hasAttribute?.('data-radix-scroll-area-viewport') && hasOverflowY) return el;
+    // Radix Scroll Area viewport: treat as scrollable even when overflow not yet reported
+    // (e.g. overflow: hidden, or scrollHeight === clientHeight due to layout/timing)
+    if (el.hasAttribute?.('data-radix-scroll-area-viewport')) return el;
     // Inside dropdown/popover, any overflowing element may be the list container
     if (hasOverflowY && el.closest?.(POPOVER_SELECTORS)) return el;
     el = el.parentElement;
@@ -43,6 +44,8 @@ export function installScrollWheelCapture(): () => void {
     for (let i = 0; i < atPoint.length; i++) {
       const el = atPoint[i] as HTMLElement;
       if (!el || !document.body.contains(el)) continue;
+      // Skip full-screen overlays so we scroll the content/dropdown under the cursor
+      if (el.hasAttribute?.('data-skip-wheel-overlay')) continue;
       scrollable = findScrollable(el);
       if (scrollable && !isPageScrollRoot(scrollable)) break;
     }
