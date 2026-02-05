@@ -1,8 +1,9 @@
 /**
  * Ensures mouse wheel / trackpad scroll works inside dropdowns, filters, and any
- * overflow:auto/scroll container. Radix and other libs often block wheel at document
- * level; we run in capture phase so we handle the event first and scroll the
- * innermost scrollable element under the pointer.
+ * overflow:auto/scroll container. We run in capture phase so we handle the event
+ * before scroll-lock or other listeners. Uses pointer position (elementFromPoint)
+ * so we scroll the list under the cursor even when the event target is the focused
+ * trigger (e.g. filter button) and the list is in a portal.
  */
 function findScrollable(el: HTMLElement | null): HTMLElement | null {
   while (el && el !== document.body) {
@@ -29,11 +30,13 @@ function isPageScrollRoot(el: HTMLElement): boolean {
 
 export function installScrollWheelCapture(): () => void {
   const handler = (e: WheelEvent) => {
-    // Use pointer position so we find the list under the cursor (e.g. in a portaled
-    // popover), not the focused element (e.g. the filter button) which e.target can be.
-    const elementUnderPointer = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    if (!elementUnderPointer || !document.body.contains(elementUnderPointer)) return;
-    const scrollable = findScrollable(elementUnderPointer);
+    // Prefer element under pointer so we scroll the list in portaled dropdowns even
+    // when e.target is the focused trigger. Fallback to e.target for normal page scroll.
+    let el: HTMLElement | null = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    if (!el || !document.body.contains(el)) el = e.target as HTMLElement;
+    if (!el || !document.body.contains(el)) return;
+    let scrollable = findScrollable(el);
+    if (!scrollable && el !== (e.target as HTMLElement)) scrollable = findScrollable(e.target as HTMLElement);
     if (!scrollable || isPageScrollRoot(scrollable)) return;
 
     const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = scrollable;
