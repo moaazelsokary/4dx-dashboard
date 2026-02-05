@@ -5,8 +5,6 @@
  * so we scroll the list under the cursor even when the event target is the focused
  * trigger (e.g. filter button) and the list is in a portal.
  */
-const POPOVER_SELECTORS = '[data-dropdown-content], [data-radix-popper-content-wrapper], [data-radix-select-content], [role="listbox"], [role="menu"]';
-
 function findScrollable(el: HTMLElement | null): HTMLElement | null {
   while (el && el !== document.body) {
     const style = getComputedStyle(el);
@@ -21,8 +19,6 @@ function findScrollable(el: HTMLElement | null): HTMLElement | null {
     // Radix Scroll Area viewport: treat as scrollable even when overflow not yet reported
     // (e.g. overflow: hidden, or scrollHeight === clientHeight due to layout/timing)
     if (el.hasAttribute?.('data-radix-scroll-area-viewport')) return el;
-    // Inside dropdown/popover, any overflowing element may be the list container
-    if (hasOverflowY && el.closest?.(POPOVER_SELECTORS)) return el;
     el = el.parentElement;
   }
   return null;
