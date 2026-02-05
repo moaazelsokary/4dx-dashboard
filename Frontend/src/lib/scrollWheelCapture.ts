@@ -36,17 +36,28 @@ export function installScrollWheelCapture(): () => void {
       typeof document.elementsFromPoint === 'function'
         ? document.elementsFromPoint(e.clientX, e.clientY)
         : [document.elementFromPoint(e.clientX, e.clientY)].filter(Boolean);
-    let scrollable: HTMLElement | null = null;
+    // When multiple scrollables are under the cursor (e.g. dialog + dropdown list in a modal),
+    // prefer the one inside dropdown/select/listbox so we scroll the list, not the dialog.
+    const DROPDOWN_ANCESTOR = '[data-dropdown-content], [data-radix-select-content], [data-radix-popper-content-wrapper], [role="listbox"], [role="menu"]';
+    const candidates: HTMLElement[] = [];
     for (let i = 0; i < atPoint.length; i++) {
       const el = atPoint[i] as HTMLElement;
       if (!el || !document.body.contains(el)) continue;
-      // Skip full-screen overlays so we scroll the content/dropdown under the cursor
       if (el.hasAttribute?.('data-skip-wheel-overlay')) continue;
-      scrollable = findScrollable(el);
-      if (scrollable && !isPageScrollRoot(scrollable)) break;
+      const candidate = findScrollable(el);
+      if (!candidate || isPageScrollRoot(candidate)) continue;
+      if (!candidates.includes(candidate)) candidates.push(candidate);
+    }
+    let scrollable: HTMLElement | null = null;
+    const inDropdown = candidates.filter((c) => c.closest(DROPDOWN_ANCESTOR));
+    if (inDropdown.length > 0) {
+      scrollable = inDropdown[0];
+    } else if (candidates.length > 0) {
+      scrollable = candidates[0];
     }
     if (!scrollable && (e.target as Node) && document.body.contains(e.target as Node)) {
       scrollable = findScrollable(e.target as HTMLElement);
+      if (scrollable && isPageScrollRoot(scrollable)) scrollable = null;
     }
     if (!scrollable || isPageScrollRoot(scrollable)) return;
 
