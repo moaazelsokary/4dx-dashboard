@@ -5,6 +5,8 @@
  * so we scroll the list under the cursor even when the event target is the focused
  * trigger (e.g. filter button) and the list is in a portal.
  */
+const POPOVER_SELECTORS = '[data-dropdown-content], [data-radix-popper-content-wrapper], [data-radix-select-content], [role="listbox"], [role="menu"]';
+
 function findScrollable(el: HTMLElement | null): HTMLElement | null {
   while (el && el !== document.body) {
     const style = getComputedStyle(el);
@@ -12,13 +14,14 @@ function findScrollable(el: HTMLElement | null): HTMLElement | null {
     const overflowX = style.overflowX;
     const canScrollY = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
     const canScrollX = overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay';
-    // Radix Scroll Area viewport can have overflowY: hidden until scrollbar is enabled
-    const isRadixViewport = el.hasAttribute?.('data-radix-scroll-area-viewport');
     const hasOverflowY = el.scrollHeight > el.clientHeight;
     const hasOverflowX = el.scrollWidth > el.clientWidth;
     if (canScrollY && hasOverflowY) return el;
     if (canScrollX && hasOverflowX) return el;
-    if (isRadixViewport && hasOverflowY) return el;
+    // Radix Scroll Area viewport can have overflowY: hidden until scrollbar is enabled
+    if (el.hasAttribute?.('data-radix-scroll-area-viewport') && hasOverflowY) return el;
+    // Inside dropdown/popover, any overflowing element may be the list container
+    if (hasOverflowY && el.closest?.(POPOVER_SELECTORS)) return el;
     el = el.parentElement;
   }
   return null;
@@ -30,13 +33,22 @@ function isPageScrollRoot(el: HTMLElement): boolean {
 
 export function installScrollWheelCapture(): () => void {
   const handler = (e: WheelEvent) => {
-    // Prefer element under pointer so we scroll the list in portaled dropdowns even
-    // when e.target is the focused trigger. Fallback to e.target for normal page scroll.
-    let el: HTMLElement | null = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    if (!el || !document.body.contains(el)) el = e.target as HTMLElement;
-    if (!el || !document.body.contains(el)) return;
-    let scrollable = findScrollable(el);
-    if (!scrollable && el !== (e.target as HTMLElement)) scrollable = findScrollable(e.target as HTMLElement);
+    // Use elementsFromPoint so we find a scrollable even when the topmost element
+    // is an overlay or non-scrollable (e.g. dialog backdrop). Then fallback to e.target.
+    const atPoint =
+      typeof document.elementsFromPoint === 'function'
+        ? document.elementsFromPoint(e.clientX, e.clientY)
+        : [document.elementFromPoint(e.clientX, e.clientY)].filter(Boolean);
+    let scrollable: HTMLElement | null = null;
+    for (let i = 0; i < atPoint.length; i++) {
+      const el = atPoint[i] as HTMLElement;
+      if (!el || !document.body.contains(el)) continue;
+      scrollable = findScrollable(el);
+      if (scrollable && !isPageScrollRoot(scrollable)) break;
+    }
+    if (!scrollable && (e.target as Node) && document.body.contains(e.target as Node)) {
+      scrollable = findScrollable(e.target as HTMLElement);
+    }
     if (!scrollable || isPageScrollRoot(scrollable)) return;
 
     const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = scrollable;
