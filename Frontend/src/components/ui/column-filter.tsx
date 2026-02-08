@@ -215,14 +215,14 @@ export function ColumnFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="min-w-64 w-auto max-w-[90vw] max-h-[80vh] overflow-hidden flex flex-col p-0"
+        className="w-72 max-w-[min(280px,90vw)] p-0 rounded border bg-popover shadow-lg"
         align="start"
         side="bottom"
-        sideOffset={4}
-        collisionPadding={12}
+        sideOffset={2}
+        collisionPadding={8}
       >
-        <div className="p-3 space-y-2 flex flex-col min-h-0 flex-1 overflow-hidden">
-          <div className="flex items-center justify-between flex-shrink-0">
+        <div className="p-2 space-y-1">
+          <div className="flex items-center justify-between px-2 py-1">
             <span className="text-sm font-semibold">Filter by {columnLabel}</span>
             {hasFilter && (
               <Button
@@ -239,19 +239,19 @@ export function ColumnFilter({
 
           {listOnly ? (
             <>
-              <div className="px-2 flex-shrink-0">
+              <div className="px-2 pb-1">
                 <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
+                  <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
                   <Input
                     placeholder="Search..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-7 pl-7 text-xs"
+                    className="h-8 pl-8 text-xs"
                   />
                 </div>
               </div>
               {filteredValues.length > 0 && (
-                <div className="px-2 py-1 flex-shrink-0">
+                <div className="px-2">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -264,7 +264,7 @@ export function ColumnFilter({
               )}
               <Separator />
               <div
-                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+                className="overflow-y-auto overflow-x-hidden max-h-[240px] min-h-[80px] overscroll-contain"
                 data-dropdown-scroll
               >
                 <div className="p-2 space-y-2">
@@ -297,7 +297,7 @@ export function ColumnFilter({
                 </div>
               </div>
               <Separator />
-              <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
+              <div className="flex items-center justify-between px-2 py-2">
                 <div className="text-xs text-muted-foreground">
                   {tempSelections.length} of {uniqueValues.length} selected
                 </div>
@@ -334,20 +334,20 @@ export function ColumnFilter({
                   Condition
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="list" className="mt-2 space-y-2 flex flex-col min-h-0 flex-1 overflow-hidden">
-                <div className="px-2 flex-shrink-0">
+              <TabsContent value="list" className="mt-2 space-y-1">
+                <div className="px-2 pb-1">
                   <div className="relative">
-                    <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
+                    <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
                     <Input
                       placeholder="Search..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="h-7 pl-7 text-xs"
+                      className="h-8 pl-8 text-xs"
                     />
                   </div>
                 </div>
                 {filteredValues.length > 0 && (
-                  <div className="px-2 py-1 flex-shrink-0">
+                  <div className="px-2">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -360,7 +360,7 @@ export function ColumnFilter({
                 )}
                 <Separator />
                 <div
-                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+                  className="overflow-y-auto overflow-x-hidden max-h-[240px] min-h-[80px] overscroll-contain"
                   data-dropdown-scroll
                 >
                   <div className="p-2 space-y-2">
@@ -393,7 +393,7 @@ export function ColumnFilter({
                   </div>
                 </div>
                 <Separator />
-                <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
+                <div className="flex items-center justify-between px-2 py-2">
                   <div className="text-xs text-muted-foreground">
                     {tempSelections.length} of {uniqueValues.length} selected
                   </div>
