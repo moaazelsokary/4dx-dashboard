@@ -76,6 +76,49 @@ function ArrowDown({ className = 'bg-emerald-500/60', arrowColor = 'text-emerald
 
 const pillarOrder = ['Strategic Themes', 'Contributors', 'Strategic Enablers'];
 
+function extractNumber(text: string, pattern: RegExp): string {
+  const match = text.match(pattern);
+  return match ? match[0] : '';
+}
+
+/** Sort targets by number (1.1, 1.2, 2.1, ...) */
+function sortTargets(targets: TargetGroup[]): TargetGroup[] {
+  return [...targets].sort((a, b) => {
+    const aNum = extractNumber(a.target, /^\d+(\.\d+)?/);
+    const bNum = extractNumber(b.target, /^\d+(\.\d+)?/);
+    if (!aNum && !bNum) return 0;
+    if (!aNum) return 1;
+    if (!bNum) return -1;
+    const aParts = aNum.split('.').map(Number);
+    const bParts = bNum.split('.').map(Number);
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const av = aParts[i] ?? 0;
+      const bv = bParts[i] ?? 0;
+      if (av !== bv) return av - bv;
+    }
+    return 0;
+  });
+}
+
+/** Sort KPIs by number (1.1.1, 1.1.2, ...) */
+function sortKPIs(kpis: KPIGroup[]): KPIGroup[] {
+  return [...kpis].sort((a, b) => {
+    const aNum = extractNumber(a.kpi, /^\d+(\.\d+)*(\.\d+)?/);
+    const bNum = extractNumber(b.kpi, /^\d+(\.\d+)*(\.\d+)?/);
+    if (!aNum && !bNum) return 0;
+    if (!aNum) return 1;
+    if (!bNum) return -1;
+    const aParts = aNum.split('.').map(Number);
+    const bParts = bNum.split('.').map(Number);
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const av = aParts[i] ?? 0;
+      const bv = bParts[i] ?? 0;
+      if (av !== bv) return av - bv;
+    }
+    return 0;
+  });
+}
+
 /** Unique keys for expand state */
 function pillarKey(p: PillarGroup) {
   return `pillar-${p.pillar}`;
@@ -94,6 +137,7 @@ const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 1.5;
 const ZOOM_STEP = 0.12;
 const AUTO_ZOOM_OUT_FACTOR = 0.92;
+const AUTO_ZOOM_IN_FACTOR = 1 / AUTO_ZOOM_OUT_FACTOR;
 
 export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -109,6 +153,10 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
     setZoomLevel((z) => Math.max(MIN_ZOOM, z * AUTO_ZOOM_OUT_FACTOR));
   }, []);
 
+  const zoomInAuto = useCallback(() => {
+    setZoomLevel((z) => Math.min(MAX_ZOOM, z * AUTO_ZOOM_IN_FACTOR));
+  }, []);
+
   const toggle = useCallback(
     (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) => {
       setter((prev) => {
@@ -117,10 +165,11 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
         if (next.has(key)) next.delete(key);
         else next.add(key);
         if (isExpanding) setTimeout(zoomOutAuto, 0);
+        else setTimeout(zoomInAuto, 0);
         return next;
       });
     },
-    [zoomOutAuto]
+    [zoomOutAuto, zoomInAuto]
   );
 
   const loadBreakdown = useCallback(async (kpi: string) => {
@@ -147,10 +196,12 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
       if (!isExpanded) {
         loadBreakdown(kpi);
         setTimeout(zoomOutAuto, 0);
+      } else {
+        setTimeout(zoomInAuto, 0);
       }
       toggle(setExpandedKPIs, kpi);
     },
-    [expandedKPIs, loadBreakdown, toggle, zoomOutAuto]
+    [expandedKPIs, loadBreakdown, toggle, zoomOutAuto, zoomInAuto]
   );
 
   const sortedPillars = [...data.pillars].sort((a, b) => {
@@ -163,7 +214,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
   });
 
   return (
-    <div className="p-4 overflow-auto min-h-[400px] flex flex-col">
+    <div className="p-4 overflow-auto min-h-[400px] flex flex-col bg-gray-50 dark:bg-gray-900/20 rounded-lg border border-emerald-200/50 dark:border-emerald-800/30">
       {/* Zoom controls */}
       <div className="flex items-center gap-2 mb-4 shrink-0">
         <span className="text-xs text-muted-foreground mr-2">Zoom</span>
@@ -201,9 +252,9 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
         <span className="text-xs text-muted-foreground ml-2">{Math.round(zoomLevel * 100)}%</span>
       </div>
 
-      {/* Flowchart: scaled for zoom */}
+      {/* Flowchart: scaled for zoom with smooth transition */}
       <div
-        className="flex flex-col items-center w-full origin-top"
+        className="flex flex-col items-center w-full origin-top transition-transform duration-300 ease-out"
         style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
       >
         {/* Level 0: Root */}
@@ -259,8 +310,8 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                               onClick={() => hasTargets && toggle(setExpandedObjectives, oKey)}
                               className={`rounded-lg px-3 py-2 text-sm font-medium w-full flex items-center justify-between gap-2 border transition-colors break-words text-left min-w-0 ${
                                 hasTargets
-                                  ? 'bg-emerald-500/20 border-emerald-500/50 text-foreground hover:bg-emerald-500/30 cursor-pointer'
-                                  : 'bg-muted/60 border-border text-foreground cursor-default'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-400/50 text-foreground hover:bg-emerald-100 dark:hover:bg-emerald-900/40 cursor-pointer'
+                                  : 'bg-gray-100 dark:bg-gray-800/50 border-border text-foreground cursor-default'
                               }`}
                             >
                               <span className="min-w-0 break-words">
@@ -279,24 +330,24 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
 
                             {hasTargets && isObjExpanded && (
                               <>
-                                <ArrowDown className="bg-border" arrowColor="text-muted-foreground" />
-                                <div className="flex flex-col items-center w-full gap-2">
-                                  {obj.targets.map((target) => {
+                                <ArrowDown className="bg-emerald-400/50" arrowColor="text-emerald-600 dark:text-emerald-400" />
+                                <div className="flex flex-row flex-wrap gap-4 justify-center items-start w-full">
+                                  {sortTargets(obj.targets).map((target) => {
                                     const tKey = targetKey(pillar, obj, target);
                                     const isTargetExpanded = expandedTargets.has(tKey);
                                     const hasKpis = target.kpis.length > 0;
 
                                     return (
-                                      <div key={tKey} className="flex flex-col items-center w-full">
+                                      <div key={tKey} className="flex flex-col items-center min-w-[180px] max-w-[280px]">
                                         <button
                                           type="button"
                                           onClick={() =>
                                             hasKpis && toggle(setExpandedTargets, tKey)
                                           }
-                                          className={`rounded-md px-3 py-1.5 text-xs font-medium w-full flex items-center justify-between gap-2 border transition-colors break-words text-left min-w-0 ${
+                                          className={`rounded-lg px-3 py-2 text-xs font-medium w-full flex items-center justify-between gap-2 border transition-colors break-words text-left min-w-0 ${
                                             hasKpis
-                                              ? 'bg-muted/80 border-border text-foreground hover:bg-muted cursor-pointer'
-                                              : 'bg-muted/50 border-border text-muted-foreground cursor-default'
+                                              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-400/50 text-foreground hover:bg-emerald-100 dark:hover:bg-emerald-900/40 cursor-pointer'
+                                              : 'bg-gray-100 dark:bg-gray-800/50 border-border text-muted-foreground cursor-default'
                                           }`}
                                         >
                                           <span className="min-w-0 break-words">
@@ -315,9 +366,9 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
 
                                         {hasKpis && isTargetExpanded && (
                                           <>
-                                            <ArrowDown className="bg-border" arrowColor="text-muted-foreground" />
-                                            <div className="flex flex-col items-center w-full gap-2">
-                                              {target.kpis.map((kpi) => {
+                                            <ArrowDown className="bg-emerald-400/40" arrowColor="text-emerald-600 dark:text-emerald-400" />
+                                            <div className="flex flex-row flex-wrap gap-3 justify-center items-start">
+                                              {sortKPIs(target.kpis).map((kpi) => {
                                                 const kKey = kpiKey(kpi);
                                                 const isKpiExpanded = expandedKPIs.has(kKey);
                                                 const cached = breakdownCache[kKey];
@@ -330,11 +381,11 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                 return (
                                                   <div
                                                     key={kKey}
-                                                    className="flex flex-col items-center w-full"
+                                                    className="flex flex-col items-center min-w-[160px] max-w-[260px]"
                                                   >
                                                     <div className="flex flex-wrap items-center justify-center gap-2 w-full">
-                                                      <div className="rounded-lg bg-primary/15 border border-primary/30 px-3 py-2 text-sm font-medium text-foreground flex items-center gap-2 flex-1 min-w-0">
-                                                        <Target className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                      <div className="rounded-lg bg-emerald-100/80 dark:bg-emerald-900/30 border border-emerald-400/50 px-3 py-2 text-sm font-medium text-foreground flex items-center gap-2 flex-1 min-w-0">
+                                                        <Target className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                                                         <span className="min-w-0 break-words">
                                                           <BidirectionalText>
                                                             {kpi.kpi.replace(
@@ -352,7 +403,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                         onClick={() =>
                                                           handleToggleBreakdown(kpi.kpi)
                                                         }
-                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-xs font-medium text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/30 transition-colors shrink-0"
+                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-500/25 border border-emerald-500/50 text-xs font-medium text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/35 transition-colors shrink-0"
                                                       >
                                                         {isKpiExpanded ? (
                                                           <>
@@ -370,8 +421,8 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
 
                                                     {isKpiExpanded && (
                                                       <>
-                                                        <ArrowDown className="bg-border" arrowColor="text-muted-foreground" />
-                                                        <div className="w-full rounded-md bg-muted/30 border border-border py-2 px-3 space-y-3">
+                                                        <ArrowDown className="bg-emerald-400/40" arrowColor="text-emerald-600 dark:text-emerald-400" />
+                                                        <div className="w-full rounded-lg bg-white dark:bg-gray-900/50 border border-emerald-200 dark:border-emerald-800/50 py-3 px-4 space-y-4 shadow-sm">
                                                           {isLoading && (
                                                             <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                                                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -399,37 +450,48 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                                   {departmentsWithRASCI.map(({ department: deptName, role: rasciLetter }) => {
                                                                     const objectives = objectivesByDept.get(deptName) ?? [];
                                                                     return (
-                                                                      <div key={deptName} className="space-y-1.5">
-                                                                        <div className="flex items-center gap-2 font-medium text-sm flex-wrap">
-                                                                          <span className="text-foreground break-words">{deptName}</span>
-                                                                          <span className="rounded bg-primary/20 text-primary px-1.5 py-0.5 text-xs font-semibold shrink-0">
-                                                                            ({rasciLetter})
-                                                                          </span>
+                                                                      <div key={deptName} className="flex gap-3">
+                                                                        <div className="flex flex-col items-center shrink-0">
+                                                                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                                                                          <div className="w-0.5 flex-1 min-h-[8px] bg-emerald-400/70" />
                                                                         </div>
-                                                                        {objectives.length > 0 ? (
-                                                                          <ul className="list-disc list-inside space-y-1 text-xs text-muted-foreground">
-                                                                            {objectives.map((obj) => (
-                                                                              <li key={obj.id} className="flex items-start gap-2 flex-wrap">
-                                                                                <span className="text-foreground break-words">
-                                                                                  <BidirectionalText>{obj.activity}</BidirectionalText>
-                                                                                </span>
-                                                                                {(obj.type === 'Direct' || obj.type === 'In direct') && (
-                                                                                  <span
-                                                                                    className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                                                                      obj.type === 'Direct'
-                                                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                                                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                                                                                    }`}
-                                                                                  >
-                                                                                    {obj.type === 'Direct' ? 'Direct' : 'In direct'}
-                                                                                  </span>
-                                                                                )}
-                                                                              </li>
-                                                                            ))}
-                                                                          </ul>
-                                                                        ) : (
-                                                                          <p className="text-xs text-muted-foreground">No objectives</p>
-                                                                        )}
+                                                                        <div className="flex-1 min-w-0 space-y-2 pb-1">
+                                                                          <div className="flex items-center gap-2 font-medium text-sm flex-wrap">
+                                                                            <span className="text-foreground break-words">{deptName}</span>
+                                                                            <span className="rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 text-xs font-semibold shrink-0">
+                                                                              ({rasciLetter})
+                                                                            </span>
+                                                                          </div>
+                                                                          {objectives.length > 0 ? (
+                                                                            <ul className="space-y-1.5 text-xs">
+                                                                              {objectives.map((obj) => (
+                                                                                <li key={obj.id} className="flex gap-2 items-start">
+                                                                                  <div className="flex shrink-0 mt-1.5">
+                                                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                                                  </div>
+                                                                                  <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+                                                                                    <span className="text-foreground break-words">
+                                                                                      <BidirectionalText>{obj.activity}</BidirectionalText>
+                                                                                    </span>
+                                                                                    {(obj.type === 'Direct' || obj.type === 'In direct') && (
+                                                                                      <span
+                                                                                        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                                                                          obj.type === 'Direct'
+                                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                                                                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                                                        }`}
+                                                                                      >
+                                                                                        {obj.type === 'Direct' ? 'Direct' : 'In direct'}
+                                                                                      </span>
+                                                                                    )}
+                                                                                  </div>
+                                                                                </li>
+                                                                              ))}
+                                                                            </ul>
+                                                                          ) : (
+                                                                            <p className="text-xs text-muted-foreground">No objectives</p>
+                                                                          )}
+                                                                        </div>
                                                                       </div>
                                                                     );
                                                                   })}
