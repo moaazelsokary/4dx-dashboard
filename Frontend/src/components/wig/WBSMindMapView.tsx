@@ -297,14 +297,14 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                 {hasChildren && isPillarExpanded && (
                   <>
                     <ArrowDown className="bg-emerald-400/50" />
-                    <div className="flex flex-col items-center w-full gap-2 pl-0">
+                    <div className="flex flex-row flex-wrap gap-4 justify-center items-start w-full">
                       {pillar.objectives.map((obj) => {
                         const oKey = objectiveKey(pillar, obj);
                         const isObjExpanded = expandedObjectives.has(oKey);
                         const hasTargets = obj.targets.length > 0;
 
                         return (
-                          <div key={oKey} className="flex flex-col items-center w-full">
+                          <div key={oKey} className="flex flex-col items-center min-w-[200px] max-w-[320px] shrink-0">
                             <button
                               type="button"
                               onClick={() => hasTargets && toggle(setExpandedObjectives, oKey)}
@@ -331,14 +331,14 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                             {hasTargets && isObjExpanded && (
                               <>
                                 <ArrowDown className="bg-emerald-400/50" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                <div className="flex flex-row flex-wrap gap-4 justify-center items-start w-full">
+                                <div className="flex flex-row flex-wrap gap-3 justify-start items-start">
                                   {sortTargets(obj.targets).map((target) => {
                                     const tKey = targetKey(pillar, obj, target);
                                     const isTargetExpanded = expandedTargets.has(tKey);
                                     const hasKpis = target.kpis.length > 0;
 
                                     return (
-                                      <div key={tKey} className="flex flex-col items-center min-w-[180px] max-w-[280px]">
+                                      <div key={tKey} className="flex flex-col items-center min-w-[160px] max-w-[260px] shrink-0">
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -367,7 +367,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                         {hasKpis && isTargetExpanded && (
                                           <>
                                             <ArrowDown className="bg-emerald-400/40" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                            <div className="flex flex-row flex-wrap gap-3 justify-center items-start">
+                                            <div className="flex flex-row flex-wrap gap-2 justify-start items-start">
                                               {sortKPIs(target.kpis).map((kpi) => {
                                                 const kKey = kpiKey(kpi);
                                                 const isKpiExpanded = expandedKPIs.has(kKey);
@@ -381,7 +381,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                 return (
                                                   <div
                                                     key={kKey}
-                                                    className="flex flex-col items-center min-w-[160px] max-w-[260px]"
+                                                    className="flex flex-col items-center min-w-[140px] max-w-[240px] shrink-0"
                                                   >
                                                     <div className="flex flex-wrap items-center justify-center gap-2 w-full">
                                                       <div className="rounded-lg bg-emerald-100/80 dark:bg-emerald-900/30 border border-emerald-400/50 px-3 py-2 text-sm font-medium text-foreground flex items-center gap-2 flex-1 min-w-0">
@@ -446,52 +446,46 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                                 );
                                                               }
                                                               return (
-                                                                <div className="space-y-4">
+                                                                <div className="flex flex-row flex-wrap gap-4 justify-start items-start">
                                                                   {departmentsWithRASCI.map(({ department: deptName, role: rasciLetter }) => {
                                                                     const objectives = objectivesByDept.get(deptName) ?? [];
                                                                     return (
-                                                                      <div key={deptName} className="flex gap-3">
-                                                                        <div className="flex flex-col items-center shrink-0">
+                                                                      <div key={deptName} className="flex flex-col items-start min-w-[180px] max-w-[320px] shrink-0">
+                                                                        <div className="flex items-center gap-2 font-medium text-sm flex-wrap mb-2">
                                                                           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                                                                          <div className="w-0.5 flex-1 min-h-[8px] bg-emerald-400/70" />
+                                                                          <span className="text-foreground break-words">{deptName}</span>
+                                                                          <span className="rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 text-xs font-semibold shrink-0">
+                                                                            ({rasciLetter})
+                                                                          </span>
                                                                         </div>
-                                                                        <div className="flex-1 min-w-0 space-y-2 pb-1">
-                                                                          <div className="flex items-center gap-2 font-medium text-sm flex-wrap">
-                                                                            <span className="text-foreground break-words">{deptName}</span>
-                                                                            <span className="rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 text-xs font-semibold shrink-0">
-                                                                              ({rasciLetter})
-                                                                            </span>
+                                                                        {objectives.length > 0 ? (
+                                                                          <div className="flex flex-row flex-wrap gap-2">
+                                                                            {objectives.map((obj) => (
+                                                                              <div
+                                                                                key={obj.id}
+                                                                                className="flex flex-wrap items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 px-2 py-1.5 text-xs"
+                                                                              >
+                                                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
+                                                                                <span className="text-foreground break-words min-w-0">
+                                                                                  <BidirectionalText>{obj.activity}</BidirectionalText>
+                                                                                </span>
+                                                                                {(obj.type === 'Direct' || obj.type === 'In direct') && (
+                                                                                  <span
+                                                                                    className={`shrink-0 text-[10px] font-medium px-1 py-0.5 rounded ${
+                                                                                      obj.type === 'Direct'
+                                                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                                                    }`}
+                                                                                  >
+                                                                                    {obj.type === 'Direct' ? 'D' : 'I'}
+                                                                                  </span>
+                                                                                )}
+                                                                              </div>
+                                                                            ))}
                                                                           </div>
-                                                                          {objectives.length > 0 ? (
-                                                                            <ul className="space-y-1.5 text-xs">
-                                                                              {objectives.map((obj) => (
-                                                                                <li key={obj.id} className="flex gap-2 items-start">
-                                                                                  <div className="flex shrink-0 mt-1.5">
-                                                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                                                                  </div>
-                                                                                  <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
-                                                                                    <span className="text-foreground break-words">
-                                                                                      <BidirectionalText>{obj.activity}</BidirectionalText>
-                                                                                    </span>
-                                                                                    {(obj.type === 'Direct' || obj.type === 'In direct') && (
-                                                                                      <span
-                                                                                        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                                                                          obj.type === 'Direct'
-                                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                                                                                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                                                                                        }`}
-                                                                                      >
-                                                                                        {obj.type === 'Direct' ? 'Direct' : 'In direct'}
-                                                                                      </span>
-                                                                                    )}
-                                                                                  </div>
-                                                                                </li>
-                                                                              ))}
-                                                                            </ul>
-                                                                          ) : (
-                                                                            <p className="text-xs text-muted-foreground">No objectives</p>
-                                                                          )}
-                                                                        </div>
+                                                                        ) : (
+                                                                          <p className="text-xs text-muted-foreground">No objectives</p>
+                                                                        )}
                                                                       </div>
                                                                     );
                                                                   })}
