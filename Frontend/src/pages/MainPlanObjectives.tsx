@@ -8,6 +8,7 @@ import { toast } from '@/hooks/use-toast';
 import HierarchicalPlanView from '@/components/wig/HierarchicalPlanView';
 import MainPlanTable from '@/components/wig/MainPlanTable';
 import RASCIEditor from '@/components/wig/RASCIEditor';
+import WBSMindMapView from '@/components/wig/WBSMindMapView';
 import type { HierarchicalPlan, MainPlanObjective } from '@/types/wig';
 import { LogOut, RefreshCw, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -212,8 +213,9 @@ export default function MainPlanObjectives() {
       <div className="container mx-auto px-4 py-4 space-y-4">
         {/* Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-3 mb-4">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-4">
             <TabsTrigger value="view">View</TabsTrigger>
+            <TabsTrigger value="wbs">WBS</TabsTrigger>
             <TabsTrigger value="rasci">RASCI</TabsTrigger>
             <TabsTrigger value="table">Table</TabsTrigger>
           </TabsList>
@@ -221,6 +223,20 @@ export default function MainPlanObjectives() {
           <TabsContent value="view" className="mt-0">
             {hierarchicalData && hierarchicalData.pillars.length > 0 ? (
               <HierarchicalPlanView data={hierarchicalData} />
+            ) : (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center text-muted-foreground py-8">
+                    No plan data available. Add objectives in Table View.
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="wbs" className="mt-0">
+            {hierarchicalData && hierarchicalData.pillars.length > 0 ? (
+              <WBSMindMapView data={hierarchicalData} />
             ) : (
               <Card>
                 <CardContent className="pt-6">
