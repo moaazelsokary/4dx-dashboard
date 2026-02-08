@@ -215,61 +215,61 @@ export function ColumnFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-72 max-w-[min(280px,90vw)] max-h-[min(420px,85vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
+        className="w-64 max-w-[min(240px,90vw)] max-h-[min(320px,70vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
         align="start"
         side="bottom"
         sideOffset={2}
         collisionPadding={12}
       >
-        <div className="flex flex-col min-h-0 overflow-hidden p-2 space-y-1 flex-1">
-          <div className="flex items-center justify-between px-2 py-1 flex-shrink-0">
-            <span className="text-sm font-semibold">Filter by {columnLabel}</span>
+        <div className="flex flex-col min-h-0 overflow-hidden p-1.5 space-y-0.5 flex-1">
+          <div className="flex items-center justify-between px-1.5 py-0.5 flex-shrink-0">
+            <span className="text-xs font-semibold">Filter by {columnLabel}</span>
             {hasFilter && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
+                className="h-5 px-1.5 text-xs"
                 onClick={handleClearAll}
               >
                 Clear
               </Button>
             )}
           </div>
-          <Separator />
+          <Separator className="my-0.5" />
 
           {listOnly ? (
             <>
-              <div className="px-2 pb-1 flex-shrink-0">
+              <div className="px-1.5 pb-0.5 flex-shrink-0">
                 <div className="relative">
-                  <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                  <Search className="absolute left-1.5 top-1.5 h-3 w-3 text-muted-foreground" />
                   <Input
                     placeholder="Search..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-8 pl-8 text-xs"
+                    className="h-7 pl-7 text-xs"
                   />
                 </div>
               </div>
               {filteredValues.length > 0 && (
-                <div className="px-2 flex-shrink-0">
+                <div className="px-1.5 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 w-full text-xs justify-start"
+                    className="h-6 w-full text-xs justify-start"
                     onClick={handleSelectAll}
                   >
                     {allFilteredSelected ? 'Deselect All' : 'Select All'}
                   </Button>
                 </div>
               )}
-              <Separator />
+              <Separator className="my-0.5" />
               <div
-                className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(240px,50vh)] min-h-[64px] overscroll-contain"
+                className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(180px,40vh)] min-h-[56px] overscroll-contain"
                 data-dropdown-scroll
               >
-                <div className="p-2 space-y-2">
+                <div className="p-1.5 space-y-0.5">
                   {filteredValues.length === 0 ? (
-                    <div className="text-sm text-muted-foreground py-2">
+                    <div className="text-xs text-muted-foreground py-1.5">
                       {searchTerm ? 'No values match your search' : 'No values available'}
                     </div>
                   ) : (
@@ -277,7 +277,7 @@ export function ColumnFilter({
                       const label = getLabel ? getLabel(value) : value;
                       const isChecked = tempSelections.includes(value);
                       return (
-                        <div key={value} className="flex items-center space-x-2 py-1">
+                        <div key={value} className="flex items-center space-x-1.5 py-0.5">
                           <Checkbox
                             id={`filter-${columnKey}-${value}`}
                             checked={isChecked}
@@ -285,7 +285,7 @@ export function ColumnFilter({
                           />
                           <label
                             htmlFor={`filter-${columnKey}-${value}`}
-                            className="text-sm cursor-pointer flex-1 truncate"
+                            className="text-xs cursor-pointer flex-1 truncate"
                             title={label}
                           >
                             {label}
@@ -296,16 +296,16 @@ export function ColumnFilter({
                   )}
                 </div>
               </div>
-              <Separator />
-              <div className="flex items-center justify-between px-2 py-2 flex-shrink-0">
-                <div className="text-xs text-muted-foreground">
+              <Separator className="my-0.5" />
+              <div className="flex items-center justify-between px-1.5 py-1.5 flex-shrink-0">
+                <div className="text-[11px] text-muted-foreground">
                   {tempSelections.length} of {uniqueValues.length} selected
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 px-3 text-xs"
+                    className="h-6 px-2 text-xs"
                     onClick={() => {
                       setTempSelections(selectedValues);
                       setSearchTerm('');
@@ -314,7 +314,7 @@ export function ColumnFilter({
                   >
                     Cancel
                   </Button>
-                  <Button size="sm" className="h-7 px-3 text-xs" onClick={handleApplyList}>
+                  <Button size="sm" className="h-6 px-2 text-xs" onClick={handleApplyList}>
                     Apply
                   </Button>
                 </div>
@@ -326,7 +326,7 @@ export function ColumnFilter({
               onValueChange={(v) => setMode(v as 'list' | 'condition')}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-2 h-8">
+              <TabsList className="grid w-full grid-cols-2 h-7">
                 <TabsTrigger value="list" className="text-xs">
                   List
                 </TabsTrigger>
@@ -334,38 +334,38 @@ export function ColumnFilter({
                   Condition
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="list" className="mt-2 space-y-1 flex flex-col min-h-0 flex-1">
-                <div className="px-2 pb-1 flex-shrink-0">
+              <TabsContent value="list" className="mt-1.5 space-y-0.5 flex flex-col min-h-0 flex-1">
+                <div className="px-1.5 pb-0.5 flex-shrink-0">
                   <div className="relative">
-                    <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                    <Search className="absolute left-1.5 top-1.5 h-3 w-3 text-muted-foreground" />
                     <Input
                       placeholder="Search..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="h-8 pl-8 text-xs"
+                      className="h-7 pl-7 text-xs"
                     />
                   </div>
                 </div>
                 {filteredValues.length > 0 && (
-                  <div className="px-2 flex-shrink-0">
+                  <div className="px-1.5 flex-shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 w-full text-xs justify-start"
+                      className="h-6 w-full text-xs justify-start"
                       onClick={handleSelectAll}
                     >
                       {allFilteredSelected ? 'Deselect All' : 'Select All'}
                     </Button>
                   </div>
                 )}
-                <Separator />
+                <Separator className="my-0.5" />
                 <div
-                  className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(240px,50vh)] min-h-[64px] overscroll-contain"
+                  className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(180px,40vh)] min-h-[56px] overscroll-contain"
                   data-dropdown-scroll
                 >
-                  <div className="p-2 space-y-2">
+                  <div className="p-1.5 space-y-0.5">
                     {filteredValues.length === 0 ? (
-                      <div className="text-sm text-muted-foreground py-2">
+                      <div className="text-xs text-muted-foreground py-1.5">
                         {searchTerm ? 'No values match your search' : 'No values available'}
                       </div>
                     ) : (
@@ -373,7 +373,7 @@ export function ColumnFilter({
                         const label = getLabel ? getLabel(value) : value;
                         const isChecked = tempSelections.includes(value);
                         return (
-                          <div key={value} className="flex items-center space-x-2 py-1">
+                          <div key={value} className="flex items-center space-x-1.5 py-0.5">
                             <Checkbox
                               id={`filter-${columnKey}-${value}`}
                               checked={isChecked}
@@ -381,7 +381,7 @@ export function ColumnFilter({
                             />
                             <label
                               htmlFor={`filter-${columnKey}-${value}`}
-                              className="text-sm cursor-pointer flex-1 truncate"
+                              className="text-xs cursor-pointer flex-1 truncate"
                               title={label}
                             >
                               {label}
@@ -392,16 +392,16 @@ export function ColumnFilter({
                     )}
                   </div>
                 </div>
-                <Separator />
-                <div className="flex items-center justify-between px-2 py-2 flex-shrink-0">
-                  <div className="text-xs text-muted-foreground">
+                <Separator className="my-0.5" />
+                <div className="flex items-center justify-between px-1.5 py-1.5 flex-shrink-0">
+                  <div className="text-[11px] text-muted-foreground">
                     {tempSelections.length} of {uniqueValues.length} selected
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 px-3 text-xs"
+                      className="h-6 px-2 text-xs"
                       onClick={() => {
                         setTempSelections(selectedValues);
                         setSearchTerm('');
@@ -410,24 +410,24 @@ export function ColumnFilter({
                     >
                       Cancel
                     </Button>
-                    <Button size="sm" className="h-7 px-3 text-xs" onClick={handleApplyList}>
+                    <Button size="sm" className="h-6 px-2 text-xs" onClick={handleApplyList}>
                       Apply
                     </Button>
                   </div>
                 </div>
               </TabsContent>
-              <TabsContent value="condition" className="mt-2 space-y-2">
+              <TabsContent value="condition" className="mt-1.5 space-y-1.5">
                 {onConditionChange && (
                   <>
-                    <div className="px-2">
-                      <label className="text-xs text-muted-foreground block mb-1">Operator</label>
+                    <div className="px-1.5">
+                      <label className="text-[11px] text-muted-foreground block mb-0.5">Operator</label>
                       <Select
                         value={tempCondition.operator}
                         onValueChange={(v) =>
                           setTempCondition((prev) => ({ ...prev, operator: v }))
                         }
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-7 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -440,12 +440,12 @@ export function ColumnFilter({
                       </Select>
                     </div>
                     {tempCondition.operator !== 'is_empty' && (
-                      <div className="px-2 space-y-2">
+                      <div className="px-1.5 space-y-1.5">
                         <div>
-                          <label className="text-xs text-muted-foreground block mb-1">Value</label>
+                          <label className="text-[11px] text-muted-foreground block mb-0.5">Value</label>
                           <Input
                             type={inputType}
-                            className="h-8 text-xs"
+                            className="h-7 text-xs"
                             value={tempCondition.value ?? ''}
                             onChange={(e) =>
                               setTempCondition((prev) => ({ ...prev, value: e.target.value }))
@@ -455,12 +455,12 @@ export function ColumnFilter({
                         </div>
                         {needsTwoValues(tempCondition.operator) && (
                           <div>
-                            <label className="text-xs text-muted-foreground block mb-1">
+                            <label className="text-[11px] text-muted-foreground block mb-0.5">
                               And
                             </label>
                             <Input
                               type={inputType}
-                              className="h-8 text-xs"
+                              className="h-7 text-xs"
                               value={tempCondition.value2 ?? ''}
                               onChange={(e) =>
                                 setTempCondition((prev) => ({ ...prev, value2: e.target.value }))
@@ -471,12 +471,12 @@ export function ColumnFilter({
                         )}
                       </div>
                     )}
-                    <Separator />
-                    <div className="flex justify-end gap-2 px-2 pb-2">
+                    <Separator className="my-0.5" />
+                    <div className="flex justify-end gap-1.5 px-1.5 pb-1.5">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-3 text-xs"
+                        className="h-6 px-2 text-xs"
                         onClick={() => {
                           setTempCondition(
                             condition ?? {
@@ -493,12 +493,12 @@ export function ColumnFilter({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-3 text-xs"
+                        className="h-6 px-2 text-xs"
                         onClick={handleClearCondition}
                       >
                         Clear
                       </Button>
-                      <Button size="sm" className="h-7 px-3 text-xs" onClick={handleApplyCondition}>
+                      <Button size="sm" className="h-6 px-2 text-xs" onClick={handleApplyCondition}>
                         Apply
                       </Button>
                     </div>
