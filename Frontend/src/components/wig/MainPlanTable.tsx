@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,12 +9,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ColumnFilter } from '@/components/ui/column-filter';
+import { loadFilterState, saveFilterState, getListSelected, type TableFilterState } from '@/lib/tableFilterState';
 import { Selector } from '@/components/ui/selector';
 import BidirectionalText from '@/components/ui/BidirectionalText';
 import { createMainObjective, updateMainObjective, deleteMainObjective } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import type { MainPlanObjective } from '@/types/wig';
-import { Edit2, Trash2, Plus, Table2, Sparkles, Filter, Search } from 'lucide-react';
+import { Edit2, Trash2, Plus, Table2, Sparkles, Filter } from 'lucide-react';
 import MainPlanObjectiveFormModal from '@/components/wig/MainPlanObjectiveFormModal';
 import {
   AlertDialog,
@@ -105,22 +107,18 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [modalInitialData, setModalInitialData] = useState<Partial<MainPlanObjective> | undefined>(undefined);
 
-  // Filter states for Excel-like filtering
-  const [filters, setFilters] = useState<{
-    pillar: string[];
-    objective: string[];
-    target: string[];
-    kpi: string[];
-    annualTarget: string[];
-  }>({
-    pillar: [],
-    objective: [],
-    target: [],
-    kpi: [],
-    annualTarget: [],
-  });
+  const MAIN_PLAN_FILTERS_KEY = 'main-plan-filters';
+  const [tableFilterState, setTableFilterState] = useState<TableFilterState>(() =>
+    loadFilterState(MAIN_PLAN_FILTERS_KEY)
+  );
+  const updateColumnFilter = useCallback((columnKey: string, state: TableFilterState[string]) => {
+    setTableFilterState((prev) => {
+      const next = { ...prev, [columnKey]: state };
+      saveFilterState(MAIN_PLAN_FILTERS_KEY, next);
+      return next;
+    });
+  }, []);
 
-  // Track which filter popover is currently open
   const [openFilter, setOpenFilter] = useState<string | null>(null);
 
   const numbers = generateNumbers(objectives);
@@ -253,251 +251,29 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
     objectives.map(obj => obj.annual_target.toString())
   )).sort((a, b) => parseFloat(a) - parseFloat(b));
 
-  // Filter objectives based on selected filters
   const filteredObjectives = objectives.filter((obj) => {
-    // Updated regex to allow three-level numbering like 7.1.7
     const targetText = obj.target.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
     const kpiText = obj.kpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim();
-    
-    const matchesPillar = filters.pillar.length === 0 || filters.pillar.includes(obj.pillar);
-    const matchesObjective = filters.objective.length === 0 || filters.objective.includes(obj.objective);
-    const matchesTarget = filters.target.length === 0 || filters.target.includes(targetText);
-    const matchesKPI = filters.kpi.length === 0 || filters.kpi.includes(kpiText);
-    const matchesAnnualTarget = filters.annualTarget.length === 0 || filters.annualTarget.includes(obj.annual_target.toString());
-
-    return matchesPillar && matchesObjective && matchesTarget && matchesKPI && matchesAnnualTarget;
-  });
-
-  const toggleFilterValue = (filterKey: keyof typeof filters, value: string) => {
-    const currentValues = filters[filterKey];
-    if (currentValues.includes(value)) {
-      setFilters({ ...filters, [filterKey]: currentValues.filter(v => v !== value) });
-    } else {
-      setFilters({ ...filters, [filterKey]: [...currentValues, value] });
-    }
-  };
-
-  const clearFilter = (filterKey: keyof typeof filters) => {
-    setFilters({ ...filters, [filterKey]: [] });
-  };
-
-  // Excel-like filter component
-  const ExcelFilter = ({ 
-    column, 
-    uniqueValues, 
-    selectedValues, 
-    onToggle, 
-    onClear,
-    getLabel,
-    filterId
-  }: { 
-    column: string;
-    uniqueValues: string[];
-    selectedValues: string[];
-    onToggle: (value: string) => void;
-    onClear: () => void;
-    getLabel?: (value: string) => string;
-    filterId: string;
-  }) => {
-    const open = openFilter === filterId;
-    const [tempSelections, setTempSelections] = useState<string[]>(selectedValues);
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    const hasFilter = selectedValues.length > 0;
-    
-    // Update temp selections when popover opens or selectedValues change
-    useEffect(() => {
-      if (open) {
-        setTempSelections(selectedValues);
-      }
-    }, [open, selectedValues]);
-    
-    const handleOpenChange = (newOpen: boolean) => {
-      if (newOpen) {
-        setOpenFilter(filterId);
-      } else {
-        setOpenFilter(null);
-      }
-    };
-    
-    // Filter values based on search term
-    const filteredValues = uniqueValues.filter(value => {
-      const label = getLabel ? getLabel(value) : value;
-      return label.toLowerCase().includes(searchTerm.toLowerCase());
-    });
-    
-    const handleToggle = (value: string) => {
-      if (tempSelections.includes(value)) {
-        setTempSelections(tempSelections.filter(v => v !== value));
-      } else {
-        setTempSelections([...tempSelections, value]);
-      }
-    };
-    
-    const handleSelectAll = () => {
-      if (tempSelections.length === filteredValues.length) {
-        // Deselect all filtered values
-        setTempSelections(tempSelections.filter(v => !filteredValues.includes(v)));
-      } else {
-        // Select all filtered values
-        const newSelections = [...tempSelections];
-        filteredValues.forEach(value => {
-          if (!newSelections.includes(value)) {
-            newSelections.push(value);
-          }
-        });
-        setTempSelections(newSelections);
-      }
-    };
-    
-    const handleApply = () => {
-      // Apply temporary selections
-      const currentSet = new Set(selectedValues);
-      const tempSet = new Set(tempSelections);
-      
-      // Remove values that are no longer selected
-      currentSet.forEach(value => {
-        if (!tempSet.has(value)) {
-          onToggle(value); // Toggle to remove
-        }
-      });
-      
-      // Add new values
-      tempSet.forEach(value => {
-        if (!currentSet.has(value)) {
-          onToggle(value); // Toggle to add
-        }
-      });
-      
-      handleOpenChange(false);
-      setSearchTerm('');
-    };
-    
-    const handleClear = () => {
-      setTempSelections([]);
-      onClear();
-      handleOpenChange(false);
-      setSearchTerm('');
-    };
-    
-    const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelections.includes(v));
-    
+    const pillarList = getListSelected(tableFilterState, 'pillar');
+    const objectiveList = getListSelected(tableFilterState, 'objective');
+    const targetList = getListSelected(tableFilterState, 'target');
+    const kpiList = getListSelected(tableFilterState, 'kpi');
+    const annualTargetList = getListSelected(tableFilterState, 'annualTarget');
+    const matchesPillar = pillarList.length === 0 || pillarList.includes(obj.pillar);
+    const matchesObjective = objectiveList.length === 0 || objectiveList.includes(obj.objective);
+    const matchesTarget = targetList.length === 0 || targetList.includes(targetText);
+    const matchesKPI = kpiList.length === 0 || kpiList.includes(kpiText);
+    const matchesAnnualTarget =
+      annualTargetList.length === 0 ||
+      annualTargetList.includes(obj.annual_target.toString());
     return (
-      <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-6 w-6 p-0 ${hasFilter ? 'text-primary' : ''}`}
-            aria-label={`Filter ${column}`}
-            title={`Filter ${column}`}
-          >
-            <Filter className="h-3 w-3" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start">
-          <div className="p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">Filter by {column}</span>
-              {hasFilter && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={handleClear}
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-            <Separator />
-            {/* Search Input */}
-            <div className="px-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
-                <Input
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-7 pl-7 text-xs"
-                />
-              </div>
-            </div>
-            {filteredValues.length > 0 && (
-              <div className="px-2 py-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-full text-xs justify-start"
-                  onClick={handleSelectAll}
-                >
-                  {allFilteredSelected ? 'Deselect All' : 'Select All'}
-                </Button>
-              </div>
-            )}
-            <Separator />
-            <ScrollArea className="h-64">
-              <div className="p-2 space-y-2">
-                {filteredValues.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-2">
-                    {searchTerm ? 'No values match your search' : 'No values available'}
-                  </div>
-                ) : (
-                  filteredValues.map((value) => {
-                    const label = getLabel ? getLabel(value) : value;
-                    const isChecked = tempSelections.includes(value);
-                    return (
-                      <div key={value} className="flex items-center space-x-2 py-1">
-                        <Checkbox
-                          id={`filter-${column}-${value}`}
-                          checked={isChecked}
-                          onCheckedChange={() => handleToggle(value)}
-                        />
-                        <label
-                          htmlFor={`filter-${column}-${value}`}
-                          className="text-sm cursor-pointer flex-1 truncate"
-                          title={label}
-                        >
-                          {label}
-                        </label>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-            <Separator />
-            <div className="flex items-center justify-between px-2 pb-2">
-              <div className="text-xs text-muted-foreground">
-                {tempSelections.length} of {uniqueValues.length} selected
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-3 text-xs"
-                  onClick={() => {
-                    handleOpenChange(false);
-                    setTempSelections(selectedValues);
-                    setSearchTerm('');
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 px-3 text-xs"
-                  onClick={handleApply}
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
+      matchesPillar &&
+      matchesObjective &&
+      matchesTarget &&
+      matchesKPI &&
+      matchesAnnualTarget
     );
-  };
+  });
 
   return (
     <>
@@ -522,26 +298,38 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                 <TableHead>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-foreground">Pillar</span>
-                    <ExcelFilter
+                    <ColumnFilter
+                      columnKey="pillar"
+                      columnLabel="Pillar"
                       filterId="main-pillar"
-                      column="Pillar"
+                      columnType="text"
                       uniqueValues={uniquePillars}
-                      selectedValues={filters.pillar}
-                      onToggle={(value) => toggleFilterValue('pillar', value)}
-                      onClear={() => clearFilter('pillar')}
+                      selectedValues={getListSelected(tableFilterState, 'pillar')}
+                      onListChange={(selected) =>
+                        updateColumnFilter('pillar', { mode: 'list', selectedValues: selected })
+                      }
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
                     />
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-foreground">Objective</span>
-                    <ExcelFilter
+                    <ColumnFilter
+                      columnKey="objective"
+                      columnLabel="Objective"
                       filterId="main-objective"
-                      column="Objective"
+                      columnType="text"
                       uniqueValues={uniqueObjectives}
-                      selectedValues={filters.objective}
-                      onToggle={(value) => toggleFilterValue('objective', value)}
-                      onClear={() => clearFilter('objective')}
+                      selectedValues={getListSelected(tableFilterState, 'objective')}
+                      onListChange={(selected) =>
+                        updateColumnFilter('objective', { mode: 'list', selectedValues: selected })
+                      }
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
                     />
                   </div>
                 </TableHead>
@@ -549,13 +337,19 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                 <TableHead>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-foreground">Target</span>
-                    <ExcelFilter
+                    <ColumnFilter
+                      columnKey="target"
+                      columnLabel="Target"
                       filterId="main-target"
-                      column="Target"
+                      columnType="text"
                       uniqueValues={uniqueTargetsForFilter}
-                      selectedValues={filters.target}
-                      onToggle={(value) => toggleFilterValue('target', value)}
-                      onClear={() => clearFilter('target')}
+                      selectedValues={getListSelected(tableFilterState, 'target')}
+                      onListChange={(selected) =>
+                        updateColumnFilter('target', { mode: 'list', selectedValues: selected })
+                      }
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
                     />
                   </div>
                 </TableHead>
@@ -563,26 +357,38 @@ export default function MainPlanTable({ objectives, onUpdate, readOnly = false }
                 <TableHead>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-foreground">KPI</span>
-                    <ExcelFilter
+                    <ColumnFilter
+                      columnKey="kpi"
+                      columnLabel="KPI"
                       filterId="main-kpi"
-                      column="KPI"
+                      columnType="text"
                       uniqueValues={uniqueKPIs}
-                      selectedValues={filters.kpi}
-                      onToggle={(value) => toggleFilterValue('kpi', value)}
-                      onClear={() => clearFilter('kpi')}
+                      selectedValues={getListSelected(tableFilterState, 'kpi')}
+                      onListChange={(selected) =>
+                        updateColumnFilter('kpi', { mode: 'list', selectedValues: selected })
+                      }
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
                     />
                   </div>
                 </TableHead>
                 <TableHead className="text-right">
                   <div className="flex items-center justify-end gap-2">
                     <span className="font-bold text-foreground">Annual Target</span>
-                    <ExcelFilter
+                    <ColumnFilter
+                      columnKey="annualTarget"
+                      columnLabel="Annual Target"
                       filterId="main-annual-target"
-                      column="Annual Target"
+                      columnType="number"
                       uniqueValues={uniqueAnnualTargets}
-                      selectedValues={filters.annualTarget}
-                      onToggle={(value) => toggleFilterValue('annualTarget', value)}
-                      onClear={() => clearFilter('annualTarget')}
+                      selectedValues={getListSelected(tableFilterState, 'annualTarget')}
+                      onListChange={(selected) =>
+                        updateColumnFilter('annualTarget', { mode: 'list', selectedValues: selected })
+                      }
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
                     />
                   </div>
                 </TableHead>

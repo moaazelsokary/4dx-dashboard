@@ -5,100 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { getDepartmentObjectives } from '@/services/wigService';
 import { getMappings, createOrUpdateMapping, type ObjectiveDataSourceMapping, type MappingFormData } from '@/services/configService';
 import { getMetrics, getDistinctProjectsAndMetrics } from '@/services/metricsService';
-import { Save, Loader2, Filter, Search } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 import type { DepartmentObjective } from '@/types/wig';
-
-// Single-select column filter with optional search (for KPI / Objective)
-function ColumnFilter({
-  columnLabel,
-  options,
-  value,
-  onValueChange,
-  searchable = false,
-  valueToLabel,
-}: {
-  columnLabel: string;
-  options: string[];
-  value: string;
-  onValueChange: (v: string) => void;
-  searchable?: boolean;
-  valueToLabel?: (v: string) => string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const filtered = useMemo(() => {
-    if (!searchable || !search.trim()) return options;
-    const q = search.toLowerCase();
-    return options.filter(o => (valueToLabel ? valueToLabel(o) : o).toLowerCase().includes(q));
-  }, [options, search, searchable, valueToLabel]);
-  const hasFilter = !!value;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={`h-auto px-1.5 py-1 ${hasFilter ? 'text-primary' : ''}`}
-          aria-label={`Filter ${columnLabel}`}
-          title={hasFilter ? `${columnLabel}: ${valueToLabel ? valueToLabel(value) : value}` : `Filter ${columnLabel}`}
-        >
-          <Filter className="h-3 w-3" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="min-w-[180px] max-w-[320px] p-0" align="start" side="bottom" sideOffset={4}>
-        <div className="p-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold">Filter: {columnLabel}</span>
-            {hasFilter && (
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { onValueChange(''); setOpen(false); }}>
-                Clear
-              </Button>
-            )}
-          </div>
-          {searchable && (
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
-              <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-7 text-xs" />
-            </div>
-          )}
-          <ScrollArea className="max-h-[220px]">
-            <div className="p-1 space-y-0.5">
-              <button
-                type="button"
-                className={`w-full text-left px-2 py-1.5 rounded text-sm ${!value ? 'bg-primary/10 font-medium' : 'hover:bg-muted'}`}
-                onClick={() => { onValueChange(''); setOpen(false); }}
-              >
-                All
-              </button>
-              {filtered.map((opt) => {
-                const label = valueToLabel ? valueToLabel(opt) : opt;
-                const isSelected = value === opt;
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    className={`w-full text-left px-2 py-1.5 rounded text-sm truncate ${isSelected ? 'bg-primary/10 font-medium' : 'hover:bg-muted'}`}
-                    title={label}
-                    onClick={() => { onValueChange(opt); setOpen(false); }}
-                  >
-                    {label.length > 45 ? label.slice(0, 45) + '…' : label}
-                  </button>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+import { ColumnFilter } from '@/components/ui/column-filter';
+import {
+  loadFilterState,
+  saveFilterState,
+  getListSelected,
+  type TableFilterState,
+} from '@/lib/tableFilterState';
 
 interface MappingRow extends DepartmentObjective {
   mapping?: ObjectiveDataSourceMapping;
@@ -117,12 +36,20 @@ const DEFAULT_COLUMN_WIDTHS = {
   actions: 100,
 };
 
+const DATA_SOURCE_MAPPING_FILTERS_KEY = 'data-source-mapping-filters';
+
 export default function DataSourceMappingList() {
-  const [filterDepartment, setFilterDepartment] = useState('');
-  const [filterKpi, setFilterKpi] = useState('');
-  const [filterObjective, setFilterObjective] = useState('');
-  const [filterTargetForm, setFilterTargetForm] = useState('');
-  const [filterActualForm, setFilterActualForm] = useState('');
+  const [tableFilterState, setTableFilterState] = useState<TableFilterState>(() =>
+    loadFilterState(DATA_SOURCE_MAPPING_FILTERS_KEY)
+  );
+  const updateColumnFilter = useCallback((columnKey: string, state: TableFilterState[string]) => {
+    setTableFilterState((prev) => {
+      const next = { ...prev, [columnKey]: state };
+      saveFilterState(DATA_SOURCE_MAPPING_FILTERS_KEY, next);
+      return next;
+    });
+  }, []);
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [editedMappings, setEditedMappings] = useState<Record<number, Partial<MappingFormData>>>({});
   const [columnWidths, setColumnWidths] = useState(DEFAULT_COLUMN_WIDTHS);
   const [resizingColumn, setResizingColumn] = useState<keyof typeof DEFAULT_COLUMN_WIDTHS | null>(null);
@@ -233,17 +160,21 @@ export default function DataSourceMappingList() {
     return 'manual';
   }, [editedMappings]);
 
-  // Filter by department, KPI, objective, target form, actual form
   const filteredRows = useMemo(() => {
-    return rows.filter(row => {
-      if (filterDepartment && row.department_name !== filterDepartment) return false;
-      if (filterKpi && row.kpi !== filterKpi) return false;
-      if (filterObjective && row.activity !== filterObjective) return false;
-      if (filterTargetForm && getEffectiveTargetSource(row) !== filterTargetForm) return false;
-      if (filterActualForm && getEffectiveActualSource(row) !== filterActualForm) return false;
+    const deptList = getListSelected(tableFilterState, 'department');
+    const kpiList = getListSelected(tableFilterState, 'kpi');
+    const activityList = getListSelected(tableFilterState, 'activity');
+    const targetFromList = getListSelected(tableFilterState, 'targetFrom');
+    const actualFromList = getListSelected(tableFilterState, 'actualFrom');
+    return rows.filter((row) => {
+      if (deptList.length > 0 && !deptList.includes(row.department_name ?? '')) return false;
+      if (kpiList.length > 0 && !kpiList.includes(row.kpi ?? '')) return false;
+      if (activityList.length > 0 && !activityList.includes(row.activity ?? '')) return false;
+      if (targetFromList.length > 0 && !targetFromList.includes(getEffectiveTargetSource(row))) return false;
+      if (actualFromList.length > 0 && !actualFromList.includes(getEffectiveActualSource(row))) return false;
       return true;
     });
-  }, [rows, filterDepartment, filterKpi, filterObjective, filterTargetForm, filterActualForm, getEffectiveTargetSource, getEffectiveActualSource]);
+  }, [rows, tableFilterState, getEffectiveTargetSource, getEffectiveActualSource]);
 
   const updateMapping = useCallback((objectiveId: number, field: keyof MappingFormData, value: any) => {
     setEditedMappings(prev => {
@@ -384,35 +315,93 @@ export default function DataSourceMappingList() {
                 <TableHead style={{ width: columnWidths.department, minWidth: columnWidths.department, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Department</span>
-                    <ColumnFilter columnLabel="Department" options={filterOptions.departments} value={filterDepartment} onValueChange={setFilterDepartment} />
+                    <ColumnFilter
+                      columnKey="department"
+                      columnLabel="Department"
+                      filterId="mapping-department"
+                      columnType="text"
+                      uniqueValues={filterOptions.departments}
+                      selectedValues={getListSelected(tableFilterState, 'department')}
+                      onListChange={(selected) => updateColumnFilter('department', { mode: 'list', selectedValues: selected })}
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
+                    />
                   </div>
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('department', e)} />
                 </TableHead>
                 <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>KPI</span>
-                    <ColumnFilter columnLabel="KPI" options={filterOptions.kpis} value={filterKpi} onValueChange={setFilterKpi} searchable />
+                    <ColumnFilter
+                      columnKey="kpi"
+                      columnLabel="KPI"
+                      filterId="mapping-kpi"
+                      columnType="text"
+                      uniqueValues={filterOptions.kpis}
+                      selectedValues={getListSelected(tableFilterState, 'kpi')}
+                      onListChange={(selected) => updateColumnFilter('kpi', { mode: 'list', selectedValues: selected })}
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
+                    />
                   </div>
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('kpi', e)} />
                 </TableHead>
                 <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Activity</span>
-                    <ColumnFilter columnLabel="Objective" options={filterOptions.activities} value={filterObjective} onValueChange={setFilterObjective} searchable valueToLabel={(a) => (a.length > 50 ? a.slice(0, 50) + '…' : a)} />
+                    <ColumnFilter
+                      columnKey="activity"
+                      columnLabel="Objective"
+                      filterId="mapping-activity"
+                      columnType="text"
+                      uniqueValues={filterOptions.activities}
+                      selectedValues={getListSelected(tableFilterState, 'activity')}
+                      onListChange={(selected) => updateColumnFilter('activity', { mode: 'list', selectedValues: selected })}
+                      getLabel={(a) => (a.length > 50 ? a.slice(0, 50) + '…' : a)}
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
+                    />
                   </div>
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('activity', e)} />
                 </TableHead>
                 <TableHead style={{ width: columnWidths.targetFrom, minWidth: columnWidths.targetFrom, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Target From</span>
-                    <ColumnFilter columnLabel="Target From" options={['manual', 'pms_target']} value={filterTargetForm} onValueChange={setFilterTargetForm} valueToLabel={(v) => (v === 'pms_target' ? 'PMS' : 'Manual')} />
+                    <ColumnFilter
+                      columnKey="targetFrom"
+                      columnLabel="Target From"
+                      filterId="mapping-targetFrom"
+                      columnType="text"
+                      uniqueValues={['manual', 'pms_target']}
+                      selectedValues={getListSelected(tableFilterState, 'targetFrom')}
+                      onListChange={(selected) => updateColumnFilter('targetFrom', { mode: 'list', selectedValues: selected })}
+                      getLabel={(v) => (v === 'pms_target' ? 'PMS' : 'Manual')}
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
+                    />
                   </div>
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('targetFrom', e)} />
                 </TableHead>
                 <TableHead style={{ width: columnWidths.actualFrom, minWidth: columnWidths.actualFrom, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Actual From</span>
-                    <ColumnFilter columnLabel="Actual From" options={['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created']} value={filterActualForm} onValueChange={setFilterActualForm} valueToLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : v === 'odoo_services_created' ? 'Odoo ServicesCreated' : 'Manual')} />
+                    <ColumnFilter
+                      columnKey="actualFrom"
+                      columnLabel="Actual From"
+                      filterId="mapping-actualFrom"
+                      columnType="text"
+                      uniqueValues={['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created']}
+                      selectedValues={getListSelected(tableFilterState, 'actualFrom')}
+                      onListChange={(selected) => updateColumnFilter('actualFrom', { mode: 'list', selectedValues: selected })}
+                      getLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : v === 'odoo_services_created' ? 'Odoo ServicesCreated' : 'Manual')}
+                      openFilterId={openFilter}
+                      onOpenFilterChange={setOpenFilter}
+                      listOnly
+                    />
                   </div>
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('actualFrom', e)} />
                 </TableHead>
