@@ -265,14 +265,14 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
         <ArrowDown className="bg-emerald-500/60" />
 
         {/* Level 1: Pillars in a row with space between */}
-        <div className="flex flex-row gap-10 lg:gap-16 justify-center items-start w-full flex-wrap">
+        <div className="flex flex-row flex-nowrap gap-10 lg:gap-16 justify-center items-start w-full overflow-x-auto pb-2">
           {sortedPillars.map((pillar) => {
             const pKey = pillarKey(pillar);
             const isPillarExpanded = expandedPillars.has(pKey);
             const hasChildren = pillar.objectives.length > 0;
 
             return (
-              <div key={pKey} className="flex flex-col items-center min-w-[220px] flex-1 basis-0 max-w-[380px]">
+              <div key={pKey} className="flex flex-col items-center min-w-[200px] flex-1 basis-0">
                 <button
                   type="button"
                   onClick={() => hasChildren && toggle(setExpandedPillars, pKey)}
@@ -297,14 +297,14 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                 {hasChildren && isPillarExpanded && (
                   <>
                     <ArrowDown className="bg-emerald-400/50" />
-                    <div className="flex flex-row flex-wrap gap-4 justify-center items-start w-full">
+                    <div className="flex flex-row flex-nowrap gap-4 justify-start items-start w-full overflow-x-auto pb-2 scrollbar-thin">
                       {pillar.objectives.map((obj) => {
                         const oKey = objectiveKey(pillar, obj);
                         const isObjExpanded = expandedObjectives.has(oKey);
                         const hasTargets = obj.targets.length > 0;
 
                         return (
-                          <div key={oKey} className="flex flex-col items-center min-w-[200px] max-w-[320px] shrink-0">
+                          <div key={oKey} className="flex flex-col items-center flex-shrink-0 w-[220px]">
                             <button
                               type="button"
                               onClick={() => hasTargets && toggle(setExpandedObjectives, oKey)}
@@ -331,14 +331,14 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                             {hasTargets && isObjExpanded && (
                               <>
                                 <ArrowDown className="bg-emerald-400/50" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                <div className="flex flex-row flex-wrap gap-3 justify-start items-start">
+                                <div className="flex flex-row flex-nowrap gap-3 justify-start items-start overflow-x-auto pb-2 w-full">
                                   {sortTargets(obj.targets).map((target) => {
                                     const tKey = targetKey(pillar, obj, target);
                                     const isTargetExpanded = expandedTargets.has(tKey);
                                     const hasKpis = target.kpis.length > 0;
 
                                     return (
-                                      <div key={tKey} className="flex flex-col items-center min-w-[160px] max-w-[260px] shrink-0">
+                                      <div key={tKey} className="flex flex-col items-center flex-shrink-0 w-[200px]">
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -367,7 +367,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                         {hasKpis && isTargetExpanded && (
                                           <>
                                             <ArrowDown className="bg-emerald-400/40" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                            <div className="flex flex-row flex-wrap gap-2 justify-start items-start">
+                                            <div className="flex flex-row flex-nowrap gap-2 justify-start items-start overflow-x-auto pb-2 w-full">
                                               {sortKPIs(target.kpis).map((kpi) => {
                                                 const kKey = kpiKey(kpi);
                                                 const isKpiExpanded = expandedKPIs.has(kKey);
@@ -381,7 +381,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                 return (
                                                   <div
                                                     key={kKey}
-                                                    className="flex flex-col items-center min-w-[140px] max-w-[240px] shrink-0"
+                                                    className="flex flex-col items-center flex-shrink-0 w-[200px]"
                                                   >
                                                     <div className="flex flex-wrap items-center justify-center gap-2 w-full">
                                                       <div className="rounded-lg bg-emerald-100/80 dark:bg-emerald-900/30 border border-emerald-400/50 px-3 py-2 text-sm font-medium text-foreground flex items-center gap-2 flex-1 min-w-0">
@@ -446,11 +446,11 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                                 );
                                                               }
                                                               return (
-                                                                <div className="flex flex-row flex-wrap gap-4 justify-start items-start">
+                                                                <div className="flex flex-row flex-nowrap gap-4 justify-start items-start overflow-x-auto pb-2">
                                                                   {departmentsWithRASCI.map(({ department: deptName, role: rasciLetter }) => {
                                                                     const objectives = objectivesByDept.get(deptName) ?? [];
                                                                     return (
-                                                                      <div key={deptName} className="flex flex-col items-start min-w-[180px] max-w-[320px] shrink-0">
+                                                                      <div key={deptName} className="flex flex-col items-start flex-shrink-0 w-[240px]">
                                                                         <div className="flex items-center gap-2 font-medium text-sm flex-wrap mb-2">
                                                                           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
                                                                           <span className="text-foreground break-words">{deptName}</span>
@@ -459,7 +459,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                                           </span>
                                                                         </div>
                                                                         {objectives.length > 0 ? (
-                                                                          <div className="flex flex-row flex-wrap gap-2">
+                                                                          <div className="flex flex-row flex-nowrap gap-2 overflow-x-auto pb-1">
                                                                             {objectives.map((obj) => (
                                                                               <div
                                                                                 key={obj.id}
