@@ -5,13 +5,13 @@
  */
 function findScrollable(el: HTMLElement | null): HTMLElement | null {
   while (el && el !== document.body) {
+    if (el.hasAttribute?.('data-dropdown-scroll') || el.hasAttribute?.('data-radix-scroll-area-viewport')) return el;
     const style = getComputedStyle(el);
     const oy = style.overflowY;
     const ox = style.overflowX;
     const scrollableY = (oy === 'auto' || oy === 'scroll' || oy === 'overlay') && el.scrollHeight > el.clientHeight;
     const scrollableX = (ox === 'auto' || ox === 'scroll' || ox === 'overlay') && el.scrollWidth > el.clientWidth;
     if (scrollableY || scrollableX) return el;
-    if (el.hasAttribute?.('data-radix-scroll-area-viewport')) return el;
     el = el.parentElement;
   }
   return null;

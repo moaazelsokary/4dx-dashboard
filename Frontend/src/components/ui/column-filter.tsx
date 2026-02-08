@@ -3,7 +3,6 @@ import { Filter, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -264,7 +263,11 @@ export function ColumnFilter({
                 </div>
               )}
               <Separator />
-              <ScrollArea className={`${scrollMaxHeight} min-h-[120px]`}>
+              <div
+                className={`overflow-y-auto overflow-x-hidden min-h-[120px] overscroll-contain ${scrollMaxHeight}`}
+                style={{ maxHeight: 'min(320px, calc(100vh - 12rem))' }}
+                data-dropdown-scroll
+              >
                 <div className="p-2 space-y-2">
                   {filteredValues.length === 0 ? (
                     <div className="text-sm text-muted-foreground py-2">
@@ -293,7 +296,7 @@ export function ColumnFilter({
                     })
                   )}
                 </div>
-              </ScrollArea>
+              </div>
               <Separator />
               <div className="flex items-center justify-between px-2 pb-2">
                 <div className="text-xs text-muted-foreground">
@@ -357,7 +360,11 @@ export function ColumnFilter({
                   </div>
                 )}
                 <Separator />
-                <ScrollArea className={`${scrollMaxHeight} min-h-[120px]`}>
+                <div
+                  className={`overflow-y-auto overflow-x-hidden min-h-[120px] overscroll-contain ${scrollMaxHeight}`}
+                  style={{ maxHeight: 'min(320px, calc(100vh - 12rem))' }}
+                  data-dropdown-scroll
+                >
                   <div className="p-2 space-y-2">
                     {filteredValues.length === 0 ? (
                       <div className="text-sm text-muted-foreground py-2">
@@ -386,7 +393,7 @@ export function ColumnFilter({
                       })
                     )}
                   </div>
-                </ScrollArea>
+                </div>
                 <Separator />
                 <div className="flex items-center justify-between px-2 pb-2">
                   <div className="text-xs text-muted-foreground">
