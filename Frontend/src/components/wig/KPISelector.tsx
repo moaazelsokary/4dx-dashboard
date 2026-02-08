@@ -3,7 +3,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { getKPIsWithRASCI } from '@/services/wigService';
 import { Loader2, Search, X, ChevronDown } from 'lucide-react';
@@ -133,7 +132,7 @@ export default function KPISelector({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0 flex flex-col" style={{ maxHeight: '500px' }} align="start">
+      <PopoverContent className="w-[400px] max-w-[min(400px,90vw)] max-h-[min(420px,85vh)] p-0 flex flex-col overflow-hidden" align="start">
         <div className="p-3 space-y-2 flex-shrink-0 border-b">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -145,32 +144,35 @@ export default function KPISelector({
             />
           </div>
         </div>
-        <ScrollArea className="flex-1" style={{ minHeight: 0, maxHeight: '300px' }}>
+        <div
+          className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(280px,50vh)] min-h-[80px] overscroll-contain"
+          data-dropdown-scroll
+        >
           <div className="space-y-1 p-2">
-              {filteredKPIs.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  No KPIs found
-                </div>
-              ) : (
-                filteredKPIs.map((kpi) => {
-                  const isSelected = selectedKPIs.includes(kpi);
-                  return (
-                    <div
-                      key={kpi}
-                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
-                      onClick={() => handleToggleKPI(kpi)}
-                    >
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => handleToggleKPI(kpi)}
-                      />
-                      <span className="text-sm flex-1">{kpi}</span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-        </ScrollArea>
+            {filteredKPIs.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                No KPIs found
+              </div>
+            ) : (
+              filteredKPIs.map((kpi) => {
+                const isSelected = selectedKPIs.includes(kpi);
+                return (
+                  <div
+                    key={kpi}
+                    className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                    onClick={() => handleToggleKPI(kpi)}
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => handleToggleKPI(kpi)}
+                    />
+                    <span className="text-sm flex-1">{kpi}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
         <div className="p-2 border-t flex-shrink-0 bg-background">
           {selectedKPIs.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2 max-h-20 overflow-y-auto">
