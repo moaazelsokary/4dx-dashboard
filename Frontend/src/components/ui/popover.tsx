@@ -9,6 +9,7 @@ const PopoverTrigger = PopoverPrimitive.Trigger
 
 function findScrollableParent(el: HTMLElement | null, boundary: HTMLElement): HTMLElement | null {
   while (el && el !== boundary) {
+    if (el.hasAttribute?.('data-dropdown-scroll') || el.hasAttribute?.('data-radix-scroll-area-viewport')) return el;
     const { overflowY } = getComputedStyle(el);
     if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && el.scrollHeight > el.clientHeight) {
       return el;
