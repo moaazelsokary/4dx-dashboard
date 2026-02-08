@@ -126,27 +126,22 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
       {/* Flowchart: top to bottom */}
       <div className="flex flex-col items-center w-full max-w-2xl mx-auto">
         {/* Level 0: Root */}
-        <div className="flex flex-col items-center">
-          <div className="rounded-xl bg-emerald-600 text-white px-6 py-3 font-bold text-base shadow-lg text-center">
-            Work Breakdown Structure
-          </div>
-          <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-2">
-            Main Plan
-          </div>
+        <div className="rounded-xl bg-emerald-600 text-white px-6 py-3 font-bold text-base shadow-lg text-center">
+          Work Breakdown Structure
         </div>
 
         {/* Vertical connector from root */}
         <div className="w-0.5 h-6 bg-emerald-500/60 rounded-full my-1" />
 
-        {/* Level 1: Pillars */}
-        <div className="flex flex-col items-center gap-2 w-full">
+        {/* Level 1: Pillars in a row (beside each other), each column has its subtree below */}
+        <div className="flex flex-row gap-6 justify-center items-start flex-wrap w-full">
           {sortedPillars.map((pillar) => {
             const pKey = pillarKey(pillar);
             const isPillarExpanded = expandedPillars.has(pKey);
             const hasChildren = pillar.objectives.length > 0;
 
             return (
-              <div key={pKey} className="flex flex-col items-center w-full">
+              <div key={pKey} className="flex flex-col items-center min-w-[200px] max-w-[320px] flex-1">
                 <button
                   type="button"
                   onClick={() => hasChildren && toggle(setExpandedPillars, pKey)}
