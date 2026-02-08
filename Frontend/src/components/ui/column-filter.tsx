@@ -215,14 +215,14 @@ export function ColumnFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className={`min-w-64 max-w-[320px] w-auto p-0 ${scrollMaxHeight ? '' : 'max-h-[calc(100vh-8rem)]'}`}
+        className="min-w-64 w-auto max-w-[90vw] max-h-[80vh] overflow-hidden flex flex-col p-0"
         align="start"
         side="bottom"
         sideOffset={4}
-        collisionPadding={8}
+        collisionPadding={12}
       >
-        <div className="p-3 space-y-2">
-          <div className="flex items-center justify-between">
+        <div className="p-3 space-y-2 flex flex-col min-h-0 flex-1 overflow-hidden">
+          <div className="flex items-center justify-between flex-shrink-0">
             <span className="text-sm font-semibold">Filter by {columnLabel}</span>
             {hasFilter && (
               <Button
@@ -239,7 +239,7 @@ export function ColumnFilter({
 
           {listOnly ? (
             <>
-              <div className="px-2">
+              <div className="px-2 flex-shrink-0">
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
                   <Input
@@ -251,7 +251,7 @@ export function ColumnFilter({
                 </div>
               </div>
               {filteredValues.length > 0 && (
-                <div className="px-2 py-1">
+                <div className="px-2 py-1 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -264,8 +264,7 @@ export function ColumnFilter({
               )}
               <Separator />
               <div
-                className={`overflow-y-auto overflow-x-hidden min-h-[120px] overscroll-contain ${scrollMaxHeight}`}
-                style={{ maxHeight: 'min(320px, calc(100vh - 12rem))' }}
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
                 data-dropdown-scroll
               >
                 <div className="p-2 space-y-2">
@@ -298,7 +297,7 @@ export function ColumnFilter({
                 </div>
               </div>
               <Separator />
-              <div className="flex items-center justify-between px-2 pb-2">
+              <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
                 <div className="text-xs text-muted-foreground">
                   {tempSelections.length} of {uniqueValues.length} selected
                 </div>
@@ -335,8 +334,8 @@ export function ColumnFilter({
                   Condition
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="list" className="mt-2 space-y-2">
-                <div className="px-2">
+              <TabsContent value="list" className="mt-2 space-y-2 flex flex-col min-h-0 flex-1 overflow-hidden">
+                <div className="px-2 flex-shrink-0">
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
                     <Input
@@ -348,7 +347,7 @@ export function ColumnFilter({
                   </div>
                 </div>
                 {filteredValues.length > 0 && (
-                  <div className="px-2 py-1">
+                  <div className="px-2 py-1 flex-shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -361,8 +360,7 @@ export function ColumnFilter({
                 )}
                 <Separator />
                 <div
-                  className={`overflow-y-auto overflow-x-hidden min-h-[120px] overscroll-contain ${scrollMaxHeight}`}
-                  style={{ maxHeight: 'min(320px, calc(100vh - 12rem))' }}
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
                   data-dropdown-scroll
                 >
                   <div className="p-2 space-y-2">
@@ -395,7 +393,7 @@ export function ColumnFilter({
                   </div>
                 </div>
                 <Separator />
-                <div className="flex items-center justify-between px-2 pb-2">
+                <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
                   <div className="text-xs text-muted-foreground">
                     {tempSelections.length} of {uniqueValues.length} selected
                   </div>
