@@ -51,13 +51,13 @@ export function getColumnFilterState(
 }
 
 export function getListSelected(state: TableFilterState, columnKey: string): string[] {
-  const col = tableState[columnKey];
+  const col = state[columnKey];
   if (!col || col.mode !== 'list') return [];
   return col.selectedValues ?? [];
 }
 
 export function getCondition(state: TableFilterState, columnKey: string): ConditionFilterState | undefined {
-  const col = tableState[columnKey];
+  const col = state[columnKey];
   if (!col || col.mode !== 'condition') return undefined;
   return {
     mode: 'condition',
