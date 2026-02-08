@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, startTransition } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, startTransition } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,6 +50,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { ColumnFilter } from '@/components/ui/column-filter';
+import {
+  loadFilterState,
+  saveFilterState,
+  getListSelected,
+  getCondition,
+  matchesTextCondition,
+  matchesNumberCondition,
+  type TableFilterState,
+} from '@/lib/tableFilterState';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import OptimizedImage from '@/components/ui/OptimizedImage';
@@ -235,24 +245,23 @@ export default function DepartmentObjectives() {
     main_objective_id: null,
   });
   
-  // Filter states for Excel-like filtering (arrays of selected values)
-  const [filters, setFilters] = useState<{
-    kpi: string[];
-    activity: string[];
-    type: string[];
-    target: string[];
-    responsible: string[];
-    mov: string[];
-    mainObjective: string[];
-  }>({
-    kpi: [],
-    activity: [],
-    type: [],
-    target: [],
-    responsible: [],
-    mov: [],
-    mainObjective: [],
-  });
+  // Filter state (Excel-like) with persistence
+  const DEPARTMENT_OBJECTIVES_FILTERS_KEY = 'department-objectives-filters';
+  const [tableFilterState, setTableFilterState] = useState<TableFilterState>(() =>
+    loadFilterState(DEPARTMENT_OBJECTIVES_FILTERS_KEY)
+  );
+  const updateColumnFilter = useCallback(
+    (columnKey: string, state: TableFilterState[string]) => {
+      setTableFilterState((prev) => {
+        const next = { ...prev, [columnKey]: state };
+        saveFilterState(DEPARTMENT_OBJECTIVES_FILTERS_KEY, next);
+        return next;
+      });
+    },
+    []
+  );
+  const tableFilterStateRef = useRef(tableFilterState);
+  tableFilterStateRef.current = tableFilterState;
 
   // Track which filter popover is currently open
   const [openFilter, setOpenFilter] = useState<string | null>(null);
@@ -289,16 +298,33 @@ export default function DepartmentObjectives() {
     setTableZoom(0.85); // Reset to default
   };
 
-  // Filter states for RASCI Metrics table
+  // Filter states for RASCI Metrics table (persisted)
+  const RASCI_FILTERS_KEY = 'department-objectives-rasci-filters';
   const [rasciFilters, setRasciFilters] = useState<{
     kpi: string[];
     role: string[];
     exists: string[];
-  }>({
-    kpi: [],
-    role: [],
-    exists: [],
+  }>(() => {
+    try {
+      const raw = localStorage.getItem('table-filters-' + RASCI_FILTERS_KEY);
+      if (!raw) return { kpi: [], role: [], exists: [] };
+      const parsed = JSON.parse(raw) as { kpi?: string[]; role?: string[]; exists?: string[] };
+      return {
+        kpi: Array.isArray(parsed.kpi) ? parsed.kpi : [],
+        role: Array.isArray(parsed.role) ? parsed.role : [],
+        exists: Array.isArray(parsed.exists) ? parsed.exists : [],
+      };
+    } catch {
+      return { kpi: [], role: [], exists: [] };
+    }
   });
+  const persistRasciFilters = useCallback((next: { kpi: string[]; role: string[]; exists: string[] }) => {
+    try {
+      localStorage.setItem('table-filters-' + RASCI_FILTERS_KEY, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }, []);
   
   const navigate = useNavigate();
 
@@ -586,23 +612,33 @@ export default function DepartmentObjectives() {
           });
           
           // Immediately check if the new objective would be filtered out
-          // Use a setTimeout to check after React has processed the state update
           setTimeout(() => {
-            const currentObjectives = objectives; // This will be stale, but we'll check filteredObjectives
-            // We need to manually check filters here
+            const state = tableFilterStateRef.current;
             const objKPIs = parseKPIs(completeObjective.kpi);
-            const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
-            const matchesActivity = filters.activity.length === 0 || filters.activity.includes(completeObjective.activity);
-            const matchesType = filters.type.length === 0 || filters.type.includes(completeObjective.type || '');
-            const matchesTarget = filters.target.length === 0 || filters.target.includes(completeObjective.activity_target.toString());
-            const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(completeObjective.responsible_person);
-            const matchesMOV = filters.mov.length === 0 || filters.mov.includes(completeObjective.mov);
-            
+            const kpiList = getListSelected(state, 'kpi');
+            const kpiCond = getCondition(state, 'kpi');
+            const matchesKPI =
+              kpiCond?.mode === 'condition'
+                ? kpiCond.operator === 'is_empty'
+                  ? objKPIs.length === 0
+                  : objKPIs.some((k) => matchesTextCondition(k, kpiCond.operator, kpiCond.value))
+                : kpiList.length === 0 || objKPIs.some((k) => kpiList.includes(k));
+            const activityList = getListSelected(state, 'activity');
+            const matchesActivity = activityList.length === 0 || activityList.includes(completeObjective.activity ?? '');
+            const typeList = getListSelected(state, 'type');
+            const matchesType = typeList.length === 0 || typeList.includes(completeObjective.type ?? '');
+            const targetList = getListSelected(state, 'target');
+            const matchesTarget = targetList.length === 0 || targetList.includes(completeObjective.activity_target.toString());
+            const responsibleList = getListSelected(state, 'responsible');
+            const matchesResponsible = responsibleList.length === 0 || responsibleList.includes(completeObjective.responsible_person ?? '');
+            const movList = getListSelected(state, 'mov');
+            const matchesMOV = movList.length === 0 || movList.includes(completeObjective.mov ?? '');
+
             const wouldBeFiltered = !(matchesKPI && matchesActivity && matchesType && matchesTarget && matchesResponsible && matchesMOV);
-            
+
             if (wouldBeFiltered) {
               console.warn('[DepartmentObjectives] WARNING: New objective would be filtered out by active filters!', {
-                filters,
+                tableFilterState: state,
                 objective: {
                   kpi: completeObjective.kpi,
                   activity: completeObjective.activity,
@@ -1263,71 +1299,84 @@ export default function DepartmentObjectives() {
     return Array.from(mainObjectiveMap.values()).sort();
   }, [objectives, mainObjectives]);
 
-  // Filter objectives based on selected filter values
-  // Use useMemo to ensure filteredObjectives updates reactively when objectives change
+  // Filter objectives based on table filter state (list + condition modes)
   const filteredObjectives = useMemo(() => {
-    const hasActiveFilters = Object.values(filters).some(filterArray => filterArray.length > 0);
-    if (hasActiveFilters) {
-      console.log('[DepartmentObjectives] Active filters:', filters);
-      console.log('[DepartmentObjectives] Filtering', objectives.length, 'objectives');
-    }
-    
     const filtered = objectives.filter((obj) => {
       const objKPIs = parseKPIs(obj.kpi);
-      const matchesKPI = filters.kpi.length === 0 || objKPIs.some(kpi => filters.kpi.includes(kpi));
-      const matchesActivity = filters.activity.length === 0 || filters.activity.includes(obj.activity);
-      const matchesType = filters.type.length === 0 || filters.type.includes(obj.type || '');
-      const matchesTarget = filters.target.length === 0 || filters.target.includes(obj.activity_target.toString());
-      const matchesResponsible = filters.responsible.length === 0 || filters.responsible.includes(obj.responsible_person);
-      const matchesMOV = filters.mov.length === 0 || filters.mov.includes(obj.mov);
-      
-      // Match main objective
+      const kpiList = getListSelected(tableFilterState, 'kpi');
+      const kpiCond = getCondition(tableFilterState, 'kpi');
+      const matchesKPI =
+        kpiCond?.mode === 'condition'
+          ? kpiCond.operator === 'is_empty'
+            ? objKPIs.length === 0
+            : objKPIs.some((k) => matchesTextCondition(k, kpiCond.operator, kpiCond.value))
+          : kpiList.length === 0 || objKPIs.some((kpi) => kpiList.includes(kpi));
+
+      const activityList = getListSelected(tableFilterState, 'activity');
+      const activityCond = getCondition(tableFilterState, 'activity');
+      const matchesActivity =
+        activityCond?.mode === 'condition'
+          ? activityCond.operator === 'is_empty'
+            ? !obj.activity?.trim()
+            : matchesTextCondition(obj.activity, activityCond.operator, activityCond.value)
+          : activityList.length === 0 || activityList.includes(obj.activity ?? '');
+
+      const typeList = getListSelected(tableFilterState, 'type');
+      const typeCond = getCondition(tableFilterState, 'type');
+      const matchesType =
+        typeCond?.mode === 'condition'
+          ? typeCond.operator === 'is_empty'
+            ? !(obj.type ?? '').trim()
+            : matchesTextCondition(obj.type, typeCond.operator, typeCond.value)
+          : typeList.length === 0 || typeList.includes(obj.type ?? '');
+
+      const targetList = getListSelected(tableFilterState, 'target');
+      const targetCond = getCondition(tableFilterState, 'target');
+      const targetStr = obj.activity_target.toString();
+      const matchesTarget =
+        targetCond?.mode === 'condition'
+          ? matchesNumberCondition(obj.activity_target, targetCond.operator, targetCond.value, targetCond.value2)
+          : targetList.length === 0 || targetList.includes(targetStr);
+
+      const responsibleList = getListSelected(tableFilterState, 'responsible');
+      const responsibleCond = getCondition(tableFilterState, 'responsible');
+      const matchesResponsible =
+        responsibleCond?.mode === 'condition'
+          ? responsibleCond.operator === 'is_empty'
+            ? !(obj.responsible_person ?? '').trim()
+            : matchesTextCondition(obj.responsible_person, responsibleCond.operator, responsibleCond.value)
+          : responsibleList.length === 0 || responsibleList.includes(obj.responsible_person ?? '');
+
+      const movList = getListSelected(tableFilterState, 'mov');
+      const movCond = getCondition(tableFilterState, 'mov');
+      const matchesMOV =
+        movCond?.mode === 'condition'
+          ? movCond.operator === 'is_empty'
+            ? !(obj.mov ?? '').trim()
+            : matchesTextCondition(obj.mov, movCond.operator, movCond.value)
+          : movList.length === 0 || movList.includes(obj.mov ?? '');
+
       let mainObjLabel = 'Not linked';
       if (obj.main_objective_id) {
         const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
-        if (mainObj) {
-          mainObjLabel = `${mainObj.objective} - ${mainObj.kpi}`;
-        }
+        if (mainObj) mainObjLabel = `${mainObj.objective} - ${mainObj.kpi}`;
       }
-      const matchesMainObjective = filters.mainObjective.length === 0 || filters.mainObjective.includes(mainObjLabel);
-      
-      const matches = matchesKPI && matchesActivity && matchesType && matchesTarget &&
-             matchesResponsible && matchesMOV && matchesMainObjective;
-      
-      return matches;
+      const mainObjectiveList = getListSelected(tableFilterState, 'mainObjective');
+      const matchesMainObjective =
+        mainObjectiveList.length === 0 || mainObjectiveList.includes(mainObjLabel);
+
+      return (
+        matchesKPI &&
+        matchesActivity &&
+        matchesType &&
+        matchesTarget &&
+        matchesResponsible &&
+        matchesMOV &&
+        matchesMainObjective
+      );
     });
-    
-    // With fresh server data, all objectives should be in the list
-    // No need to check for missing newly created objectives
-    if (false && hasActiveFilters) {
-      console.error('[DepartmentObjectives] CRITICAL: Newly created objectives are hidden by filters! Clearing filters...', {
-        missingIds: missingNewObjectives,
-        activeFilters: filters,
-      });
-      // Clear filters to show the new objectives - use setTimeout to avoid state update during render
-      setTimeout(() => {
-        setFilters({
-          kpi: [],
-          activity: [],
-          type: [],
-          target: [],
-          responsible: [],
-          mov: [],
-          mainObjective: [],
-        });
-        toast({
-          title: 'Filters Cleared',
-          description: 'Filters were cleared to show your newly created objective(s)',
-        });
-      }, 0);
-    }
-    
-    if (hasActiveFilters) {
-      console.log('[DepartmentObjectives] Filtered to', filtered.length, 'objectives');
-    }
-    
     return filtered;
-  }, [objectives, filters, mainObjectives]);
+  }, [objectives, tableFilterState, mainObjectives]);
 
   // NOW we can do conditional returns - AFTER all hooks
   // Skeleton loader component
@@ -1408,19 +1457,6 @@ export default function DepartmentObjectives() {
   // Permission check: Only CEO/admin can modify M&E KPIs
   const canModifyMEKPIs = user?.role === 'CEO';
 
-  const toggleFilterValue = (filterKey: keyof typeof filters, value: string) => {
-    const currentValues = filters[filterKey];
-    if (currentValues.includes(value)) {
-      setFilters({ ...filters, [filterKey]: currentValues.filter(v => v !== value) });
-    } else {
-      setFilters({ ...filters, [filterKey]: [...currentValues, value] });
-    }
-  };
-
-  const clearFilter = (filterKey: keyof typeof filters) => {
-    setFilters({ ...filters, [filterKey]: [] });
-  };
-
   // Get unique values for RASCI Metrics filters
   const rasciWithRoles = rasciMetrics.filter(rasci => rasci.role && rasci.role !== '—' && rasci.role.trim() !== '');
   const uniqueRasciKPIs = Array.from(new Set(rasciWithRoles.map(r => r.kpi).filter(Boolean))).sort();
@@ -1438,240 +1474,23 @@ export default function DepartmentObjectives() {
   });
 
   const toggleRasciFilterValue = (filterKey: keyof typeof rasciFilters, value: string) => {
-    const currentValues = rasciFilters[filterKey];
-    if (currentValues.includes(value)) {
-      setRasciFilters({ ...rasciFilters, [filterKey]: currentValues.filter(v => v !== value) });
-    } else {
-      setRasciFilters({ ...rasciFilters, [filterKey]: [...currentValues, value] });
-    }
+    setRasciFilters((prev) => {
+      const currentValues = prev[filterKey];
+      const next =
+        currentValues.includes(value)
+          ? { ...prev, [filterKey]: currentValues.filter((v) => v !== value) }
+          : { ...prev, [filterKey]: [...currentValues, value] };
+      persistRasciFilters(next);
+      return next;
+    });
   };
 
   const clearRasciFilter = (filterKey: keyof typeof rasciFilters) => {
-    setRasciFilters({ ...rasciFilters, [filterKey]: [] });
-  };
-
-  // Excel-like filter component
-  const ExcelFilter = ({ 
-    column, 
-    uniqueValues, 
-    selectedValues, 
-    onToggle, 
-    onClear,
-    getLabel,
-    filterId
-  }: { 
-    column: string;
-    uniqueValues: string[];
-    selectedValues: string[];
-    onToggle: (value: string) => void;
-    onClear: () => void;
-    getLabel?: (value: string) => string;
-    filterId: string;
-  }) => {
-    const open = openFilter === filterId;
-    const [tempSelections, setTempSelections] = useState<string[]>(selectedValues);
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    const hasFilter = selectedValues.length > 0;
-    
-    // Update temp selections when popover opens or selectedValues change
-    useEffect(() => {
-      if (open) {
-        setTempSelections(selectedValues);
-      }
-    }, [open, selectedValues]);
-    
-    const handleOpenChange = (newOpen: boolean) => {
-      if (newOpen) {
-        setOpenFilter(filterId);
-      } else {
-        setOpenFilter(null);
-      }
-    };
-    
-    // Filter values based on search term
-    const filteredValues = uniqueValues.filter(value => {
-      const label = getLabel ? getLabel(value) : value;
-      return label.toLowerCase().includes(searchTerm.toLowerCase());
+    setRasciFilters((prev) => {
+      const next = { ...prev, [filterKey]: [] };
+      persistRasciFilters(next);
+      return next;
     });
-    
-    const handleToggle = (value: string) => {
-      if (tempSelections.includes(value)) {
-        setTempSelections(tempSelections.filter(v => v !== value));
-      } else {
-        setTempSelections([...tempSelections, value]);
-      }
-    };
-    
-    const handleSelectAll = () => {
-      if (tempSelections.length === filteredValues.length) {
-        // Deselect all filtered values
-        setTempSelections(tempSelections.filter(v => !filteredValues.includes(v)));
-      } else {
-        // Select all filtered values
-        const newSelections = [...tempSelections];
-        filteredValues.forEach(value => {
-          if (!newSelections.includes(value)) {
-            newSelections.push(value);
-          }
-        });
-        setTempSelections(newSelections);
-      }
-    };
-    
-    const handleApply = () => {
-      // Apply temporary selections
-      const currentSet = new Set(selectedValues);
-      const tempSet = new Set(tempSelections);
-      
-      // Remove values that are no longer selected
-      currentSet.forEach(value => {
-        if (!tempSet.has(value)) {
-          onToggle(value); // Toggle to remove
-        }
-      });
-      
-      // Add new values
-      tempSet.forEach(value => {
-        if (!currentSet.has(value)) {
-          onToggle(value); // Toggle to add
-        }
-      });
-      
-      handleOpenChange(false);
-      setSearchTerm('');
-    };
-    
-    const handleClear = () => {
-      setTempSelections([]);
-      onClear();
-      handleOpenChange(false);
-      setSearchTerm('');
-    };
-    
-    const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelections.includes(v));
-    
-    return (
-      <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-auto px-1.5 py-1 ${hasFilter ? 'text-primary' : ''}`}
-            aria-label={`Filter ${column}`}
-            title={`Filter ${column}`}
-          >
-            <Filter className="h-3 w-3" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent 
-          className="min-w-64 max-w-[320px] w-auto p-0 max-h-[calc(100vh-8rem)]" 
-          align="start"
-          side="bottom"
-          sideOffset={4}
-          collisionPadding={8}
-        >
-          <div className="p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">Filter by {column}</span>
-              {hasFilter && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={handleClear}
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-            <Separator />
-            {/* Search Input */}
-            <div className="px-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
-                <Input
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-7 pl-7 text-xs"
-                />
-              </div>
-            </div>
-            {filteredValues.length > 0 && (
-              <div className="px-2 py-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-full text-xs justify-start"
-                  onClick={handleSelectAll}
-                >
-                  {allFilteredSelected ? 'Deselect All' : 'Select All'}
-                </Button>
-              </div>
-            )}
-            <Separator />
-            <ScrollArea className="max-h-[calc(100vh-20rem)] min-h-[120px]">
-              <div className="p-2 space-y-2">
-                {filteredValues.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-2">
-                    {searchTerm ? 'No values match your search' : 'No values available'}
-                  </div>
-                ) : (
-                  filteredValues.map((value) => {
-                    const label = getLabel ? getLabel(value) : value;
-                    const isChecked = tempSelections.includes(value);
-                    return (
-                      <div key={value} className="flex items-center space-x-2 py-1">
-                        <Checkbox
-                          id={`filter-${column}-${value}`}
-                          checked={isChecked}
-                          onCheckedChange={() => handleToggle(value)}
-                        />
-                        <label
-                          htmlFor={`filter-${column}-${value}`}
-                          className="text-sm cursor-pointer flex-1 truncate"
-                          title={label}
-                        >
-                          {label}
-                        </label>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-            <Separator />
-            <div className="flex items-center justify-between px-2 pb-2">
-              <div className="text-xs text-muted-foreground">
-                {tempSelections.length} of {uniqueValues.length} selected
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-3 text-xs"
-                  onClick={() => {
-                    setOpen(false);
-                    setTempSelections(selectedValues);
-                    setSearchTerm('');
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 px-3 text-xs"
-                  onClick={handleApply}
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
   };
 
   const handleOpenMEModal = (objective: DepartmentObjective) => {
@@ -2297,13 +2116,18 @@ export default function DepartmentObjectives() {
                     <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>KPI</span>
-                        <ExcelFilter
+                        <ColumnFilter
+                          columnKey="kpi"
+                          columnLabel="KPI"
                           filterId="kpi"
-                          column="KPI"
+                          columnType="text"
                           uniqueValues={uniqueKPIs}
-                          selectedValues={filters.kpi}
-                          onToggle={(value) => toggleFilterValue('kpi', value)}
-                          onClear={() => clearFilter('kpi')}
+                          selectedValues={getListSelected(tableFilterState, 'kpi')}
+                          onListChange={(selected) => updateColumnFilter('kpi', { mode: 'list', selectedValues: selected })}
+                          condition={getCondition(tableFilterState, 'kpi')}
+                          onConditionChange={(c) => updateColumnFilter('kpi', c)}
+                          openFilterId={openFilter}
+                          onOpenFilterChange={setOpenFilter}
                         />
                       </div>
                       <div
@@ -2314,13 +2138,18 @@ export default function DepartmentObjectives() {
                     <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>Activity</span>
-                        <ExcelFilter
+                        <ColumnFilter
+                          columnKey="activity"
+                          columnLabel="Activity"
                           filterId="activity"
-                          column="Activity"
+                          columnType="text"
                           uniqueValues={uniqueActivities}
-                          selectedValues={filters.activity}
-                          onToggle={(value) => toggleFilterValue('activity', value)}
-                          onClear={() => clearFilter('activity')}
+                          selectedValues={getListSelected(tableFilterState, 'activity')}
+                          onListChange={(selected) => updateColumnFilter('activity', { mode: 'list', selectedValues: selected })}
+                          condition={getCondition(tableFilterState, 'activity')}
+                          onConditionChange={(c) => updateColumnFilter('activity', c)}
+                          openFilterId={openFilter}
+                          onOpenFilterChange={setOpenFilter}
                         />
                       </div>
                       <div
@@ -2331,13 +2160,18 @@ export default function DepartmentObjectives() {
                     <TableHead style={{ width: columnWidths.type, minWidth: columnWidths.type, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>Type</span>
-                        <ExcelFilter
+                        <ColumnFilter
+                          columnKey="type"
+                          columnLabel="Type"
                           filterId="type"
-                          column="Type"
+                          columnType="text"
                           uniqueValues={uniqueTypes}
-                          selectedValues={filters.type}
-                          onToggle={(value) => toggleFilterValue('type', value)}
-                          onClear={() => clearFilter('type')}
+                          selectedValues={getListSelected(tableFilterState, 'type')}
+                          onListChange={(selected) => updateColumnFilter('type', { mode: 'list', selectedValues: selected })}
+                          condition={getCondition(tableFilterState, 'type')}
+                          onConditionChange={(c) => updateColumnFilter('type', c)}
+                          openFilterId={openFilter}
+                          onOpenFilterChange={setOpenFilter}
                         />
                       </div>
                       <div
@@ -2348,13 +2182,18 @@ export default function DepartmentObjectives() {
                     <TableHead className="text-right border-r border-border/50" style={{ width: columnWidths.target, minWidth: columnWidths.target, position: 'relative' }}>
                       <div className="flex items-center gap-2 justify-end">
                         <span>Target</span>
-                        <ExcelFilter
+                        <ColumnFilter
+                          columnKey="target"
+                          columnLabel="Target"
                           filterId="target"
-                          column="Target"
+                          columnType="number"
                           uniqueValues={uniqueTargets}
-                          selectedValues={filters.target}
-                          onToggle={(value) => toggleFilterValue('target', value)}
-                          onClear={() => clearFilter('target')}
+                          selectedValues={getListSelected(tableFilterState, 'target')}
+                          onListChange={(selected) => updateColumnFilter('target', { mode: 'list', selectedValues: selected })}
+                          condition={getCondition(tableFilterState, 'target')}
+                          onConditionChange={(c) => updateColumnFilter('target', c)}
+                          openFilterId={openFilter}
+                          onOpenFilterChange={setOpenFilter}
                         />
                       </div>
                       <div
@@ -2365,13 +2204,18 @@ export default function DepartmentObjectives() {
                     <TableHead style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>Responsible</span>
-                        <ExcelFilter
+                        <ColumnFilter
+                          columnKey="responsible"
+                          columnLabel="Responsible"
                           filterId="responsible"
-                          column="Responsible"
+                          columnType="text"
                           uniqueValues={uniqueResponsible}
-                          selectedValues={filters.responsible}
-                          onToggle={(value) => toggleFilterValue('responsible', value)}
-                          onClear={() => clearFilter('responsible')}
+                          selectedValues={getListSelected(tableFilterState, 'responsible')}
+                          onListChange={(selected) => updateColumnFilter('responsible', { mode: 'list', selectedValues: selected })}
+                          condition={getCondition(tableFilterState, 'responsible')}
+                          onConditionChange={(c) => updateColumnFilter('responsible', c)}
+                          openFilterId={openFilter}
+                          onOpenFilterChange={setOpenFilter}
                         />
                       </div>
                       <div
@@ -2382,13 +2226,18 @@ export default function DepartmentObjectives() {
                     <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>MOV</span>
-                        <ExcelFilter
+                        <ColumnFilter
+                          columnKey="mov"
+                          columnLabel="MOV"
                           filterId="mov"
-                          column="MOV"
+                          columnType="text"
                           uniqueValues={uniqueMOVs}
-                          selectedValues={filters.mov}
-                          onToggle={(value) => toggleFilterValue('mov', value)}
-                          onClear={() => clearFilter('mov')}
+                          selectedValues={getListSelected(tableFilterState, 'mov')}
+                          onListChange={(selected) => updateColumnFilter('mov', { mode: 'list', selectedValues: selected })}
+                          condition={getCondition(tableFilterState, 'mov')}
+                          onConditionChange={(c) => updateColumnFilter('mov', c)}
+                          openFilterId={openFilter}
+                          onOpenFilterChange={setOpenFilter}
                         />
                       </div>
                       <div
@@ -2592,29 +2441,59 @@ export default function DepartmentObjectives() {
             <div className="flex items-center justify-between flex-wrap gap-4">
               <CardTitle>RASCI Metrics</CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
-                <ExcelFilter
+                <ColumnFilter
+                  columnKey="rasci-kpi"
+                  columnLabel="KPI"
                   filterId="rasci-kpi"
-                  column="KPI"
+                  columnType="text"
                   uniqueValues={uniqueRasciKPIs}
                   selectedValues={rasciFilters.kpi}
-                  onToggle={(value) => toggleRasciFilterValue('kpi', value)}
-                  onClear={() => clearRasciFilter('kpi')}
+                  onListChange={(selected) => {
+                    setRasciFilters((prev) => {
+                      const next = { ...prev, kpi: selected };
+                      persistRasciFilters(next);
+                      return next;
+                    });
+                  }}
+                  openFilterId={openFilter}
+                  onOpenFilterChange={setOpenFilter}
+                  listOnly
                 />
-                <ExcelFilter
+                <ColumnFilter
+                  columnKey="rasci-role"
+                  columnLabel="Role"
                   filterId="rasci-role"
-                  column="Role"
+                  columnType="text"
                   uniqueValues={uniqueRasciRoles}
                   selectedValues={rasciFilters.role}
-                  onToggle={(value) => toggleRasciFilterValue('role', value)}
-                  onClear={() => clearRasciFilter('role')}
+                  onListChange={(selected) => {
+                    setRasciFilters((prev) => {
+                      const next = { ...prev, role: selected };
+                      persistRasciFilters(next);
+                      return next;
+                    });
+                  }}
+                  openFilterId={openFilter}
+                  onOpenFilterChange={setOpenFilter}
+                  listOnly
                 />
-                <ExcelFilter
+                <ColumnFilter
+                  columnKey="rasci-exists"
+                  columnLabel="Exists"
                   filterId="rasci-exists"
-                  column="Exists"
+                  columnType="text"
                   uniqueValues={uniqueRasciExists}
                   selectedValues={rasciFilters.exists}
-                  onToggle={(value) => toggleRasciFilterValue('exists', value)}
-                  onClear={() => clearRasciFilter('exists')}
+                  onListChange={(selected) => {
+                    setRasciFilters((prev) => {
+                      const next = { ...prev, exists: selected };
+                      persistRasciFilters(next);
+                      return next;
+                    });
+                  }}
+                  openFilterId={openFilter}
+                  onOpenFilterChange={setOpenFilter}
+                  listOnly
                 />
               </div>
             </div>
