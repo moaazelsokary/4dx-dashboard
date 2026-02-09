@@ -137,8 +137,10 @@ function kpiKey(k: KPIGroup) {
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 1.5;
 const ZOOM_STEP = 0.12;
-/** Scale down to 92% of fit so the whole diagram has breathing room */
-const FIT_PADDING = 0.92;
+/** Use full fit (no extra shrink) */
+const FIT_PADDING = 1;
+/** Don't scale below this so the diagram stays readable */
+const MIN_FIT_SCALE = 0.5;
 const AUTO_ZOOM_OUT_FACTOR = 0.92;
 const AUTO_ZOOM_IN_FACTOR = 1 / AUTO_ZOOM_OUT_FACTOR;
 
@@ -228,7 +230,8 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
       const sh = content.scrollHeight || content.offsetHeight;
       if (sw <= 0 || sh <= 0) return;
       const rawScale = Math.min(cw / sw, ch / sh, 1);
-      setFitScale(rawScale * FIT_PADDING);
+      const scale = Math.max(rawScale * FIT_PADDING, MIN_FIT_SCALE);
+      setFitScale(scale);
     };
     updateFitRef.current = updateFit;
     const runAfterLayout = () => {
@@ -434,30 +437,27 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                     key={kKey}
                                                     className="flex flex-col items-center flex-shrink-0 w-[200px]"
                                                   >
-                                                    <div className="flex flex-wrap items-center justify-center gap-2 w-full">
-                                                      <div className="rounded-lg bg-emerald-100/80 dark:bg-emerald-900/30 border border-emerald-400/50 px-3 py-2 text-sm font-medium text-foreground flex items-center gap-2 flex-1 min-w-0">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => openBreakdown(kpi.kpi)}
+                                                      className="rounded-lg px-3 py-2 text-xs font-medium w-full flex items-center justify-between gap-2 border transition-colors break-words text-left min-w-0 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-400/50 text-foreground hover:bg-emerald-100 dark:hover:bg-emerald-900/40 cursor-pointer"
+                                                    >
+                                                      <span className="min-w-0 break-words flex items-center gap-1.5">
                                                         <Target className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                                        <span className="min-w-0 break-words">
-                                                          <BidirectionalText>
-                                                            {kpi.kpi.replace(
-                                                              /^\d+(\.\d+)*(\.\d+)?\s*/,
-                                                              ''
-                                                            ).trim() || kpi.kpi}
-                                                          </BidirectionalText>
-                                                        </span>
-                                                        <span className="text-xs text-muted-foreground shrink-0">
+                                                        <BidirectionalText>
+                                                          {kpi.kpi.replace(
+                                                            /^\d+(\.\d+)*(\.\d+)?\s*/,
+                                                            ''
+                                                          ).trim() || kpi.kpi}
+                                                        </BidirectionalText>
+                                                        <span className="text-muted-foreground shrink-0">
                                                           ({kpi.annual_target.toLocaleString()})
                                                         </span>
-                                                      </div>
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => openBreakdown(kpi.kpi)}
-                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-500/25 border border-emerald-500/50 text-xs font-medium text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/35 transition-colors shrink-0"
-                                                      >
+                                                      </span>
+                                                      <span className="shrink-0 text-muted-foreground" title="Breakdown">
                                                         <ChevronRight className="h-3.5 w-3.5" />
-                                                        Breakdown
-                                                      </button>
-                                                    </div>
+                                                      </span>
+                                                    </button>
                                                   </div>
                                                 );
                                               })}
