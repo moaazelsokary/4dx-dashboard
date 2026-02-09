@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Target, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { getDepartmentObjectivesByKPI, getRASCIByKPI } from '@/services/wigService';
 import type {
@@ -141,6 +141,9 @@ const AUTO_ZOOM_IN_FACTOR = 1 / AUTO_ZOOM_OUT_FACTOR;
 
 export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [expandedPillars, setExpandedPillars] = useState<Set<string>>(new Set());
   const [expandedObjectives, setExpandedObjectives] = useState<Set<string>>(new Set());
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
@@ -213,8 +216,38 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
     return ai - bi;
   });
 
+  // Fit entire diagram in viewport (no scroll); re-fit when container or content size changes
+  useEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+    const updateFit = () => {
+      if (!container || !content) return;
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const sw = content.scrollWidth || content.offsetWidth;
+      const sh = content.scrollHeight || content.offsetHeight;
+      if (sw <= 0 || sh <= 0) return;
+      const scale = Math.min(cw / sw, ch / sh, 1);
+      setFitScale(scale);
+    };
+    // run after layout
+    const t = requestAnimationFrame(() => {
+      requestAnimationFrame(updateFit);
+    });
+    const ro = new ResizeObserver(updateFit);
+    ro.observe(container);
+    ro.observe(content);
+    return () => {
+      cancelAnimationFrame(t);
+      ro.disconnect();
+    };
+  }, [data, expandedPillars, expandedObjectives, expandedTargets, expandedKPIs, breakdownCache]);
+
+  const effectiveScale = fitScale * zoomLevel;
+
   return (
-    <div className="p-4 overflow-auto min-h-[400px] flex flex-col bg-gray-50 dark:bg-gray-900/20 rounded-lg border border-emerald-200/50 dark:border-emerald-800/30">
+    <div className="p-4 min-h-[400px] flex flex-col bg-gray-50 dark:bg-gray-900/20 rounded-lg border border-emerald-200/50 dark:border-emerald-800/30">
       {/* Zoom controls */}
       <div className="flex items-center gap-2 mb-4 shrink-0">
         <span className="text-xs text-muted-foreground mr-2">Zoom</span>
@@ -249,14 +282,22 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
           <RotateCcw className="h-3.5 w-3.5 mr-1" />
           Reset
         </Button>
-        <span className="text-xs text-muted-foreground ml-2">{Math.round(zoomLevel * 100)}%</span>
+        <span className="text-xs text-muted-foreground ml-2">{Math.round(effectiveScale * 100)}%</span>
       </div>
 
-      {/* Flowchart: scaled for zoom with smooth transition */}
+      {/* Viewport: no scroll, whole visual fits */}
       <div
-        className="flex flex-col items-center w-full origin-top transition-transform duration-300 ease-out"
-        style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-hidden flex items-start justify-center"
+        style={{ minHeight: 420 }}
       >
+        <div
+          ref={contentRef}
+          className="inline-block origin-top transition-transform duration-300 ease-out"
+          style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top center' }}
+        >
+          {/* Flowchart content */}
+          <div className="flex flex-col items-center w-full">
         {/* Level 0: Root */}
         <div className="rounded-xl bg-emerald-600 text-white px-6 py-3 font-bold text-base shadow-lg text-center break-words max-w-full">
           Work Breakdown Structure
@@ -517,6 +558,8 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
               </div>
             );
           })}
+        </div>
+          </div>
         </div>
       </div>
     </div>
