@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Target, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { ChevronRight, ChevronDown, Target, Loader2, ZoomIn, ZoomOut, RotateCcw, Maximize2 } from 'lucide-react';
 import { getDepartmentObjectivesByKPI, getRASCIByKPI } from '@/services/wigService';
 import type {
   HierarchicalPlan,
@@ -12,6 +12,7 @@ import type {
 } from '@/types/wig';
 import { Button } from '@/components/ui/button';
 import BidirectionalText from '@/components/ui/BidirectionalText';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 interface WBSMindMapViewProps {
   data: HierarchicalPlan;
@@ -136,18 +137,21 @@ function kpiKey(k: KPIGroup) {
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 1.5;
 const ZOOM_STEP = 0.12;
+/** Scale down to 92% of fit so the whole diagram has breathing room */
+const FIT_PADDING = 0.92;
 const AUTO_ZOOM_OUT_FACTOR = 0.92;
 const AUTO_ZOOM_IN_FACTOR = 1 / AUTO_ZOOM_OUT_FACTOR;
 
 export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [fitScale, setFitScale] = useState(1);
+  const [fitKey, setFitKey] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [expandedPillars, setExpandedPillars] = useState<Set<string>>(new Set());
   const [expandedObjectives, setExpandedObjectives] = useState<Set<string>>(new Set());
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
-  const [expandedKPIs, setExpandedKPIs] = useState<Set<string>>(new Set());
+  const [openBreakdownKpi, setOpenBreakdownKpi] = useState<string | null>(null);
   const [breakdownCache, setBreakdownCache] = useState<
     Record<string, { objectives: DepartmentObjective[]; rasci: RASCI[] } | 'loading' | null>
   >({});
@@ -193,18 +197,12 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
     }
   }, []);
 
-  const handleToggleBreakdown = useCallback(
+  const openBreakdown = useCallback(
     (kpi: string) => {
-      const isExpanded = expandedKPIs.has(kpi);
-      if (!isExpanded) {
-        loadBreakdown(kpi);
-        setTimeout(zoomOutAuto, 0);
-      } else {
-        setTimeout(zoomInAuto, 0);
-      }
-      toggle(setExpandedKPIs, kpi);
+      loadBreakdown(kpi);
+      setOpenBreakdownKpi(kpi);
     },
-    [expandedKPIs, loadBreakdown, toggle, zoomOutAuto, zoomInAuto]
+    [loadBreakdown]
   );
 
   const sortedPillars = [...data.pillars].sort((a, b) => {
@@ -217,6 +215,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
   });
 
   // Fit entire diagram in viewport (no scroll); re-fit when container or content size changes
+  const updateFitRef = useRef<() => void>(() => {});
   useEffect(() => {
     const container = containerRef.current;
     const content = contentRef.current;
@@ -228,21 +227,23 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
       const sw = content.scrollWidth || content.offsetWidth;
       const sh = content.scrollHeight || content.offsetHeight;
       if (sw <= 0 || sh <= 0) return;
-      const scale = Math.min(cw / sw, ch / sh, 1);
-      setFitScale(scale);
+      const rawScale = Math.min(cw / sw, ch / sh, 1);
+      setFitScale(rawScale * FIT_PADDING);
     };
-    // run after layout
-    const t = requestAnimationFrame(() => {
-      requestAnimationFrame(updateFit);
-    });
-    const ro = new ResizeObserver(updateFit);
+    updateFitRef.current = updateFit;
+    const runAfterLayout = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(updateFit);
+        setTimeout(updateFit, 120);
+        setTimeout(updateFit, 350);
+      });
+    };
+    runAfterLayout();
+    const ro = new ResizeObserver(runAfterLayout);
     ro.observe(container);
     ro.observe(content);
-    return () => {
-      cancelAnimationFrame(t);
-      ro.disconnect();
-    };
-  }, [data, expandedPillars, expandedObjectives, expandedTargets, expandedKPIs, breakdownCache]);
+    return () => ro.disconnect();
+  }, [data, expandedPillars, expandedObjectives, expandedTargets, openBreakdownKpi, breakdownCache, fitKey]);
 
   const effectiveScale = fitScale * zoomLevel;
 
@@ -281,6 +282,17 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
         >
           <RotateCcw className="h-3.5 w-3.5 mr-1" />
           Reset
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 text-xs"
+          onClick={() => setFitKey((k) => k + 1)}
+          title="Fit entire diagram in view"
+        >
+          <Maximize2 className="h-3.5 w-3.5 mr-1" />
+          Fit
         </Button>
         <span className="text-xs text-muted-foreground ml-2">{Math.round(effectiveScale * 100)}%</span>
       </div>
@@ -416,13 +428,6 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                             <div className="flex flex-row flex-nowrap gap-2 justify-start items-start pb-2 w-full">
                                               {sortKPIs(target.kpis).map((kpi) => {
                                                 const kKey = kpiKey(kpi);
-                                                const isKpiExpanded = expandedKPIs.has(kKey);
-                                                const cached = breakdownCache[kKey];
-                                                const isLoading = cached === 'loading';
-                                                const hasData =
-                                                  cached &&
-                                                  typeof cached === 'object' &&
-                                                  'objectives' in cached;
 
                                                 return (
                                                   <div
@@ -446,102 +451,13 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                       </div>
                                                       <button
                                                         type="button"
-                                                        onClick={() =>
-                                                          handleToggleBreakdown(kpi.kpi)
-                                                        }
+                                                        onClick={() => openBreakdown(kpi.kpi)}
                                                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-500/25 border border-emerald-500/50 text-xs font-medium text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/35 transition-colors shrink-0"
                                                       >
-                                                        {isKpiExpanded ? (
-                                                          <>
-                                                            <ChevronDown className="h-3.5 w-3.5" />
-                                                            Hide
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            <ChevronRight className="h-3.5 w-3.5" />
-                                                            Breakdown
-                                                          </>
-                                                        )}
+                                                        <ChevronRight className="h-3.5 w-3.5" />
+                                                        Breakdown
                                                       </button>
                                                     </div>
-
-                                                    {isKpiExpanded && (
-                                                      <>
-                                                        <ArrowDown className="bg-emerald-400/40" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                                        <div className="w-full rounded-lg bg-white dark:bg-gray-900/50 border border-emerald-200 dark:border-emerald-800/50 py-3 px-4 space-y-4 shadow-sm">
-                                                          {isLoading && (
-                                                            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                                                              <Loader2 className="h-4 w-4 animate-spin" />
-                                                              Loading…
-                                                            </div>
-                                                          )}
-                                                          {cached === null && (
-                                                            <div className="text-sm text-muted-foreground py-2">
-                                                              Failed to load.
-                                                            </div>
-                                                          )}
-                                                          {hasData && cached && (
-                                                            (() => {
-                                                              const departmentsWithRASCI = getDepartmentsWithRASCI(cached.rasci);
-                                                              const objectivesByDept = groupObjectivesByDepartment(cached.objectives);
-                                                              if (departmentsWithRASCI.length === 0) {
-                                                                return (
-                                                                  <div className="text-sm text-muted-foreground py-2">
-                                                                    No RASCI assignments for this KPI.
-                                                                  </div>
-                                                                );
-                                                              }
-                                                              return (
-                                                                <div className="flex flex-row flex-nowrap gap-4 justify-start items-start pb-2">
-                                                                  {departmentsWithRASCI.map(({ department: deptName, role: rasciLetter }) => {
-                                                                    const objectives = objectivesByDept.get(deptName) ?? [];
-                                                                    return (
-                                                                      <div key={deptName} className="flex flex-col items-start flex-shrink-0 w-[240px]">
-                                                                        <div className="flex items-center gap-2 font-medium text-sm flex-wrap mb-2">
-                                                                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                                                                          <span className="text-foreground break-words">{deptName}</span>
-                                                                          <span className="rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 text-xs font-semibold shrink-0">
-                                                                            ({rasciLetter})
-                                                                          </span>
-                                                                        </div>
-                                                                        {objectives.length > 0 ? (
-                                                                          <div className="flex flex-row flex-nowrap gap-2 pb-1">
-                                                                            {objectives.map((obj) => (
-                                                                              <div
-                                                                                key={obj.id}
-                                                                                className="flex flex-wrap items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 px-2 py-1.5 text-xs"
-                                                                              >
-                                                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
-                                                                                <span className="text-foreground break-words min-w-0">
-                                                                                  <BidirectionalText>{obj.activity}</BidirectionalText>
-                                                                                </span>
-                                                                                {(obj.type === 'Direct' || obj.type === 'In direct') && (
-                                                                                  <span
-                                                                                    className={`shrink-0 text-[10px] font-medium px-1 py-0.5 rounded ${
-                                                                                      obj.type === 'Direct'
-                                                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                                                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                                                                                    }`}
-                                                                                  >
-                                                                                    {obj.type === 'Direct' ? 'D' : 'I'}
-                                                                                  </span>
-                                                                                )}
-                                                                              </div>
-                                                                            ))}
-                                                                          </div>
-                                                                        ) : (
-                                                                          <p className="text-xs text-muted-foreground">No objectives</p>
-                                                                        )}
-                                                                      </div>
-                                                                    );
-                                                                  })}
-                                                                </div>
-                                                              );
-                                                            })()
-                                                          )}
-                                                        </div>
-                                                      </>
-                                                    )}
                                                   </div>
                                                 );
                                               })}
@@ -567,6 +483,95 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
           </div>
         </div>
       </div>
+
+      {/* KPI breakdown in a sheet (no overlay on the map) */}
+      <Sheet open={!!openBreakdownKpi} onOpenChange={(open) => !open && setOpenBreakdownKpi(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="pr-8">
+              {openBreakdownKpi
+                ? openBreakdownKpi.replace(/^\d+(\.\d+)*(\.\d+)?\s*/, '').trim() || openBreakdownKpi
+                : 'KPI Breakdown'}
+            </SheetTitle>
+          </SheetHeader>
+          {openBreakdownKpi && (
+            <div className="mt-6">
+              {breakdownCache[openBreakdownKpi] === 'loading' && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading…
+                </div>
+              )}
+              {breakdownCache[openBreakdownKpi] === null && (
+                <div className="text-sm text-muted-foreground py-4">Failed to load.</div>
+              )}
+              {breakdownCache[openBreakdownKpi] &&
+                typeof breakdownCache[openBreakdownKpi] === 'object' &&
+                'objectives' in breakdownCache[openBreakdownKpi]! && (() => {
+                  const cached = breakdownCache[openBreakdownKpi] as {
+                    objectives: DepartmentObjective[];
+                    rasci: RASCI[];
+                  };
+                  const departmentsWithRASCI = getDepartmentsWithRASCI(cached.rasci);
+                  const objectivesByDept = groupObjectivesByDepartment(cached.objectives);
+                  if (departmentsWithRASCI.length === 0) {
+                    return (
+                      <div className="text-sm text-muted-foreground py-4">
+                        No RASCI assignments for this KPI.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-6">
+                      {departmentsWithRASCI.map(({ department: deptName, role: rasciLetter }) => {
+                        const objectives = objectivesByDept.get(deptName) ?? [];
+                        return (
+                          <div key={deptName} className="rounded-lg border border-border bg-muted/30 p-4">
+                            <div className="flex items-center gap-2 font-medium text-sm mb-3">
+                              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="text-foreground">{deptName}</span>
+                              <span className="rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 text-xs font-semibold shrink-0">
+                                ({rasciLetter})
+                              </span>
+                            </div>
+                            {objectives.length > 0 ? (
+                              <ul className="space-y-2">
+                                {objectives.map((obj) => (
+                                  <li
+                                    key={obj.id}
+                                    className="flex flex-wrap items-center gap-2 rounded-md bg-background border px-3 py-2 text-sm"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                    <span className="text-foreground min-w-0 flex-1">
+                                      <BidirectionalText>{obj.activity}</BidirectionalText>
+                                    </span>
+                                    {(obj.type === 'Direct' || obj.type === 'In direct') && (
+                                      <span
+                                        className={`shrink-0 text-xs font-medium px-1.5 py-0.5 rounded ${
+                                          obj.type === 'Direct'
+                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                        }`}
+                                      >
+                                        {obj.type === 'Direct' ? 'D' : 'I'}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">No objectives</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
