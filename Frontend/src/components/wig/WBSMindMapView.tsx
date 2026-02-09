@@ -145,7 +145,7 @@ const AUTO_ZOOM_OUT_FACTOR = 0.75;
 const AUTO_ZOOM_IN_FACTOR = 1 / AUTO_ZOOM_OUT_FACTOR;
 
 export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState(1.7);
   const [fitScale, setFitScale] = useState(1);
   const [fitKey, setFitKey] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -288,8 +288,8 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
           variant="outline"
           size="sm"
           className="h-8 px-2 text-xs"
-          onClick={() => setZoomLevel(1)}
-          title="Reset zoom"
+          onClick={() => setZoomLevel(1.7)}
+          title="Reset zoom (170%)"
         >
           <RotateCcw className="h-3.5 w-3.5 mr-1" />
           Reset
@@ -373,7 +373,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                         const hasTargets = obj.targets.length > 0;
 
                         return (
-                          <div key={oKey} className="flex flex-col items-center flex-shrink-0 w-[220px]">
+                          <div key={oKey} className="flex flex-col items-center flex-shrink-0 min-w-[220px] w-max">
                             <button
                               type="button"
                               onClick={() => hasTargets && toggle(setExpandedObjectives, oKey)}
@@ -407,7 +407,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                     const hasKpis = target.kpis.length > 0;
 
                                     return (
-                                      <div key={tKey} className="flex flex-col items-center flex-shrink-0 w-[200px]">
+                                      <div key={tKey} className="flex flex-col items-center flex-shrink-0 min-w-[200px] w-max">
                                         <button
                                           type="button"
                                           onClick={() =>
