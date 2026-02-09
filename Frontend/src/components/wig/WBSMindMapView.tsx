@@ -293,10 +293,15 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
       >
         <div
           ref={contentRef}
-          className="inline-block origin-top transition-transform duration-300 ease-out"
-          style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top center' }}
+          className="origin-top transition-transform duration-300 ease-out"
+          style={{
+            transform: `scale(${effectiveScale})`,
+            transformOrigin: 'top center',
+            width: 'max-content',
+            minWidth: 'max-content',
+          }}
         >
-          {/* Flowchart content */}
+          {/* Flowchart content - natural width so scale can fit to viewport */}
           <div className="flex flex-col items-center w-full">
         {/* Level 0: Root */}
         <div className="rounded-xl bg-emerald-600 text-white px-6 py-3 font-bold text-base shadow-lg text-center break-words max-w-full">
@@ -306,14 +311,14 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
         <ArrowDown className="bg-emerald-500/60" />
 
         {/* Level 1: Pillars in a row with space between */}
-        <div className="flex flex-row flex-nowrap gap-10 lg:gap-16 justify-center items-start w-full overflow-x-auto pb-2">
+        <div className="flex flex-row flex-nowrap gap-10 lg:gap-16 justify-center items-start w-full pb-2">
           {sortedPillars.map((pillar) => {
             const pKey = pillarKey(pillar);
             const isPillarExpanded = expandedPillars.has(pKey);
             const hasChildren = pillar.objectives.length > 0;
 
             return (
-              <div key={pKey} className="flex flex-col items-center min-w-[200px] flex-1 basis-0">
+              <div key={pKey} className="flex flex-col items-center flex-none min-w-[200px] w-max">
                 <button
                   type="button"
                   onClick={() => hasChildren && toggle(setExpandedPillars, pKey)}
@@ -338,7 +343,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                 {hasChildren && isPillarExpanded && (
                   <>
                     <ArrowDown className="bg-emerald-400/50" />
-                    <div className="flex flex-row flex-nowrap gap-4 justify-start items-start w-full overflow-x-auto pb-2 scrollbar-thin">
+                    <div className="flex flex-row flex-nowrap gap-4 justify-start items-start w-full pb-2">
                       {pillar.objectives.map((obj) => {
                         const oKey = objectiveKey(pillar, obj);
                         const isObjExpanded = expandedObjectives.has(oKey);
@@ -372,7 +377,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                             {hasTargets && isObjExpanded && (
                               <>
                                 <ArrowDown className="bg-emerald-400/50" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                <div className="flex flex-row flex-nowrap gap-3 justify-start items-start overflow-x-auto pb-2 w-full">
+                                <div className="flex flex-row flex-nowrap gap-3 justify-start items-start pb-2 w-full">
                                   {sortTargets(obj.targets).map((target) => {
                                     const tKey = targetKey(pillar, obj, target);
                                     const isTargetExpanded = expandedTargets.has(tKey);
@@ -408,7 +413,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                         {hasKpis && isTargetExpanded && (
                                           <>
                                             <ArrowDown className="bg-emerald-400/40" arrowColor="text-emerald-600 dark:text-emerald-400" />
-                                            <div className="flex flex-row flex-nowrap gap-2 justify-start items-start overflow-x-auto pb-2 w-full">
+                                            <div className="flex flex-row flex-nowrap gap-2 justify-start items-start pb-2 w-full">
                                               {sortKPIs(target.kpis).map((kpi) => {
                                                 const kKey = kpiKey(kpi);
                                                 const isKpiExpanded = expandedKPIs.has(kKey);
@@ -487,7 +492,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                                 );
                                                               }
                                                               return (
-                                                                <div className="flex flex-row flex-nowrap gap-4 justify-start items-start overflow-x-auto pb-2">
+                                                                <div className="flex flex-row flex-nowrap gap-4 justify-start items-start pb-2">
                                                                   {departmentsWithRASCI.map(({ department: deptName, role: rasciLetter }) => {
                                                                     const objectives = objectivesByDept.get(deptName) ?? [];
                                                                     return (
@@ -500,7 +505,7 @@ export default function WBSMindMapView({ data }: WBSMindMapViewProps) {
                                                                           </span>
                                                                         </div>
                                                                         {objectives.length > 0 ? (
-                                                                          <div className="flex flex-row flex-nowrap gap-2 overflow-x-auto pb-1">
+                                                                          <div className="flex flex-row flex-nowrap gap-2 pb-1">
                                                                             {objectives.map((obj) => (
                                                                               <div
                                                                                 key={obj.id}
