@@ -114,10 +114,11 @@ export default function LockRuleList() {
         return `KPI: ${lock.kpi || 'N/A'}`;
       case 'department_kpi':
         return `${lock.department_name || 'Department'} - ${lock.kpi || 'KPI'}`;
-      case 'specific_objective':
+      case 'specific_objective': {
         const objectiveName = lock.department_objective_activity || 'Objective';
         return `${lock.department_name || 'Department'} - ${objectiveName}${lock.department_objective_id ? ` (ID: ${lock.department_objective_id})` : ''}`;
-      case 'all_department_objectives':
+      }
+      case 'all_department_objectives': {
         const exclusions = [];
         if (lock.exclude_monthly_target) exclusions.push('Monthly Target');
         if (lock.exclude_monthly_actual) exclusions.push('Monthly Actual');
@@ -126,6 +127,7 @@ export default function LockRuleList() {
           ? `Users: ${lock.user_ids.length}` 
           : 'All Users';
         return `All Department Objectives (${userScope}${exclusions.length > 0 ? `, Excluding: ${exclusions.join(', ')}` : ''})`;
+      }
       default:
         return lock.scope_type || 'Unknown';
     }

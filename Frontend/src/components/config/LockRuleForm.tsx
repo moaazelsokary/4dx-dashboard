@@ -27,9 +27,18 @@ interface LockRuleFormProps {
   onSuccess: () => void;
 }
 
+/** Legacy lock scope values still used by this form and older API rows */
+type FormScopeType =
+  | 'all_users'
+  | 'specific_users'
+  | 'specific_kpi'
+  | 'department_kpi'
+  | 'all_department_objectives'
+  | 'specific_objective';
+
 export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: LockRuleFormProps) {
   const queryClient = useQueryClient();
-  const [scopeType, setScopeType] = useState<'all_users' | 'specific_users' | 'specific_kpi' | 'department_kpi' | 'all_department_objectives' | 'specific_objective'>('all_users');
+  const [scopeType, setScopeType] = useState<FormScopeType>('all_users');
   const [lockType, setLockType] = useState<string[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [selectedKPI, setSelectedKPI] = useState<string>('');
@@ -120,7 +129,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
   // Initialize form when lock is provided
   useEffect(() => {
     if (lock && open) {
-      setScopeType(lock.scope_type as any);
+      setScopeType(lock.scope_type as FormScopeType);
       if (Array.isArray(lock.lock_type)) {
         setLockType(lock.lock_type);
       } else if (lock.lock_type) {
@@ -276,7 +285,7 @@ export default function LockRuleForm({ open, onOpenChange, lock, onSuccess }: Lo
           {/* Scope Type */}
           <div className="space-y-3">
             <Label>Scope Type</Label>
-            <RadioGroup value={scopeType} onValueChange={(value) => setScopeType(value as any)}>
+            <RadioGroup value={scopeType} onValueChange={(value) => setScopeType(value as FormScopeType)}>
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="all_department_objectives" id="scope-all-dept" />

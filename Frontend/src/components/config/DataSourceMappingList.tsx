@@ -33,6 +33,7 @@ const DEFAULT_COLUMN_WIDTHS = {
   pmsProject: 200,
   pmsMetric: 200,
   odooProject: 200,
+  derivedProject: 180,
   actions: 100,
 };
 
@@ -92,10 +93,10 @@ export default function DataSourceMappingList() {
     queryFn: () => getMappings(),
   });
 
-  // Load metrics data for dropdowns
+  // Load metrics data for dropdowns (force fetch to include derived definitions)
   const { data: metricsData, isLoading: metricsLoading } = useQuery({
     queryKey: ['metrics-data'],
-    queryFn: () => getMetrics(),
+    queryFn: () => getMetrics(true),
   });
 
   // Memoized mapping index and derived data
@@ -105,8 +106,8 @@ export default function DataSourceMappingList() {
     return index;
   }, [mappings]);
 
-  const { pmsProjects, pmsMetrics, odooProjects } = useMemo(
-    () => metricsData ? getDistinctProjectsAndMetrics(metricsData) : { pmsProjects: [], pmsMetrics: [], odooProjects: [] },
+  const { pmsProjects, pmsMetrics, odooProjects, derivedProjects } = useMemo(
+    () => metricsData ? getDistinctProjectsAndMetrics(metricsData) : { pmsProjects: [], pmsMetrics: [], odooProjects: [], derivedProjects: [] },
     [metricsData]
   );
 
@@ -147,16 +148,16 @@ export default function DataSourceMappingList() {
   }, [objectives]);
 
   // Effective target/actual source for a row (for filtering)
-  const getEffectiveTargetSource = useCallback((row: MappingRow): 'manual' | 'pms_target' => {
+  const getEffectiveTargetSource = useCallback((row: MappingRow): 'manual' | 'pms_target' | 'derived' => {
     const edited = editedMappings[row.id];
     const current = edited ?? row.mapping;
-    return current?.target_source === 'pms_target' ? 'pms_target' : 'manual';
+    return current?.target_source === 'derived' ? 'derived' : current?.target_source === 'pms_target' ? 'pms_target' : 'manual';
   }, [editedMappings]);
 
-  const getEffectiveActualSource = useCallback((row: MappingRow): 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' => {
+  const getEffectiveActualSource = useCallback((row: MappingRow): 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived' => {
     const edited = editedMappings[row.id];
     const current = edited ?? row.mapping;
-    if (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done' || current?.actual_source === 'odoo_services_created') return current.actual_source;
+    if (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done' || current?.actual_source === 'odoo_services_created' || current?.actual_source === 'derived') return current.actual_source;
     return 'manual';
   }, [editedMappings]);
 
@@ -176,7 +177,7 @@ export default function DataSourceMappingList() {
     });
   }, [rows, tableFilterState, getEffectiveTargetSource, getEffectiveActualSource]);
 
-  const updateMapping = useCallback((objectiveId: number, field: keyof MappingFormData, value: any) => {
+  const updateMapping = useCallback(<K extends keyof MappingFormData>(objectiveId: number, field: K, value: MappingFormData[K]) => {
     setEditedMappings(prev => {
       const current = prev[objectiveId] || {};
       const mapping = mappingIndex[objectiveId];
@@ -185,18 +186,19 @@ export default function DataSourceMappingList() {
       const base: Partial<MappingFormData> = mapping ? {
         pms_project_name: mapping.pms_project_name || '',
         pms_metric_name: mapping.pms_metric_name || '',
-        target_source: mapping.target_source === 'pms_target' ? 'pms_target' : 'manual',
-        // Backend: 'manual' | 'pms_actual' | 'odoo_services_done'; default display Manual
-        actual_source: (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created')
+        target_source: mapping.target_source === 'derived' ? 'derived' : mapping.target_source === 'pms_target' ? 'pms_target' : 'manual',
+        actual_source: (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created' || mapping.actual_source === 'derived')
           ? mapping.actual_source
           : 'manual',
         odoo_project_name: mapping.odoo_project_name || '',
+        derived_project_name: mapping.derived_project_name || '',
       } : {
         pms_project_name: '',
         pms_metric_name: '',
         target_source: 'manual',
         actual_source: 'manual',
         odoo_project_name: '',
+        derived_project_name: '',
       };
 
       const updated = { ...base, ...current, [field]: value };
@@ -253,7 +255,7 @@ export default function DataSourceMappingList() {
     if (!edited) return;
 
     const actualSource = edited.actual_source ?? 'manual';
-    if (!['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created'].includes(actualSource)) {
+    if (!['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived'].includes(actualSource)) {
       toast({
         title: 'Error',
         description: 'Actual From is required',
@@ -266,6 +268,16 @@ export default function DataSourceMappingList() {
       toast({
         title: 'Error',
         description: 'Odoo Project is required when Actual From is Odoo ServicesDone or Odoo ServicesCreated',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const needsDerived = edited.target_source === 'derived' || actualSource === 'derived';
+    if (needsDerived && !edited.derived_project_name) {
+      toast({
+        title: 'Error',
+        description: 'Derived project is required when Target From or Actual From is Derived',
         variant: 'destructive',
       });
       return;
@@ -375,10 +387,10 @@ export default function DataSourceMappingList() {
                       columnLabel="Target From"
                       filterId="mapping-targetFrom"
                       columnType="text"
-                      uniqueValues={['manual', 'pms_target']}
+                      uniqueValues={['manual', 'pms_target', 'derived']}
                       selectedValues={getListSelected(tableFilterState, 'targetFrom')}
                       onListChange={(selected) => updateColumnFilter('targetFrom', { mode: 'list', selectedValues: selected })}
-                      getLabel={(v) => (v === 'pms_target' ? 'PMS' : 'Manual')}
+                      getLabel={(v) => (v === 'pms_target' ? 'PMS' : v === 'derived' ? 'Derived' : 'Manual')}
                       openFilterId={openFilter}
                       onOpenFilterChange={setOpenFilter}
                       listOnly
@@ -394,10 +406,10 @@ export default function DataSourceMappingList() {
                       columnLabel="Actual From"
                       filterId="mapping-actualFrom"
                       columnType="text"
-                      uniqueValues={['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created']}
+                      uniqueValues={['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived']}
                       selectedValues={getListSelected(tableFilterState, 'actualFrom')}
                       onListChange={(selected) => updateColumnFilter('actualFrom', { mode: 'list', selectedValues: selected })}
-                      getLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : v === 'odoo_services_created' ? 'Odoo ServicesCreated' : 'Manual')}
+                      getLabel={(v) => (v === 'pms_actual' ? 'PMS Actual' : v === 'odoo_services_done' ? 'Odoo ServicesDone' : v === 'odoo_services_created' ? 'Odoo ServicesCreated' : v === 'derived' ? 'Derived' : 'Manual')}
                       openFilterId={openFilter}
                       onOpenFilterChange={setOpenFilter}
                       listOnly
@@ -414,13 +426,16 @@ export default function DataSourceMappingList() {
                 <TableHead style={{ width: columnWidths.odooProject, minWidth: columnWidths.odooProject, position: 'relative' }} className="border-r border-border/50">Odoo Project
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('odooProject', e)} />
                 </TableHead>
+                <TableHead style={{ width: columnWidths.derivedProject, minWidth: columnWidths.derivedProject, position: 'relative' }} className="border-r border-border/50">Derived Project
+                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('derivedProject', e)} />
+                </TableHead>
                 <TableHead style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {                filteredRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                     No objectives found
                   </TableCell>
                 </TableRow>
@@ -429,10 +444,11 @@ export default function DataSourceMappingList() {
                   const edited = editedMappings[row.id];
                   const current = edited || row.mapping;
                   const hasChanges = edited !== undefined;
-                  const targetSource = edited?.target_source ?? (current?.target_source === 'pms_target' ? 'pms_target' : 'manual');
-                  const actualSource = edited?.actual_source ?? (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done' || current?.actual_source === 'odoo_services_created' ? current?.actual_source : 'manual');
+                  const targetSource = edited?.target_source ?? (current?.target_source === 'derived' ? 'derived' : current?.target_source === 'pms_target' ? 'pms_target' : 'manual');
+                  const actualSource = edited?.actual_source ?? (current?.actual_source === 'pms_actual' || current?.actual_source === 'odoo_services_done' || current?.actual_source === 'odoo_services_created' || current?.actual_source === 'derived' ? current?.actual_source : 'manual');
                   const pmsEnabled = targetSource === 'pms_target' || actualSource === 'pms_actual';
                   const odooEnabled = actualSource === 'odoo_services_done' || actualSource === 'odoo_services_created';
+                  const derivedEnabled = targetSource === 'derived' || actualSource === 'derived';
                   const pmsProject = edited?.pms_project_name || current?.pms_project_name || '';
                   const filteredMetrics = pmsProject ? (pmsMetricsByProject[pmsProject] ?? []) : pmsMetrics;
 
@@ -442,18 +458,19 @@ export default function DataSourceMappingList() {
                       <TableCell style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }} className="border-r border-border/50">{row.kpi || '-'}</TableCell>
                       <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="truncate border-r border-border/50" title={row.activity || ''}>{row.activity || '-'}</TableCell>
                       <TableCell style={{ width: columnWidths.targetFrom, minWidth: columnWidths.targetFrom }} className="border-r border-border/50">
-                        <Select value={targetSource} onValueChange={(value: 'pms_target' | 'manual') => updateMapping(row.id, 'target_source', value)}>
+                        <Select value={targetSource} onValueChange={(value: 'pms_target' | 'derived' | 'manual') => updateMapping(row.id, 'target_source', value)}>
                           <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="manual">Manual</SelectItem>
                             <SelectItem value="pms_target">PMS</SelectItem>
+                            <SelectItem value="derived">Derived</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
                       <TableCell style={{ width: columnWidths.actualFrom, minWidth: columnWidths.actualFrom }} className="border-r border-border/50">
-                        <Select value={actualSource} onValueChange={(value: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created') => updateMapping(row.id, 'actual_source', value)}>
+                        <Select value={actualSource} onValueChange={(value: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived') => updateMapping(row.id, 'actual_source', value)}>
                           <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
                             <SelectValue />
                           </SelectTrigger>
@@ -462,6 +479,7 @@ export default function DataSourceMappingList() {
                             <SelectItem value="pms_actual">PMS Actual</SelectItem>
                             <SelectItem value="odoo_services_done">Odoo ServicesDone</SelectItem>
                             <SelectItem value="odoo_services_created">Odoo ServicesCreated</SelectItem>
+                            <SelectItem value="derived">Derived</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -501,6 +519,18 @@ export default function DataSourceMappingList() {
                           </SelectContent>
                         </Select>
                       </TableCell>
+                      <TableCell style={{ width: columnWidths.derivedProject, minWidth: columnWidths.derivedProject }} className="border-r border-border/50">
+                        <Select value={edited?.derived_project_name ?? current?.derived_project_name ?? ''} onValueChange={(value) => updateMapping(row.id, 'derived_project_name', value)} disabled={!derivedEnabled}>
+                          <SelectTrigger className="h-8 min-w-0 w-full max-w-full">
+                            <SelectValue placeholder="Select derived" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {derivedProjects.map(project => (
+                              <SelectItem key={project} value={project}>{project}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
                         {hasChanges && (
                           <Button
@@ -528,6 +558,7 @@ export default function DataSourceMappingList() {
           <p>• Choose <strong>Target From</strong> first (default Manual), then <strong>Actual From</strong> (default Manual).</p>
           <p>• <strong>PMS Project &amp; Metric</strong> are editable when Target From = PMS or Actual From = PMS Actual; required when either is from PMS.</p>
           <p>• <strong>Odoo Project</strong> is editable and required when Actual From = Odoo ServicesDone or Odoo ServicesCreated.</p>
+          <p>• <strong>Derived Project</strong> is editable and required when Target From or Actual From = Derived (use metrics created on PMS &amp; Odoo Metrics page).</p>
           <p>• Click <strong>Save</strong> to save changes for each objective.</p>
         </div>
       </CardContent>

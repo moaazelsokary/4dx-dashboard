@@ -1,6 +1,12 @@
+/**
+ * @deprecated Use SidebarNav + AppLayout instead. All pages have been migrated to the
+ * left sidebar navigation. This component is kept for reference only.
+ */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Layers, Table2, Users, BarChart3, FolderOpen, Power, ArrowUpRight, Settings, TrendingUp } from 'lucide-react';
+import { Home, Users, BarChart3, History, ArrowUpRight, Settings } from 'lucide-react';
+import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
+import { OdooIcon } from '@/components/icons/OdooIcon';
 import { hasPowerBIAccess } from '@/config/powerbi';
 
 interface NavigationBarProps {
@@ -31,7 +37,6 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
   const canAccessMainPlan = isCEO || isDepartment; // Department users can view (read-only)
   const canAccessDepartmentObjectives = isCEO || isDepartment;
   const canAccessSummary = isCEO || isOperations;
-  const canAccessProjectDetails = isCEO || isOperations;
   const canAccessPowerBI = hasPowerBI;
 
   // For CEO/admin, show all buttons on all pages
@@ -54,7 +59,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           onClick={() => navigate('/main-plan')}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
-          <Layers className="w-3 h-3 mr-1" />
+          <Home className="w-3 h-3 mr-1" />
           Strategic Plan 2026
         </Button>
       )}
@@ -80,7 +85,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           onClick={() => navigate('/powerbi')}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
-          <Power className="w-3 h-3 mr-1" />
+          <PowerBIIcon className="w-3 h-3 mr-1" />
           Power BI Dashboards
         </Button>
       )}
@@ -93,7 +98,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           onClick={() => navigate('/pms-odoo-metrics')}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
-          <TrendingUp className="w-3 h-3 mr-1" />
+          <OdooIcon className="w-3 h-3 mr-1" />
           PMS & Odoo Metrics
         </Button>
       )}
@@ -111,31 +116,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* Projects Summary */}
-      {canAccessSummary && shouldShowButton('/summary') && (
-        <Button
-          variant={location.pathname === '/summary' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => navigate('/summary')}
-          className="h-7 px-2 text-xs whitespace-nowrap"
-        >
-          <BarChart3 className="w-3 h-3 mr-1" />
-          Projects Summary
-        </Button>
-      )}
-
-      {/* Projects Details */}
-      {canAccessProjectDetails && shouldShowButton('/project-details') && (
-        <Button
-          variant={location.pathname === '/project-details' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => navigate('/project-details')}
-          className="h-7 px-2 text-xs whitespace-nowrap"
-        >
-          <FolderOpen className="w-3 h-3 mr-1" />
-          Projects Details
-        </Button>
-      )}
+      {/* Projects Summary and Projects Details hidden from UI */}
 
       {/* Projects Website */}
       {canAccessSummary && (
@@ -145,7 +126,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
           onClick={() => window.open('http://pms.lifemakers.org/', '_blank')}
           className="h-7 px-2 text-xs whitespace-nowrap"
         >
-          <BarChart3 className="w-3 h-3 mr-1" />
+          <History className="w-3 h-3 mr-1" />
           Projects Website
         </Button>
       )}
@@ -163,18 +144,6 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
         </Button>
       )}
 
-      {/* CMS Admin (Admin/CEO/Editor) */}
-      {(isCEO || isAdmin || user.role === 'Editor') && shouldShowButton('/admin/cms') && (
-        <Button
-          variant={location.pathname === '/admin/cms' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => navigate('/admin/cms')}
-          className="h-7 px-2 text-xs whitespace-nowrap"
-        >
-          <Table2 className="w-3 h-3 mr-1" />
-          CMS Admin
-        </Button>
-      )}
     </div>
   );
 }

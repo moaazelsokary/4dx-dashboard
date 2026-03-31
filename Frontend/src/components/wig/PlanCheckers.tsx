@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,11 +16,7 @@ export default function PlanCheckers({ objectiveId }: PlanCheckersProps) {
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
 
-  useEffect(() => {
-    loadChecker();
-  }, [objectiveId]);
-
-  const loadChecker = async () => {
+  const loadChecker = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getPlanChecker(objectiveId);
@@ -34,7 +30,11 @@ export default function PlanCheckers({ objectiveId }: PlanCheckersProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [objectiveId]);
+
+  useEffect(() => {
+    void loadChecker();
+  }, [loadChecker]);
 
   const handleCalculate = async () => {
     try {

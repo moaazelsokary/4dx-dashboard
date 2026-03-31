@@ -205,17 +205,17 @@ async function getExcelData(siteId: string, fileId: string, tabName: string): Pr
     }
 
     // Filter out rows where the first 6 columns are all empty
-    const filteredRows = data.values.filter((row: any[]) => {
-      return row.slice(0, 6).some(cell => cell !== undefined && cell !== null && cell.toString().trim() !== '');
+    const filteredRows = (data.values as unknown[][]).filter((row: unknown[]) => {
+      return row.slice(0, 6).some(cell => cell !== undefined && cell !== null && String(cell).trim() !== '');
     });
 
     console.log(`[SharePoint] Successfully retrieved ${filteredRows.length} rows of data`);
     console.log('[SharePoint] Raw Excel data structure:', filteredRows.slice(0, 3)); // Show first 3 rows for debugging
     
     // Convert the raw data to ExcelRow format
-    return filteredRows.map((row: any[], index: number) => ({
+    return filteredRows.map((row: unknown[], index: number) => ({
       id: index + 1,
-      data: row.map((cell: any) => cell?.toString() || '')
+      data: row.map((cell: unknown) => (cell == null ? '' : String(cell)))
     }));
   } catch (error) {
     console.error('[SharePoint] Error getting Excel data:', error);
@@ -266,8 +266,8 @@ const getFilteredMonthlyData = (rowData: string[], selectedPeriod?: string, sele
   let totalTarget = 0;
   let totalAchieved = 0;
   let monthCount = 0;
-  let achievedArr: number[] = [];
-  let targetArr: number[] = [];
+  const achievedArr: number[] = [];
+  const targetArr: number[] = [];
 
   if (selectedPeriod === "monthly" && selectedMonths?.length) {
     selectedMonths.forEach(monthStr => {
@@ -528,7 +528,7 @@ function transformExcelToLagMetrics(
 
   // Force the index of التمييز to 4 for all rows
   let indicatorColIdx = 2; // default fallback
-  let typeColIdx = 4; // FORCE التمييز to index 4
+  const typeColIdx = 4; // FORCE التمييز to index 4
   const headerRow = excelData[0]?.data || [];
   for (let idx = 0; idx < headerRow.length; idx++) {
     const normalizedHeader = normalizeArabic(headerRow[idx]);
@@ -548,7 +548,7 @@ function transformExcelToLagMetrics(
     const rowData = row.data;
     const type = rowData[0]?.trim().toUpperCase();
     const name = rowData[1]?.trim();
-    let tamyeez = rowData[typeColIdx];
+    const tamyeez = rowData[typeColIdx];
     // Check if this is "عدد يقل" (less is better)
     const isLessBetter = tamyeez?.trim() === 'عدد يقل';
     if (name) {
@@ -558,7 +558,7 @@ function transformExcelToLagMetrics(
     if (type === 'LAG' && name) {
       // Check for indicators: must be at least ONE blank تصنيف الهدف row
       let j = i + 1;
-      let indicatorRows: { row: ExcelRow; idx: number }[] = [];
+      const indicatorRows: { row: ExcelRow; idx: number }[] = [];
       while (j < excelData.length) {
         const nextType = excelData[j].data[0]?.trim().toUpperCase();
         if (nextType === '' || nextType === undefined) {
@@ -620,7 +620,7 @@ function transformExcelToLagMetrics(
           if (leadType === 'LEAD' && leadName) {
             // Check for LEAD indicators (must be at least 1)
             let k = leadStart + 1;
-            let leadIndicatorRows: { row: ExcelRow; idx: number }[] = [];
+            const leadIndicatorRows: { row: ExcelRow; idx: number }[] = [];
             while (k < excelData.length) {
               const nextType = excelData[k].data[0]?.trim().toUpperCase();
               if (nextType === '' || nextType === undefined) {
@@ -712,7 +712,7 @@ function transformExcelToLagMetrics(
         const value = norm.value;
         const target = norm.target;
         // LEADs for this LAG
-        let leads: any[] = [];
+        const leads: LagMetric['leads'] = [];
         let leadStart = j;
         let leadCounter = 1; // Counter for numbering LEADs under this LAG
         while (leadStart < excelData.length) {
@@ -722,7 +722,7 @@ function transformExcelToLagMetrics(
           if (leadType === 'LEAD' && leadName) {
             // Check for LEAD indicators (must be at least 1)
             let k = leadStart + 1;
-            let leadIndicatorRows: { row: ExcelRow; idx: number }[] = [];
+            const leadIndicatorRows: { row: ExcelRow; idx: number }[] = [];
             while (k < excelData.length) {
               const nextType = excelData[k].data[0]?.trim().toUpperCase();
               if (nextType === '' || nextType === undefined) {
@@ -891,7 +891,7 @@ export async function getDepartmentData(
 }
 
 // Test connection function
-export async function testSharePointConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+export async function testSharePointConnection(): Promise<{ success: boolean; message: string; details?: unknown }> {
   console.log('[SharePoint] Testing connection...');
   
   try {
@@ -945,7 +945,7 @@ export function getDepartmentFiles() {
 }
 
 // Test specific department connection
-export async function testDepartmentConnection(department: string): Promise<{ success: boolean; message: string; details?: any }> {
+export async function testDepartmentConnection(department: string): Promise<{ success: boolean; message: string; details?: unknown }> {
   console.log(`[SharePoint] Testing connection for department: ${department}`);
   
   try {

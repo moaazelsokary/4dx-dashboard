@@ -1,19 +1,53 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
-import NavigationBar from '@/components/shared/NavigationBar';
-import { getMetrics, refreshMetrics, type MetricsData, getDistinctProjectsAndMetrics } from '@/services/metricsService';
-import { RefreshCw, Calendar, Filter } from 'lucide-react';
+import { AppLayout } from '@/components/layout/AppLayout';
+import {
+  getMetrics,
+  refreshMetrics,
+  createDerivedMetric,
+  updateDerivedMetric,
+  deleteDerivedMetric,
+  type MetricsData,
+  type DerivedMetricDefinition,
+  type DerivedMetricDefinitionItem,
+  getDistinctProjectsAndMetrics,
+} from '@/services/metricsService';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { RefreshCw, Filter, Plus, Pencil, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
+import type { User } from '@/services/authService';
+
+function errMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
 
 export type UnifiedMetricRow = {
-  source: 'pms' | 'odoo';
+  source: 'pms' | 'odoo' | 'odoo & pms';
   project: string;
   metric: string | null;
   month: string;
@@ -44,11 +78,21 @@ function unifyMetrics(data: MetricsData): UnifiedMetricRow[] {
     servicesCreated: m.ServicesCreated ?? null,
     servicesDone: m.ServicesDone ?? null,
   }));
-  return [...pmsRows, ...odooRows];
+  const derivedRows: UnifiedMetricRow[] = (data.derived || []).map(d => ({
+    source: d.source as 'odoo & pms' | 'odoo' | 'pms',
+    project: d.project,
+    metric: d.metric,
+    month: d.month,
+    target: d.target ?? null,
+    actual: d.actual ?? null,
+    servicesCreated: d.servicesCreated ?? null,
+    servicesDone: d.servicesDone ?? null,
+  }));
+  return [...pmsRows, ...odooRows, ...derivedRows];
 }
 
 const PMSOdooMetrics = () => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,7 +113,7 @@ const PMSOdooMetrics = () => {
     }
 
     const userObj = JSON.parse(userData);
-    setUser(userObj);
+    setUser(userObj as User);
     loadData();
   }, [navigate]);
 
@@ -77,14 +121,15 @@ const PMSOdooMetrics = () => {
     try {
       setLoading(true);
       setError(null);
-      const metricsData = await getMetrics();
+      const metricsData = await getMetrics(true);
       setData(metricsData);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading metrics:', err);
-      setError(err.message || 'Failed to load metrics');
+      const msg = errMessage(err, 'Failed to load metrics');
+      setError(msg);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to load metrics',
+        description: msg,
         variant: 'destructive',
       });
     } finally {
@@ -95,19 +140,18 @@ const PMSOdooMetrics = () => {
   const handleRefresh = async () => {
     try {
       setRefreshing(true);
+      setError(null);
       await refreshMetrics();
+      await loadData();
       toast({
         title: 'Success',
-        description: 'Refresh started. Data will update shortly.',
+        description: 'Refresh completed. Data updated.',
       });
-      setTimeout(() => {
-        loadData();
-      }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error refreshing metrics:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to refresh metrics',
+        description: errMessage(err, 'Failed to refresh metrics'),
         variant: 'destructive',
       });
     } finally {
@@ -115,9 +159,102 @@ const PMSOdooMetrics = () => {
     }
   };
 
+  const openAddModal = () => {
+    setEditingDef(null);
+    setFormProjectName('');
+    setFormPmsSelected([]);
+    setFormOdooSelected([]);
+    setAddModalOpen(true);
+  };
+
+  const openEditModal = (def: DerivedMetricDefinition) => {
+    setEditingDef(def);
+    setFormProjectName(def.projectName);
+    const pms = (def.definition || []).filter(d => d.source === 'pms');
+    const odoo = (def.definition || []).filter(d => d.source === 'odoo');
+    setFormPmsSelected(pms);
+    setFormOdooSelected(odoo);
+    setAddModalOpen(true);
+  };
+
+  const togglePms = (item: DerivedMetricDefinitionItem) => {
+    const key = `${item.project}|${item.metric ?? ''}`;
+    const exists = formPmsSelected.some(d => `${d.project}|${d.metric ?? ''}` === key);
+    if (exists) {
+      setFormPmsSelected(formPmsSelected.filter(d => `${d.project}|${d.metric ?? ''}` !== key));
+    } else {
+      setFormPmsSelected([...formPmsSelected, item]);
+    }
+  };
+
+  const toggleOdoo = (project: string) => {
+    const item = { source: 'odoo' as const, project };
+    const exists = formOdooSelected.some(d => d.project === project);
+    if (exists) {
+      setFormOdooSelected(formOdooSelected.filter(d => d.project !== project));
+    } else {
+      setFormOdooSelected([...formOdooSelected, item]);
+    }
+  };
+
+  const handleSaveDerived = async () => {
+    const definition = [...formPmsSelected, ...formOdooSelected];
+    if (!formProjectName.trim()) {
+      toast({ title: 'Error', description: 'Project name is required', variant: 'destructive' });
+      return;
+    }
+    if (definition.length < 2) {
+      toast({ title: 'Error', description: 'Select at least 2 metrics to sum', variant: 'destructive' });
+      return;
+    }
+    setFormSaving(true);
+    try {
+      if (editingDef) {
+        await updateDerivedMetric(editingDef.id, formProjectName.trim(), definition);
+        toast({ title: 'Success', description: 'Derived metric updated.' });
+      } else {
+        await createDerivedMetric(formProjectName.trim(), definition);
+        toast({ title: 'Success', description: 'Derived metric created.' });
+      }
+      setAddModalOpen(false);
+      await loadData();
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: errMessage(err, 'Failed to save'), variant: 'destructive' });
+    } finally {
+      setFormSaving(false);
+    }
+  };
+
+  const handleDeleteDerived = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteDerivedMetric(deleteTarget.id);
+      toast({ title: 'Success', description: 'Derived metric deleted.' });
+      setDeleteTarget(null);
+      await loadData();
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: errMessage(err, 'Failed to delete'), variant: 'destructive' });
+    }
+  };
+
   const unified = data ? unifyMetrics(data) : [];
-  const { pmsProjects, odooProjects } = data ? getDistinctProjectsAndMetrics(data) : { pmsProjects: [], pmsMetrics: [], odooProjects: [] };
-  const allProjects = [...new Set([...pmsProjects, ...odooProjects])].sort();
+  const { pmsProjects, pmsMetrics, odooProjects, derivedProjects } = data
+    ? getDistinctProjectsAndMetrics(data)
+    : { pmsProjects: [], pmsMetrics: [], odooProjects: [], derivedProjects: [] };
+  const allProjects = [...new Set([...pmsProjects, ...odooProjects, ...derivedProjects])].sort();
+  const pmsMetricPairs = pmsProjects.flatMap(p =>
+    (pmsMetrics || []).map(m => ({ source: 'pms' as const, project: p, metric: m }))
+  );
+
+  const isAdmin = user?.role === 'Admin' || user?.role === 'CEO';
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editingDef, setEditingDef] = useState<DerivedMetricDefinition | null>(null);
+  const [formProjectName, setFormProjectName] = useState('');
+  const [formPmsSelected, setFormPmsSelected] = useState<DerivedMetricDefinitionItem[]>([]);
+  const [formOdooSelected, setFormOdooSelected] = useState<DerivedMetricDefinitionItem[]>([]);
+  const [formSaving, setFormSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DerivedMetricDefinition | null>(null);
   const allMonths = [...new Set(unified.map(r => r.month))].sort().reverse();
 
   const filteredRows = unified.filter(row => {
@@ -138,50 +275,19 @@ const PMSOdooMetrics = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate(-1)}
-                  className="h-7 px-2 text-xs"
-                >
-                  Back
-                </Button>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">PMS & Odoo Metrics</h1>
-                  <p className="text-xs text-muted-foreground">
-                    Combined metrics from PMS and Odoo systems
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {data?.lastUpdated && (
-                  <span className="text-xs text-muted-foreground">
-                    Last updated: {format(new Date(data.lastUpdated), 'MMM dd, yyyy HH:mm')}
-                  </span>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-              </div>
-            </div>
-            <NavigationBar user={user} activeTab="" onTabChange={() => {}} />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-6">
+    <AppLayout
+      user={user}
+      headerTitle="PMS & Odoo Metrics"
+      headerSubtitle="PMS & Odoo Metrics"
+      onSignOut={() => { localStorage.removeItem('user'); navigate('/'); }}
+      onRefresh={handleRefresh}
+      status={refreshing ? 'loading' : null}
+      badge={data?.lastUpdated ? (
+        <span className="text-xs text-muted-foreground">
+          Last updated: {format(new Date(data.lastUpdated), 'MMM dd, yyyy HH:mm')}
+        </span>
+      ) : undefined}
+    >
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
@@ -210,6 +316,7 @@ const PMSOdooMetrics = () => {
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="pms">PMS</SelectItem>
                     <SelectItem value="odoo">Odoo</SelectItem>
+                    <SelectItem value="odoo & pms">Odoo & PMS</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -262,7 +369,55 @@ const PMSOdooMetrics = () => {
             </CardContent>
           </Card>
         ) : (
-          <Card>
+          <>
+            {isAdmin && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span>Derived Metrics</span>
+                    <Button size="sm" onClick={openAddModal}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Metric
+                    </Button>
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Sum 2+ existing metrics (PMS or Odoo). Source is derived automatically.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(!data?.derivedDefinitions || data.derivedDefinitions.length === 0) ? (
+                    <p className="text-sm text-muted-foreground">No derived metrics yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {data.derivedDefinitions.map(def => (
+                        <div
+                          key={def.id}
+                          className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                        >
+                          <Badge variant={def.source === 'odoo & pms' ? 'outline' : def.source === 'pms' ? 'default' : 'secondary'}>
+                            {def.source.toUpperCase()}
+                          </Badge>
+                          <span className="font-medium">{def.projectName}</span>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEditModal(def)}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(def)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center justify-between">
                 <span>Metrics</span>
@@ -295,7 +450,11 @@ const PMSOdooMetrics = () => {
                       filteredRows.map((row, index) => (
                         <TableRow key={`${row.source}-${index}-${row.project}-${row.month}`}>
                           <TableCell>
-                            <Badge variant={row.source === 'pms' ? 'default' : 'secondary'}>
+                            <Badge
+                              variant={
+                                row.source === 'pms' ? 'default' : row.source === 'odoo & pms' ? 'outline' : 'secondary'
+                              }
+                            >
                               {row.source.toUpperCase()}
                             </Badge>
                           </TableCell>
@@ -322,9 +481,97 @@ const PMSOdooMetrics = () => {
               </div>
             </CardContent>
           </Card>
+          </>
         )}
-      </div>
-    </div>
+
+        <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingDef ? 'Edit' : 'Add'} Derived Metric</DialogTitle>
+              <DialogDescription>
+                Select 2+ metrics to sum. Project name is entered manually. Source is derived automatically.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Project name</label>
+                <Input
+                  placeholder="e.g. Combined Services"
+                  value={formProjectName}
+                  onChange={e => setFormProjectName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">PMS metrics (Project + Metric)</label>
+                <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {pmsMetricPairs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No PMS data available.</p>
+                  ) : (
+                    pmsMetricPairs.map((item, i) => {
+                      const key = `${item.project}|${item.metric ?? ''}`;
+                      const checked = formPmsSelected.some(d => `${d.project}|${d.metric ?? ''}` === key);
+                      return (
+                        <label key={i} className="flex items-center gap-2 cursor-pointer text-sm">
+                          <Checkbox checked={checked} onCheckedChange={() => togglePms(item)} />
+                          <span>
+                            {item.project} / {item.metric}
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Odoo projects</label>
+                <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {odooProjects.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No Odoo data available.</p>
+                  ) : (
+                    odooProjects.map(proj => (
+                      <label key={proj} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <Checkbox
+                          checked={formOdooSelected.some(d => d.project === proj)}
+                          onCheckedChange={() => toggleOdoo(proj)}
+                        />
+                        <span>{proj}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Selected: {formPmsSelected.length + formOdooSelected.length} (min 2 required)
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveDerived} disabled={formSaving}>
+                {formSaving ? 'Saving...' : editingDef ? 'Update' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete derived metric?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget && `This will remove "${deleteTarget.projectName}". This action cannot be undone.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteDerived} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+    </AppLayout>
   );
 };
 

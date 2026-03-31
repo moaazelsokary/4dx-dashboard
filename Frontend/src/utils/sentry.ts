@@ -49,21 +49,37 @@ export async function initSentry() {
 
 const sentryPackage = '@sentry/react';
 
-export function captureException(error: Error, context?: Record<string, any>) {
+type SentryModule = {
+  captureException: (error: Error, options?: { contexts?: { custom?: Record<string, unknown> } }) => void;
+  captureMessage: (message: string, level: string) => void;
+  setUser: (user: { id?: string; username?: string; role?: string } | null) => void;
+};
+
+function getSentryModule(mod: unknown): SentryModule | null {
+  if (!mod || typeof mod !== 'object') return null;
+  const m = mod as Record<string, unknown>;
+  if (typeof m.captureException !== 'function') return null;
+  return mod as SentryModule;
+}
+
+export function captureException(error: Error, context?: Record<string, unknown>) {
   if (!sentryInitialized) {
     console.error('Error (Sentry not initialized):', error, context);
     return;
   }
 
-  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
-    if (Sentry) {
-      Sentry.captureException(error, {
-        contexts: {
-          custom: context || {},
-        },
-      });
-    }
-  });
+  import(/* @vite-ignore */ sentryPackage)
+    .catch(() => null)
+    .then((mod) => {
+      const Sentry = getSentryModule(mod);
+      if (Sentry) {
+        Sentry.captureException(error, {
+          contexts: {
+            custom: context || {},
+          },
+        });
+      }
+    });
 }
 
 export function captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info') {
@@ -72,34 +88,43 @@ export function captureMessage(message: string, level: 'info' | 'warning' | 'err
     return;
   }
 
-  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
-    if (Sentry) {
-      Sentry.captureMessage(message, level);
-    }
-  });
+  import(/* @vite-ignore */ sentryPackage)
+    .catch(() => null)
+    .then((mod) => {
+      const Sentry = getSentryModule(mod);
+      if (Sentry) {
+        Sentry.captureMessage(message, level);
+      }
+    });
 }
 
 export function setUser(user: { id?: string; username?: string; role?: string }) {
   if (!sentryInitialized) return;
 
-  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
-    if (Sentry) {
-      Sentry.setUser({
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      });
-    }
-  });
+  import(/* @vite-ignore */ sentryPackage)
+    .catch(() => null)
+    .then((mod) => {
+      const Sentry = getSentryModule(mod);
+      if (Sentry) {
+        Sentry.setUser({
+          id: user.id,
+          username: user.username,
+          role: user.role,
+        });
+      }
+    });
 }
 
 export function clearUser() {
   if (!sentryInitialized) return;
 
-  import(/* @vite-ignore */ sentryPackage).catch(() => null).then((Sentry: any) => {
-    if (Sentry) {
-      Sentry.setUser(null);
-    }
-  });
+  import(/* @vite-ignore */ sentryPackage)
+    .catch(() => null)
+    .then((mod) => {
+      const Sentry = getSentryModule(mod);
+      if (Sentry) {
+        Sentry.setUser(null);
+      }
+    });
 }
 

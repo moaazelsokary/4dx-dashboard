@@ -125,7 +125,7 @@ const DashboardFilters = ({
                   variant={selectedPeriod === period.value ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectedPeriod(period.value)}
-                  className={`${selectedPeriod === period.value ? "bg-primary text-primary-foreground" : ""} text-xs sm:text-sm`}
+                  className={`min-h-10 sm:min-h-9 ${selectedPeriod === period.value ? "bg-primary text-primary-foreground" : ""} text-xs sm:text-sm`}
                 >
                   {period.label}
                 </Button>
@@ -140,17 +140,25 @@ const DashboardFilters = ({
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Select Months ({selectedMonths.length} selected)
               </label>
-              <div className="flex flex-wrap gap-1 sm:gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-2">
                 {compactMonths.map((month) => (
                   <Badge
                     key={month.value}
                     variant={selectedMonths.includes(month.value) ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors text-xs ${
+                    role="button"
+                    tabIndex={0}
+                    className={`cursor-pointer transition-colors text-xs min-h-10 min-w-[2.75rem] sm:min-h-8 inline-flex items-center justify-center px-2.5 py-2 sm:py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       selectedMonths.includes(month.value) 
                         ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                         : "hover:bg-muted"
                     }`}
                     onClick={() => toggleMonth(month.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleMonth(month.value);
+                      }
+                    }}
                   >
                     {month.label}
                   </Badge>
@@ -166,17 +174,25 @@ const DashboardFilters = ({
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Select Quarters ({selectedQuarters.length} selected)
               </label>
-              <div className="flex flex-wrap gap-1 sm:gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-2">
                 {quarters.map((quarter) => (
                   <Badge
                     key={quarter.value}
                     variant={selectedQuarters.includes(quarter.value) ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors text-xs ${
+                    role="button"
+                    tabIndex={0}
+                    className={`cursor-pointer transition-colors text-xs min-h-10 sm:min-h-8 inline-flex items-center justify-center px-2.5 py-2 sm:py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       selectedQuarters.includes(quarter.value) 
                         ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                         : "hover:bg-muted"
                     }`}
                     onClick={() => toggleQuarter(quarter.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleQuarter(quarter.value);
+                      }
+                    }}
                   >
                     {quarter.label}
                   </Badge>

@@ -51,7 +51,11 @@ const OptimizedImage = ({
       height={height}
       loading={loading}
       onError={handleError}
-      className={cn('object-cover', className)}
+      className={cn(
+        // Mobile-only: gently reduce visual/photo size without affecting desktop layout.
+        'object-cover max-md:scale-[0.94] max-md:origin-center',
+        className
+      )}
       {...props}
     />
   );

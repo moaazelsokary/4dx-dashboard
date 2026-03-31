@@ -4,7 +4,7 @@
  */
 
 // Excel export using xlsx library
-export const exportToExcel = async (data: any[], filename: string = 'export'): Promise<void> => {
+export const exportToExcel = async (data: Record<string, unknown>[], filename: string = 'export'): Promise<void> => {
   try {
     // Dynamic import to avoid loading in bundle if not needed
     const XLSX = await import('xlsx');
@@ -49,7 +49,7 @@ export const exportToExcel = async (data: any[], filename: string = 'export'): P
 };
 
 // CSV export
-export const exportToCSV = (data: any[], filename: string = 'export'): void => {
+export const exportToCSV = (data: Record<string, unknown>[], filename: string = 'export'): void => {
   if (data.length === 0) {
     throw new Error('No data to export');
   }
@@ -99,7 +99,7 @@ export const exportToCSV = (data: any[], filename: string = 'export'): void => {
 // Note: jsPDF has limited bidirectional text support. For full bidirectional support,
 // consider using html2canvas to capture rendered HTML tables with bidirectional text.
 export const exportToPDF = async (
-  data: any[],
+  data: Record<string, unknown>[],
   filename: string = 'export',
   title: string = 'Export'
 ): Promise<void> => {
@@ -164,28 +164,27 @@ export const exportToPDF = async (
 /**
  * Format data for export (flatten nested objects)
  */
-export const formatDataForExport = (data: any[]): any[] => {
+export const formatDataForExport = (data: Record<string, unknown>[]): Record<string, unknown>[] => {
   return data.map(item => {
-    const flattened: any = {};
-    
+    const flattened: Record<string, unknown> = {};
+
     Object.keys(item).forEach(key => {
       const value = item[key];
-      
+
       if (value === null || value === undefined) {
         flattened[key] = '';
       } else if (typeof value === 'object' && !Array.isArray(value)) {
-        // Flatten nested objects
-        Object.keys(value).forEach(nestedKey => {
-          flattened[`${key}_${nestedKey}`] = value[nestedKey];
+        const nested = value as Record<string, unknown>;
+        Object.keys(nested).forEach(nestedKey => {
+          flattened[`${key}_${nestedKey}`] = nested[nestedKey];
         });
       } else if (Array.isArray(value)) {
-        // Convert arrays to comma-separated strings
         flattened[key] = value.join(', ');
       } else {
         flattened[key] = value;
       }
     });
-    
+
     return flattened;
   });
 };

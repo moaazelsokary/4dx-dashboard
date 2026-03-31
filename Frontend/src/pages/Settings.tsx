@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
 import CookiePreferences from '@/components/shared/CookiePreferences';
-import NavigationBar from '@/components/shared/NavigationBar';
+import { AppLayout } from '@/components/layout/AppLayout';
+import type { User } from '@/services/authService';
 
 export default function Settings() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [cookieDialogOpen, setCookieDialogOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -19,44 +19,17 @@ export default function Settings() {
     }
 
     const userObj = JSON.parse(userData);
-    setUser(userObj);
+    setUser(userObj as User);
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate(-1)}
-                  className="h-7 px-2 text-xs"
-                >
-                  <ArrowLeft className="w-3 h-3 mr-1" />
-                  Back
-                </Button>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">Settings</h1>
-                  <p className="text-xs text-muted-foreground">
-                    Manage your preferences and account settings
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <NavigationBar 
-              user={user} 
-              activeTab="" 
-              onTabChange={() => {}}
-            />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-6 max-w-4xl">
+    <AppLayout
+      user={user}
+      headerTitle="Settings"
+      headerSubtitle="Manage your preferences and account settings"
+      onSignOut={() => { localStorage.removeItem('user'); navigate('/'); }}
+    >
+      <div className="max-w-4xl mx-auto">
         <div className="space-y-6">
           {/* Cookie Preferences */}
           <Card>
@@ -119,7 +92,7 @@ export default function Settings() {
         open={cookieDialogOpen} 
         onOpenChange={setCookieDialogOpen} 
       />
-    </div>
+    </AppLayout>
   );
 }
 

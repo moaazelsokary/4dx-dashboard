@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run proxies\" \"vite\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -26,11 +26,12 @@
     "migrate-type-constraint": "node scripts/run-type-constraint-migration.cjs",
     "migrate-order-column": "node scripts/run-order-migration.cjs",
     "init-config-schema": "node scripts/run-config-schema.cjs",
+    "sync-pms-odoo": "node scripts/run-pms-odoo-sync.cjs",
     "proxy": "node proxy-server.cjs",
     "onedrive-proxy": "node onedrive-proxy.cjs",
     "wig-proxy": "node wig-proxy.cjs",
     "auth-proxy": "node auth-proxy.cjs",
-    "proxies": "concurrently \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\" \"npm run auth-proxy\""
+    "proxies": "concurrently -n proxy,onedrive,wig,auth \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\" \"npm run auth-proxy\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

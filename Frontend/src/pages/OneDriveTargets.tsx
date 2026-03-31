@@ -8,7 +8,7 @@ const ONEDRIVE_FUNCTION_URL = isLocalhost
 const ONEDRIVE_SAMPLE_URL = 'https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true';
 
 const OneDriveTargets: React.FC = () => {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,8 +21,8 @@ const OneDriveTargets: React.FC = () => {
         if (!res.ok) throw new Error('Failed to fetch OneDrive data');
         const json = await res.json();
         setData(json.worksheets);
-      } catch (e: any) {
-        setError(e.message);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Request failed');
       } finally {
         setLoading(false);
       }

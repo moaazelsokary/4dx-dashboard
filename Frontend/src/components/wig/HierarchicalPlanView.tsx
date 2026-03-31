@@ -251,7 +251,6 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                         objText = `${objNum} ${objText}`;
                       } else if (!fullNumMatch) {
                         // No number prefix, use as is
-                        objText = objText;
                       } else {
                         // Has number prefix but couldn't extract objNum, just remove prefix
                         objText = objText.replace(/^\d+(\.\d+)?\s*/, '').trim();
@@ -269,7 +268,7 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                       return (
                         <Card 
                           key={objIndex} 
-                          className={`border-l-4 ${colors.borderLeft} bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group`}
+                          className={`border-l-4 ${colors.borderLeft} bg-card border border-border/80 hover:shadow-md transition-all duration-200 group`}
                         >
                           <Accordion type="single" collapsible>
                             <AccordionItem value={`objective-${pillarIndex}-${objIndex}`} className="border-none">
@@ -324,7 +323,7 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                                     <BidirectionalText>{targetText}</BidirectionalText>
                                                   </h4>
                                                 </div>
-                                                <Badge variant="outline" className="border-primary/30 bg-white/50 dark:bg-gray-800/50">
+                                                <Badge variant="outline" className="border-primary/30 bg-muted/60 shrink-0">
                                                   <TrendingUp className="h-3 w-3 mr-1" />
                                                   {target.kpis.length} KPIs
                                                 </Badge>
@@ -340,7 +339,7 @@ export default function HierarchicalPlanView({ data }: HierarchicalPlanViewProps
                                                   return (
                                                     <Card 
                                                       key={kpiIndex} 
-                                                      className={`border-l-4 ${colors.borderLeft} bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:shadow-lg transition-all duration-200 group`}
+                                                      className={`border-l-4 ${colors.borderLeft} bg-card border border-border/80 hover:shadow-lg transition-all duration-200 group`}
                                                     >
                                                       <div className="p-4">
                                                         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">

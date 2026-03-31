@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,23 +11,24 @@ import {
   BarChart3,
   AlertCircle
 } from 'lucide-react';
-import NavigationBar from '@/components/shared/NavigationBar';
 import { POWERBI_CONFIG, getDashboardById, getAccessibleDashboards, type DashboardConfig } from '@/config/powerbi';
-import OptimizedImage from '@/components/ui/OptimizedImage';
+import { AppLayout } from '@/components/layout/AppLayout';
+import type { User } from '@/services/authService';
 
 const PowerBIDashboard: React.FC = () => {
   const [selectedDashboard, setSelectedDashboard] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
   const navigate = useNavigate();
 
   // Get accessible dashboards based on user role and departments
-  const dashboards: DashboardConfig[] = user 
-    ? getAccessibleDashboards(user.role, user.departments || [])
-    : [];
+  const dashboards: DashboardConfig[] = useMemo(
+    () => (user ? getAccessibleDashboards(user.role, user.departments || []) : []),
+    [user]
+  );
 
   // Authentication check
   useEffect(() => {
@@ -44,8 +45,25 @@ const PowerBIDashboard: React.FC = () => {
       return;
     }
     
-    setUser(userObj);
+    setUser(userObj as User);
   }, [navigate]);
+
+  const loadDashboard = useCallback(() => {
+    const dashboard = dashboards.find(d => d.id === selectedDashboard);
+    if (!dashboard || !dashboard.embedUrl) {
+      console.error('❌ Dashboard not found or URL not configured:', selectedDashboard);
+      setError('Dashboard URL not configured');
+      return;
+    }
+
+    console.log('✅ Loading dashboard:', dashboard.name, 'URL:', dashboard.embedUrl);
+    setError(null);
+    setLoading(true);
+
+    setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+  }, [dashboards, selectedDashboard]);
 
   // Set default selected dashboard when dashboards are loaded
   useEffect(() => {
@@ -63,25 +81,7 @@ const PowerBIDashboard: React.FC = () => {
       console.log('🔄 Loading dashboard:', selectedDashboard);
       loadDashboard();
     }
-  }, [selectedDashboard]);
-
-  const loadDashboard = () => {
-    const dashboard = dashboards.find(d => d.id === selectedDashboard);
-    if (!dashboard || !dashboard.embedUrl) {
-      console.error('❌ Dashboard not found or URL not configured:', selectedDashboard);
-      setError('Dashboard URL not configured');
-      return;
-    }
-
-    console.log('✅ Loading dashboard:', dashboard.name, 'URL:', dashboard.embedUrl);
-    setError(null);
-    setLoading(true);
-
-    // Simulate loading time for better UX
-    setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-  };
+  }, [selectedDashboard, loadDashboard]);
 
   const handleSignOut = () => {
     localStorage.removeItem("user");
@@ -101,50 +101,13 @@ const PowerBIDashboard: React.FC = () => {
   const currentDashboard = dashboards.find(d => d.id === selectedDashboard);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            {/* Top Row: Logo, Title, Actions */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <OptimizedImage 
-                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                    alt="Logo" 
-                    className="w-full h-full object-contain"
-                    sizes="48px"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                    Power BI Dashboards
-                  </h1>
-                  <p className="text-xs text-muted-foreground">Interactive data visualizations</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={refreshDashboard} className="h-7 px-2 text-xs">
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
-                  <LogOut className="w-3 h-3 mr-1" />
-                  Sign Out
-                </Button>
-              </div>
-            </div>
-
-            {/* Navigation Row */}
-            <NavigationBar user={user} />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-4">
+    <AppLayout
+      user={user}
+      headerTitle="Power BI Dashboards"
+      headerSubtitle="Interactive data visualizations"
+      onSignOut={handleSignOut}
+      onRefresh={refreshDashboard}
+    >
         {/* Dashboard Selection */}
         <Card className="mb-6">
           <CardHeader>
@@ -242,8 +205,7 @@ const PowerBIDashboard: React.FC = () => {
             )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </AppLayout>
   );
 };
 

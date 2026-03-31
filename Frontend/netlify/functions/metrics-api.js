@@ -10,11 +10,57 @@ const logger = require('./utils/logger');
 const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 
+// Compute derived metric rows from pms/odoo data and definition
+function computeDerivedRows(pms, odoo, derivedDef) {
+  const def = Array.isArray(derivedDef.definition) ? derivedDef.definition : (JSON.parse(derivedDef.definition || '[]') || []);
+  const hasPms = def.some(d => d.source === 'pms');
+  const hasOdoo = def.some(d => d.source === 'odoo');
+  const source = hasPms && hasOdoo ? 'odoo & pms' : hasOdoo ? 'odoo' : 'pms';
+  const months = new Set();
+  for (const d of def) {
+    if (d.source === 'pms') {
+      (pms || []).filter(r => r.ProjectName === d.project && r.MetricName === (d.metric || '')).forEach(r => months.add(r.MonthYear));
+    } else if (d.source === 'odoo') {
+      (odoo || []).filter(r => r.Project === d.project).forEach(r => months.add(r.Month));
+    }
+  }
+  const rows = [];
+  for (const month of [...months].sort()) {
+    let target = null, actual = null, servicesCreated = null, servicesDone = null;
+    if (hasPms) {
+      for (const d of def) {
+        if (d.source !== 'pms') continue;
+        const m = (pms || []).find(r => r.ProjectName === d.project && r.MetricName === (d.metric || '') && r.MonthYear === month);
+        if (m) {
+          target = (target ?? 0) + (m.Target ?? 0);
+          actual = (actual ?? 0) + (m.Actual ?? 0);
+        }
+      }
+    }
+    if (hasOdoo) {
+      for (const d of def) {
+        if (d.source !== 'odoo') continue;
+        const m = (odoo || []).find(r => r.Project === d.project && r.Month === month);
+        if (m) {
+          servicesCreated = (servicesCreated ?? 0) + (m.ServicesCreated ?? 0);
+          servicesDone = (servicesDone ?? 0) + (m.ServicesDone ?? 0);
+        }
+      }
+    }
+    rows.push({
+      source, project: derivedDef.project_name, metric: null, month: month,
+      target: hasPms ? target : null, actual: hasPms ? actual : null,
+      servicesCreated: hasOdoo ? servicesCreated : null, servicesDone: hasOdoo ? servicesDone : null
+    });
+  }
+  return rows;
+}
+
 // GET: Read from cache table
 async function getMetricsFromCache() {
   const pool = await getPool();
   const request = pool.request();
-  
+
   // Get PMS data
   const pmsResult = await request.query(`
     SELECT 
@@ -28,7 +74,7 @@ async function getMetricsFromCache() {
     WHERE source = 'pms'
     ORDER BY project_name, metric_name, month
   `);
-  
+
   // Get Odoo data
   const odooResult = await request.query(`
     SELECT 
@@ -41,19 +87,46 @@ async function getMetricsFromCache() {
     WHERE source = 'odoo'
     ORDER BY month DESC, project_name
   `);
-  
+
   // Get last updated timestamp
   const lastUpdatedResult = await request.query(`
     SELECT MAX(updated_at) AS last_updated
     FROM dbo.pms_odoo_cache
   `);
-  
+
   const lastUpdated = lastUpdatedResult.recordset[0]?.last_updated || null;
-  
+  const pms = pmsResult.recordset || [];
+  const odoo = odooResult.recordset || [];
+
+  // Get derived metrics definitions and compute rows
+  let derived = [];
+  let derivedDefinitions = [];
+  try {
+    const derivedResult = await request.query(`
+      SELECT id, project_name, source, definition FROM dbo.derived_metrics
+    `);
+    const derivedDefs = derivedResult.recordset || [];
+    for (const d of derivedDefs) {
+      derived = derived.concat(computeDerivedRows(pms, odoo, d));
+    }
+    derivedDefinitions = derivedDefs.map(d => ({
+      id: d.id,
+      projectName: d.project_name,
+      source: d.source,
+      definition: typeof d.definition === 'string' ? JSON.parse(d.definition || '[]') : d.definition
+    }));
+  } catch (e) {
+    if (!e.message || !e.message.includes('Invalid object name') || !e.message.includes('derived_metrics')) {
+      logger.warn('Could not load derived_metrics', e.message);
+    }
+  }
+
   return {
-    pms: pmsResult.recordset,
-    odoo: odooResult.recordset,
-    lastUpdated: lastUpdated
+    pms,
+    odoo,
+    derived,
+    derivedDefinitions,
+    lastUpdated
   };
 }
 
@@ -67,7 +140,7 @@ const handler = rateLimiter('general')(
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
     };
 
     // Handle CORS preflight
@@ -109,9 +182,11 @@ const handler = rateLimiter('general')(
                 data: {
                   pms: [],
                   odoo: [],
+                  derived: [],
+                  derivedDefinitions: [],
                   lastUpdated: null
                 },
-                warning: 'Cache table does not exist yet. Run sync first.'
+                warning: 'Cache or derived_metrics table does not exist yet. Run migration and sync first.'
               })
             };
           }
@@ -168,6 +243,141 @@ const handler = rateLimiter('general')(
               error: 'Failed to start refresh',
               message: error.message
             })
+          };
+        }
+      }
+
+      // POST /derived: Create derived metric (Admin/CEO only)
+      if (method === 'POST' && path === '/derived') {
+        const user = event.user;
+        if (!user || !['Admin', 'CEO'].includes(user.role)) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({ success: false, error: 'Unauthorized - Admin or CEO role required' })
+          };
+        }
+        try {
+          const body = JSON.parse(event.body || '{}');
+          const { projectName, definition } = body;
+          if (!projectName || !Array.isArray(definition) || definition.length < 2) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'projectName and definition (array of 2+ items) required' })
+            };
+          }
+          const hasPms = definition.some(d => d.source === 'pms');
+          const hasOdoo = definition.some(d => d.source === 'odoo');
+          const source = hasPms && hasOdoo ? 'odoo & pms' : hasOdoo ? 'odoo' : 'pms';
+          const pool = await getPool();
+          const r = await pool.request()
+            .input('project_name', sql.NVarChar, String(projectName).trim())
+            .input('source', sql.NVarChar, source)
+            .input('definition', sql.NVarChar, JSON.stringify(definition))
+            .input('created_by', sql.NVarChar, user.username || null)
+            .query(`
+              INSERT INTO dbo.derived_metrics (project_name, source, definition, created_by)
+              OUTPUT INSERTED.id VALUES (@project_name, @source, @definition, @created_by)
+            `);
+          const id = r.recordset[0]?.id;
+          return {
+            statusCode: 201,
+            headers,
+            body: JSON.stringify({ success: true, id, message: 'Derived metric created' })
+          };
+        } catch (err) {
+          logger.error('Create derived metric error', err);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ success: false, error: err.message || 'Failed to create' })
+          };
+        }
+      }
+
+      // PUT /derived/:id: Update derived metric (Admin/CEO only)
+      const putDerivedMatch = path && path.match(/^\/derived\/(\d+)$/);
+      if (method === 'PUT' && putDerivedMatch) {
+        const user = event.user;
+        if (!user || !['Admin', 'CEO'].includes(user.role)) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({ success: false, error: 'Unauthorized - Admin or CEO role required' })
+          };
+        }
+        const id = parseInt(putDerivedMatch[1], 10);
+        try {
+          const body = JSON.parse(event.body || '{}');
+          const { projectName, definition } = body;
+          if (!projectName || !Array.isArray(definition) || definition.length < 2) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'projectName and definition (array of 2+ items) required' })
+            };
+          }
+          const hasPms = definition.some(d => d.source === 'pms');
+          const hasOdoo = definition.some(d => d.source === 'odoo');
+          const source = hasPms && hasOdoo ? 'odoo & pms' : hasOdoo ? 'odoo' : 'pms';
+          const pool = await getPool();
+          const r = await pool.request()
+            .input('id', sql.Int, id)
+            .input('project_name', sql.NVarChar, String(projectName).trim())
+            .input('source', sql.NVarChar, source)
+            .input('definition', sql.NVarChar, JSON.stringify(definition))
+            .query(`
+              UPDATE dbo.derived_metrics SET project_name = @project_name, source = @source, definition = @definition
+              WHERE id = @id
+            `);
+          if (r.rowsAffected[0] === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Derived metric not found' })
+            };
+          }
+          return { statusCode: 200, headers, body: JSON.stringify({ success: true, message: 'Derived metric updated' }) };
+        } catch (err) {
+          logger.error('Update derived metric error', err);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ success: false, error: err.message || 'Failed to update' })
+          };
+        }
+      }
+
+      // DELETE /derived/:id (Admin/CEO only)
+      const delDerivedMatch = path && path.match(/^\/derived\/(\d+)$/);
+      if (method === 'DELETE' && delDerivedMatch) {
+        const user = event.user;
+        if (!user || !['Admin', 'CEO'].includes(user.role)) {
+          return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({ success: false, error: 'Unauthorized - Admin or CEO role required' })
+          };
+        }
+        const id = parseInt(delDerivedMatch[1], 10);
+        try {
+          const pool = await getPool();
+          const r = await pool.request().input('id', sql.Int, id).query('DELETE FROM dbo.derived_metrics WHERE id = @id');
+          if (r.rowsAffected[0] === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Derived metric not found' })
+            };
+          }
+          return { statusCode: 200, headers, body: JSON.stringify({ success: true, message: 'Derived metric deleted' }) };
+        } catch (err) {
+          logger.error('Delete derived metric error', err);
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ success: false, error: err.message || 'Failed to delete' })
           };
         }
       }

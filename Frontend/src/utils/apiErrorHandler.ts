@@ -119,8 +119,9 @@ export async function handleApiError(
   } else if (error instanceof Error) {
     errorMessage = error.message;
     // Try to extract status from error if it has one
-    if ('status' in error && typeof (error as any).status === 'number') {
-      status = (error as any).status;
+    if ('status' in error) {
+      const s = (error as Error & { status?: unknown }).status;
+      if (typeof s === 'number') status = s;
     }
   }
 

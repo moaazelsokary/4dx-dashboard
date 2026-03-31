@@ -33,9 +33,35 @@ export interface OdooMetric {
   UpdatedAt: string;
 }
 
+export interface DerivedMetricRow {
+  source: 'odoo' | 'pms' | 'odoo & pms';
+  project: string;
+  metric: null;
+  month: string;
+  target: number | null;
+  actual: number | null;
+  servicesCreated: number | null;
+  servicesDone: number | null;
+}
+
+export interface DerivedMetricDefinitionItem {
+  source: 'odoo' | 'pms';
+  project: string;
+  metric?: string;
+}
+
+export interface DerivedMetricDefinition {
+  id: number;
+  projectName: string;
+  source: string;
+  definition: DerivedMetricDefinitionItem[];
+}
+
 export interface MetricsData {
   pms: PMSMetric[];
   odoo: OdooMetric[];
+  derived?: DerivedMetricRow[];
+  derivedDefinitions?: DerivedMetricDefinition[];
   lastUpdated: string | null;
 }
 
@@ -80,15 +106,18 @@ function cacheData(data: MetricsData): void {
   }
 }
 
-// Fetch metrics from API
+// Fetch metrics from API (always bypass cache)
 async function fetchMetricsFromAPI(): Promise<MetricsData> {
   const url = `${API_BASE_URL}?_t=${Date.now()}`;
   const authHeaders = getAuthHeader();
   
   const response = await fetch(url, {
     method: 'GET',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
       ...authHeaders,
     },
   });
@@ -109,11 +138,24 @@ async function fetchMetricsFromAPI(): Promise<MetricsData> {
 
 /**
  * Get metrics data (with localStorage cache)
- * Returns cached data immediately if available, then fetches fresh data in background
+ * @param forceFetch - If true, always fetch from API (use on page load to get latest)
  */
-export async function getMetrics(): Promise<MetricsData> {
-  // Check cache first
+export async function getMetrics(forceFetch = false): Promise<MetricsData> {
   const cached = getCachedData();
+  if (forceFetch) {
+    try {
+      const data = await fetchMetricsFromAPI();
+      cacheData(data);
+      return data;
+    } catch (err) {
+      if (cached) {
+        console.warn('Using stale cache due to fetch error:', err);
+        return { pms: cached.pms, odoo: cached.odoo, lastUpdated: cached.lastUpdated };
+      }
+      throw handleApiError(err);
+    }
+  }
+  // Check cache first (when not forcing fetch)
   
   if (cached && !cached.isStale) {
     // Return cached data immediately, then refresh in background
@@ -163,8 +205,10 @@ export async function refreshMetrics(): Promise<void> {
   
   const response = await fetch(url, {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
       ...authHeaders,
     },
   });
@@ -186,22 +230,83 @@ export async function refreshMetrics(): Promise<void> {
 }
 
 /**
+ * Create a derived metric (Admin/CEO only)
+ */
+export async function createDerivedMetric(projectName: string, definition: DerivedMetricDefinitionItem[]): Promise<{ id: number }> {
+  const url = `${API_BASE_URL}/derived`;
+  const authHeaders = getAuthHeader();
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ projectName, definition }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to create derived metric' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success) throw new Error(result.error || 'Failed to create');
+  return { id: result.id };
+}
+
+/**
+ * Update a derived metric (Admin/CEO only)
+ */
+export async function updateDerivedMetric(id: number, projectName: string, definition: DerivedMetricDefinitionItem[]): Promise<void> {
+  const url = `${API_BASE_URL}/derived/${id}`;
+  const authHeaders = getAuthHeader();
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ projectName, definition }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to update derived metric' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success) throw new Error(result.error || 'Failed to update');
+}
+
+/**
+ * Delete a derived metric (Admin/CEO only)
+ */
+export async function deleteDerivedMetric(id: number): Promise<void> {
+  const url = `${API_BASE_URL}/derived/${id}`;
+  const authHeaders = getAuthHeader();
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: authHeaders,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to delete derived metric' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.success) throw new Error(result.error || 'Failed to delete');
+}
+
+/**
  * Get distinct projects and metrics for dropdowns
  */
 export function getDistinctProjectsAndMetrics(data: MetricsData): {
   pmsProjects: string[];
   pmsMetrics: string[];
   odooProjects: string[];
+  derivedProjects: string[];
 } {
   const pms = data?.pms ?? [];
   const odoo = data?.odoo ?? [];
+  const defs = data?.derivedDefinitions ?? [];
   const pmsProjects = [...new Set(pms.map(m => m.ProjectName).filter(Boolean))].sort();
   const pmsMetrics = [...new Set(pms.map(m => m.MetricName).filter(Boolean))].sort();
   const odooProjects = [...new Set(odoo.map(m => m.Project).filter(Boolean))].sort();
-  
+  const derivedProjects = [...new Set(defs.map(d => d.projectName).filter(Boolean))].sort();
+
   return {
     pmsProjects,
     pmsMetrics,
-    odooProjects
+    odooProjects,
+    derivedProjects,
   };
 }

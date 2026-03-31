@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import OptimizedImage from '@/components/ui/OptimizedImage';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -42,11 +42,24 @@ import {
   Navigation,
   Power
 } from 'lucide-react';
-import NavigationBar from '@/components/shared/NavigationBar';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
 import { dataCacheService } from '@/services/dataCacheService';
 import { hasPowerBIAccess } from '@/config/powerbi';
+import type { User } from '@/services/authService';
+
+type ExcelRow = unknown[];
+type OneDriveWorkbook = Record<string, unknown>;
+
+type SummaryMetricSlice = { actual: number; target: number; variance: number };
+type SummaryFilteredMetrics = {
+  volunteers: SummaryMetricSlice;
+  opportunities: SummaryMetricSlice;
+  training: SummaryMetricSlice;
+  expenditures: SummaryMetricSlice;
+  beneficiaries: SummaryMetricSlice;
+  cases: SummaryMetricSlice;
+};
 
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
@@ -59,17 +72,17 @@ const TEST_FUNCTION_URL = isLocalhost
 const ONEDRIVE_SAMPLE_URL = 'https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true';
 
 const Summary: React.FC = () => {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<OneDriveWorkbook | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>(['all']); // Changed to array for multiple selection
   const [selectedProject, setSelectedProject] = useState('all');
   const [selectedChartMetric, setSelectedChartMetric] = useState('Volunteers');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   
   // Reactive filtering - recalculate when filters change (like department dashboard)
-  const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
+  const [filteredMetrics, setFilteredMetrics] = useState<SummaryFilteredMetrics | null>(null);
   
   const navigate = useNavigate();
 
@@ -81,7 +94,7 @@ const Summary: React.FC = () => {
       return;
     }
     
-    const userObj = JSON.parse(userData);
+    const userObj = JSON.parse(userData) as User;
     // Only allow CEO, operations department, or project role
     if (userObj.role !== "CEO" && 
         !(userObj.role === "department" && userObj.departments.includes("operations")) &&
@@ -91,15 +104,6 @@ const Summary: React.FC = () => {
     }
     setUser(userObj);
   }, [navigate]);
-  
-  useEffect(() => {
-    console.log('🔄 Filter effect triggered - data:', !!data, 'quarters:', selectedQuarters, 'project:', selectedProject);
-    if (data) {
-      const metrics = getFilteredMetrics();
-      console.log('🔄 Setting filtered metrics:', metrics);
-      setFilteredMetrics(metrics);
-    }
-  }, [data, selectedQuarters, selectedProject]);
 
   // Debug filter changes
   useEffect(() => {
@@ -112,10 +116,10 @@ const Summary: React.FC = () => {
     
     try {
       const data = await dataCacheService.fetchOneDriveData(forceRefresh);
-      setData(data);
-    } catch (e: any) {
+      setData(data as OneDriveWorkbook);
+    } catch (e: unknown) {
       console.error('Fetch error:', e);
-      setError(e.message);
+      setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -162,7 +166,7 @@ const Summary: React.FC = () => {
     
     // Calculate totals from Overall Targets (assuming first row is headers)
     const dataRows = overallTargets.slice(1);
-    const totals = dataRows.reduce((acc: any, row: any[]) => {
+    const totals = dataRows.reduce((acc, row: ExcelRow) => {
       if (row.length >= 7) {
         acc.volunteers += parseInt(row[1]) || 0;
         acc.opportunities += parseInt(row[2]) || 0;
@@ -190,7 +194,7 @@ const Summary: React.FC = () => {
   const summaryMetrics = getSummaryMetrics();
 
   // Transform data based on selected quarters (like department dashboard)
-  const getFilteredMetrics = () => {
+  const getFilteredMetrics = useCallback(() => {
     console.log('🔄 getFilteredMetrics called with quarters:', selectedQuarters, 'project:', selectedProject);
     
     if (!data) {
@@ -393,7 +397,7 @@ const Summary: React.FC = () => {
     }
 
     // Transform data based on selected quarters (like department dashboard)
-    let metrics = {
+    const metrics = {
       volunteers: { actual: 0, target: 0, variance: 0 },
       opportunities: { actual: 0, target: 0, variance: 0 },
       training: { actual: 0, target: 0, variance: 0 },
@@ -492,9 +496,9 @@ const Summary: React.FC = () => {
     });
 
     // Calculate achievement rates (like department dashboard)
-    Object.keys(metrics).forEach(key => {
-      if (metrics[key as keyof typeof metrics]) {
-        const metric = metrics[key as keyof typeof metrics] as any;
+    (Object.keys(metrics) as (keyof SummaryFilteredMetrics)[]).forEach((key) => {
+      const metric = metrics[key];
+      if (metric) {
         if (metric.target > 0) {
           // Calculate achievement rate (actual/target * 100) like department dashboard
           metric.variance = (metric.actual / metric.target) * 100;
@@ -507,9 +511,16 @@ const Summary: React.FC = () => {
 
     console.log('✅ Final filtered metrics for quarters', selectedQuarters, 'and project', selectedProject, ':', metrics);
     return metrics;
-  };
+  }, [data, selectedQuarters, selectedProject]);
 
-
+  useEffect(() => {
+    console.log('🔄 Filter effect triggered - data:', !!data, 'quarters:', selectedQuarters, 'project:', selectedProject);
+    if (data) {
+      const metrics = getFilteredMetrics();
+      console.log('🔄 Setting filtered metrics:', metrics);
+      setFilteredMetrics(metrics);
+    }
+  }, [data, selectedQuarters, selectedProject, getFilteredMetrics]);
 
   // Fallback to mock data if no real data available
   const mockMetrics = {
@@ -724,7 +735,7 @@ const Summary: React.FC = () => {
     });
 
     // Use the exact same metrics calculation logic from getFilteredMetrics
-    let metrics = {
+    const metrics = {
       volunteers: { actual: 0, target: 0, variance: 0 },
       opportunities: { actual: 0, target: 0, variance: 0 },
       training: { actual: 0, target: 0, variance: 0 },
@@ -842,7 +853,7 @@ const Summary: React.FC = () => {
     
     // Skip header row and extract project names from Project column (index 0)
     const projectNames = targetQuartersVsActual.slice(1)
-      .map((row: any[]) => row[0]) // Project column
+      .map((row: ExcelRow) => row[0]) // Project column
       .filter((name: string) => name && name.trim() !== '')
       .map((name: string) => name.trim())
       .filter((name: string, index: number, arr: string[]) => arr.indexOf(name) === index); // Remove duplicates
@@ -929,63 +940,21 @@ const Summary: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            {/* Top Row: Logo, Title, Actions */}
-            <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="w-12 h-12 flex items-center justify-center p-1">
-                <OptimizedImage 
-                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                  alt="Logo" 
-                  className="w-full h-full object-contain"
-                  sizes="48px"
-                />
-              </div>
-              <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                  Program Operations Sector
-                </h1>
-                  <p className="text-xs text-muted-foreground">Summary Overview</p>
-              </div>
-            </div>
-            
-              <div className="flex items-center gap-2">
-                {loading && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Syncing...
-                  </div>
-                )}
-                {error && (
-                  <div className="flex items-center gap-1 text-xs text-destructive">
-                    <AlertCircle className="w-3 h-3" />
-                    Error
-                  </div>
-                )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="h-7 px-2 text-xs">
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
-                  <LogOut className="w-3 h-3 mr-1" />
-                  Sign Out
-                </Button>
-              </div>
-            </div>
-
-            {/* Navigation Row */}
-            <NavigationBar user={user} />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-4 space-y-4 pb-20 sm:pb-4">
-        {/* Mobile Buttons - Before Filters */}
-        <div className="flex gap-3 sm:hidden">
+    <AppLayout
+      user={user}
+      headerTitle="Program Operations Sector"
+      headerSubtitle="Summary Overview"
+      onSignOut={handleSignOut}
+      onRefresh={handleRefreshData}
+      status={
+        loading
+          ? 'loading'
+          : error
+            ? { type: 'error', message: 'Error' }
+            : null
+      }
+      mobileActions={
+        <div className="flex gap-3">
           <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 text-xs">
             <RefreshCw className="w-4 h-4 mr-1" />
             Refresh Data
@@ -995,7 +964,8 @@ const Summary: React.FC = () => {
             Sign Out
           </Button>
         </div>
-
+      }
+    >
         {/* Combined Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
           <CardContent className="p-6">
@@ -1174,7 +1144,7 @@ const Summary: React.FC = () => {
         {!loading && !error && displayMetrics && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Metrics Cards */}
-            {Object.entries(displayMetrics).map(([key, metric]: [string, any]) => {
+            {Object.entries(displayMetrics).map(([key, metric]: [string, SummaryMetricSlice]) => {
               const statusInfo = getStatusInfo(metric.variance, metric.actual, metric.target);
               return (
                 <Card key={key} className="border-primary/20">
@@ -1250,7 +1220,7 @@ const Summary: React.FC = () => {
                          <XAxis dataKey="quarter" />
                   <YAxis />
                          <Tooltip 
-                    formatter={(value: any) => formatNumber(value)}
+                    formatter={(value: number | string) => formatNumber(typeof value === 'number' ? value : Number(value))}
                          />
                          <Line 
                            type="monotone" 
@@ -1299,9 +1269,8 @@ const Summary: React.FC = () => {
                  </CardContent>
                </Card>
              </div>
-           )}
-      </div>
-    </div>
+             )}
+      </AppLayout>
   );
 };
 

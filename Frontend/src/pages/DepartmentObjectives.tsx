@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback, useMemo, useRef, startTransition } from 'react';
 import { flushSync } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -30,7 +29,9 @@ import {
   getRASCIByDepartment,
   getHierarchicalPlan,
   getDepartmentDashboardData,
+  getRASCISummaryByDepartment,
 } from '@/services/wigService';
+import type { RASCISummaryByDepartment } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
@@ -40,10 +41,10 @@ import ObjectiveFormModal from '@/components/wig/ObjectiveFormModal';
 import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence, HierarchicalPlan } from '@/types/wig';
 import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut, Layers, Sparkles, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter, DragEndEvent, type DraggableAttributes } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import NavigationBar from '@/components/shared/NavigationBar';
+import { AppLayout } from '@/components/layout/AppLayout';
 import ExportButton from '@/components/shared/ExportButton';
 import BidirectionalText from '@/components/ui/BidirectionalText';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -62,9 +63,28 @@ import {
 } from '@/lib/tableFilterState';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import OptimizedImage from '@/components/ui/OptimizedImage';
 import { useOperationLock } from '@/hooks/useOperationLock';
 import { Lock as LockIcon } from 'lucide-react';
+import type { User } from '@/services/authService';
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'response' in err) {
+    const r = err as { response?: { data?: { error?: string } } };
+    return r.response?.data?.error ?? fallback;
+  }
+  return fallback;
+}
+
+type DepartmentObjectiveUpdatePayload = Partial<
+  Omit<DepartmentObjective, 'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'>
+>;
+
+type SortableRowRenderProps = {
+  attributes: DraggableAttributes;
+  listeners: ReturnType<typeof useSortable>['listeners'];
+  isDragging: boolean;
+};
 
 // Component to check delete lock for a specific objective
 function DeleteButtonWithLockCheck({ 
@@ -167,7 +187,7 @@ const joinKPIs = (kpis: string | string[] | undefined): string => {
 // SortableRow component for drag-and-drop
 interface SortableRowProps {
   id: number;
-  children: (props: { attributes: any; listeners: any; isDragging: boolean }) => React.ReactNode;
+  children: (props: SortableRowRenderProps) => React.ReactNode;
   isEditing?: boolean;
 }
 
@@ -214,14 +234,20 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
 }
 
 export default function DepartmentObjectives() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [objectives, setObjectives] = useState<DepartmentObjective[]>([]);
   const [mainObjectives, setMainObjectives] = useState<MainPlanObjective[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [rasciMetrics, setRasciMetrics] = useState<RASCIWithExistence[]>([]);
+  const [rasciSummary, setRasciSummary] = useState<RASCISummaryByDepartment[]>([]);
   const [hierarchicalData, setHierarchicalData] = useState<HierarchicalPlan | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('objectives');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') || '';
+  const activeTab = useMemo(() => {
+    if (['objectives', 'rasci'].includes(tabParam)) return tabParam;
+    return 'objectives';
+  }, [tabParam]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -360,22 +386,35 @@ export default function DepartmentObjectives() {
     }
 
     const userObj = JSON.parse(userData);
-    if (userObj.role !== 'department' && userObj.role !== 'CEO') {
+    if (userObj.role !== 'department' && userObj.role !== 'CEO' && userObj.role !== 'Admin') {
       navigate('/access-denied');
       return;
     }
 
-    setUser(userObj);
+    setUser(userObj as User);
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap only; loadData tracks selectedDepartment via separate effect
   }, [navigate]);
 
-  // Reload data when selected department changes (for CEO/admin)
+  // Reload data when selected department changes (for CEO/Admin)
   useEffect(() => {
-    if (user?.role === 'CEO') {
+    if (user?.role === 'CEO' || user?.role === 'Admin') {
       loadData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDepartment]);
+
+  // Fetch RASCI summary when on RASCI tab with All Departments (CEO/Admin)
+  useEffect(() => {
+    if (activeTab === 'rasci' && !selectedDepartment && (user?.role === 'CEO' || user?.role === 'Admin')) {
+      getRASCISummaryByDepartment()
+        .then((data) => setRasciSummary(data || []))
+        .catch((err) => {
+          console.warn('[DepartmentObjectives] Failed to fetch RASCI summary:', err);
+          setRasciSummary([]);
+        });
+    }
+  }, [activeTab, selectedDepartment, user?.role]);
 
   const loadData = async (showLoading = true) => {
     // Set loading state immediately for better UX
@@ -390,7 +429,7 @@ export default function DepartmentObjectives() {
       // For CEO/admin, use selectedDepartment if set, otherwise use first department or null for all
       // For regular department users, use their own department
       let departmentCode: string | undefined;
-      if (userObj.role === 'CEO') {
+      if (userObj.role === 'CEO' || userObj.role === 'Admin') {
         departmentCode = selectedDepartment || undefined; // undefined means all departments
       } else {
         departmentCode = userObj.departments?.[0];
@@ -402,6 +441,7 @@ export default function DepartmentObjectives() {
       const mainObjs = dashboardData.mainObjectives;
       const depts = dashboardData.departments;
       const rasciData = dashboardData.rasci;
+      const rasciSummaryData = dashboardData.rasciSummary || [];
       const hierarchical = dashboardData.hierarchicalPlan;
       
       // Sort by sort_order if available, otherwise by id
@@ -422,6 +462,7 @@ export default function DepartmentObjectives() {
         setMainObjectives(mainObjs);
         setDepartments(depts);
         setRasciMetrics(rasciData);
+        setRasciSummary(rasciSummaryData);
         setHierarchicalData(hierarchical);
       });
     } catch (err) {
@@ -876,7 +917,7 @@ export default function DepartmentObjectives() {
         document.removeEventListener('mouseup', handleResizeEnd);
       };
     }
-  }, [resizingColumn, resizeStartX, resizeStartWidth]);
+  }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
   const saveEdit = async (e?: React.MouseEvent) => {
     if (e) {
@@ -887,9 +928,10 @@ export default function DepartmentObjectives() {
 
     try {
       // Convert KPI array to delimited string if needed
-      const updateData: any = { ...editData };
-      if (updateData.kpi && Array.isArray(updateData.kpi)) {
-        updateData.kpi = joinKPIs(updateData.kpi);
+      const updateData: DepartmentObjectiveUpdatePayload = { ...editData };
+      const kpiField = updateData.kpi as string | string[] | undefined;
+      if (Array.isArray(kpiField)) {
+        updateData.kpi = joinKPIs(kpiField);
       }
       
       // Get original objective before editing
@@ -1381,75 +1423,53 @@ export default function DepartmentObjectives() {
   // NOW we can do conditional returns - AFTER all hooks
   // Skeleton loader component
   const DepartmentObjectivesSkeleton = () => (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header Skeleton */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Skeleton className="w-12 h-12 rounded" />
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-7 w-20" />
-                <Skeleton className="h-7 w-20" />
-              </div>
-            </div>
-            <Skeleton className="h-10 w-full max-w-md" />
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-10 w-[250px]" />
           </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-4 space-y-4">
-        {/* Department Filter Skeleton */}
+        </CardContent>
+      </Card>
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full max-w-md" />
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-10 w-[250px]" />
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-7 gap-4 pb-2 border-b">
+                {[...Array(7)].map((_, i) => (
+                  <Skeleton key={i} className="h-6 w-full" />
+                ))}
+              </div>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="grid grid-cols-7 gap-4 py-3 border-b">
+                  {[...Array(7)].map((_, j) => (
+                    <Skeleton key={j} className="h-5 w-full" />
+                  ))}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
-
-        {/* Tabs Skeleton */}
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-full max-w-md" />
-          
-          {/* Table Skeleton */}
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Table Header */}
-                <div className="grid grid-cols-7 gap-4 pb-2 border-b">
-                  {[...Array(7)].map((_, i) => (
-                    <Skeleton key={i} className="h-6 w-full" />
-                  ))}
-                </div>
-                {/* Table Rows */}
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="grid grid-cols-7 gap-4 py-3 border-b">
-                    {[...Array(7)].map((_, j) => (
-                      <Skeleton key={j} className="h-5 w-full" />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </div>
   );
 
   if (loading) {
-    return <DepartmentObjectivesSkeleton />;
+    return (
+      <AppLayout
+        user={user}
+        headerTitle="Department Objectives"
+        headerSubtitle="Department Dashboard"
+        onSignOut={handleSignOut}
+      >
+        <DepartmentObjectivesSkeleton />
+      </AppLayout>
+    );
   }
 
   const userDepartment = departments.find((d) => d.code === user?.departments?.[0]);
@@ -1525,10 +1545,10 @@ export default function DepartmentObjectives() {
       if (selectedMEObjective && isMEModalOpen) {
         // The modal will automatically show updated data since objectives state is updated
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: 'Error',
-        description: err?.response?.data?.error || 'Failed to delete M&E KPI',
+        description: apiErrorMessage(err, 'Failed to delete M&E KPI'),
         variant: 'destructive',
       });
     }
@@ -1646,7 +1666,7 @@ export default function DepartmentObjectives() {
         department_id: department.id,
         kpi: meKpiData.me_kpi,
         activity: `[M&E-PARENT:${currentMEKPIObjectiveId}] ${meKpiData.me_kpi}`, // Mark as M&E with parent reference
-        type: 'M&E' as any, // Use M&E type
+        type: 'M&E',
         activity_target: 0,
         responsible_person: meKpiData.responsible || '',
         mov: meKpiData.mov,
@@ -1906,116 +1926,70 @@ export default function DepartmentObjectives() {
     return hierarchicalNumbers.kpiNums.get(kpiKey) || '';
   };
 
+  const showDepartmentFilter =
+    (user?.role === 'CEO' || user?.role === 'Admin') && departments.length > 0;
+
+  const departmentFilterSelect = showDepartmentFilter ? (
+    <Select
+      value={selectedDepartment || 'all'}
+      onValueChange={(value) => {
+        setSelectedDepartment(value === 'all' ? null : value);
+      }}
+    >
+      <SelectTrigger id="department-filter" className="w-full min-w-[200px] sm:w-[250px]" aria-label="Department">
+        <SelectValue placeholder="Select department" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Departments</SelectItem>
+        {departments.map((dept) => (
+          <SelectItem key={dept.id} value={dept.code}>
+            {dept.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  ) : null;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            {/* Top Row: Logo, Title, Actions */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <OptimizedImage 
-                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                    alt="Logo" 
-                    className="w-full h-full object-contain"
-                    sizes="48px"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                    Department Objectives
-                  </h1>
-                  <p className="text-xs text-muted-foreground">
-                    {userDepartment?.name || 'Department'} Dashboard
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                {activeTab === 'objectives' && filteredObjectives.length > 0 && (
-                  <ExportButton
-                    data={filteredObjectives
-                      .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
-                      .map(obj => {
-                        const parsedKPIs = parseKPIs(obj.kpi);
-                        return {
-                          'KPI': parsedKPIs.join(', '),
-                          'Activity': obj.activity || '',
-                          'Type': obj.type || '',
-                          'Target': obj.activity_target || 0,
-                          'Responsible Person': obj.responsible_person || '',
-                          'MOV': obj.mov || '',
-                        };
-                      })}
-                    filename={`department-objectives-${new Date().toISOString().split('T')[0]}`}
-                    title="Department Objectives"
-                  />
-                )}
-                <Button type="button" variant="outline" size="sm" onClick={() => loadData()} className="h-7 px-2 text-xs">
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
-                  <LogOut className="w-3 h-3 mr-1" />
-                  Sign Out
-                </Button>
-              </div>
-            </div>
-
-            {/* Navigation Row */}
-            <NavigationBar user={user} />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-4 space-y-4">
-        {/* Department Filter for CEO/Admin */}
-        {user?.role === 'CEO' && departments.length > 0 && (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <Label htmlFor="department-filter" className="text-sm font-medium">
-                  Filter by Department:
-                </Label>
-                <Select
-                  value={selectedDepartment || 'all'}
-                  onValueChange={(value) => {
-                    setSelectedDepartment(value === 'all' ? null : value);
-                  }}
-                >
-                  <SelectTrigger id="department-filter" className="w-[250px]">
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Departments</SelectItem>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept.id} value={dept.code}>
-                        {dept.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Tabs Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="objectives">Objectives</TabsTrigger>
-            <TabsTrigger value="rasci">RASCI Metrics</TabsTrigger>
-          </TabsList>
-
-          {/* Objectives Tab */}
+    <AppLayout
+      user={user}
+      headerTitle="Department Objectives"
+      headerSubtitle={`${userDepartment?.name || 'Department'} Dashboard`}
+      onSignOut={handleSignOut}
+      onRefresh={() => loadData()}
+      exportSlot={
+        activeTab === 'objectives' && filteredObjectives.length > 0 ? (
+          <ExportButton
+            asIcon
+            data={filteredObjectives
+              .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
+              .map(obj => {
+                const parsedKPIs = parseKPIs(obj.kpi);
+                return {
+                  'KPI': parsedKPIs.join(', '),
+                  'Activity': obj.activity || '',
+                  'Type': obj.type || '',
+                  'Target': obj.activity_target || 0,
+                  'Responsible Person': obj.responsible_person || '',
+                  'MOV': obj.mov || '',
+                };
+              })}
+            filename={`department-objectives-${new Date().toISOString().split('T')[0]}`}
+            title="Department Objectives"
+          />
+        ) : null
+      }
+    >
+        <Tabs value={activeTab} className="w-full">
           <TabsContent value="objectives" className="mt-4">
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Department Objectives</CardTitle>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 min-w-0">
+                <CardTitle className="shrink-0">Department Objectives</CardTitle>
+                {departmentFilterSelect}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap shrink-0 justify-end">
                 {/* Zoom Controls */}
                 <div className="flex items-center gap-2 border rounded-md px-2 py-1">
                   <Button
@@ -2261,9 +2235,8 @@ export default function DepartmentObjectives() {
                             meObj => (meObj.type === 'M&E' || meObj.type === 'M&E MOV') && meObj.activity?.startsWith(`[M&E-PARENT:${obj.id}]`)
                           );
                           
-                          return (
-                            <>
-                              <SortableRow key={obj.id} id={obj.id} isEditing={false}>
+                           return (
+                            <SortableRow key={obj.id} id={obj.id} isEditing={false}>
                                 {({ attributes, listeners }) => {
                                   // Parse types for per-KPI display
                                   const parsedKPIs = parseKPIs(obj.kpi);
@@ -2422,7 +2395,6 @@ export default function DepartmentObjectives() {
                                   );
                                 }}
                               </SortableRow>
-                        </> 
                       );
                     })}
                     </SortableContext>
@@ -2438,73 +2410,137 @@ export default function DepartmentObjectives() {
           <TabsContent value="rasci" className="mt-4">
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <CardTitle>RASCI Metrics</CardTitle>
-              <div className="flex items-center gap-2 flex-wrap">
-                <ColumnFilter
-                  columnKey="rasci-kpi"
-                  columnLabel="KPI"
-                  filterId="rasci-kpi"
-                  columnType="text"
-                  uniqueValues={uniqueRasciKPIs}
-                  selectedValues={rasciFilters.kpi}
-                  onListChange={(selected) => {
-                    setRasciFilters((prev) => {
-                      const next = { ...prev, kpi: selected };
-                      persistRasciFilters(next);
-                      return next;
-                    });
-                  }}
-                  openFilterId={openFilter}
-                  onOpenFilterChange={setOpenFilter}
-                  listOnly
-                />
-                <ColumnFilter
-                  columnKey="rasci-role"
-                  columnLabel="Role"
-                  filterId="rasci-role"
-                  columnType="text"
-                  uniqueValues={uniqueRasciRoles}
-                  selectedValues={rasciFilters.role}
-                  onListChange={(selected) => {
-                    setRasciFilters((prev) => {
-                      const next = { ...prev, role: selected };
-                      persistRasciFilters(next);
-                      return next;
-                    });
-                  }}
-                  openFilterId={openFilter}
-                  onOpenFilterChange={setOpenFilter}
-                  listOnly
-                />
-                <ColumnFilter
-                  columnKey="rasci-exists"
-                  columnLabel="Exists"
-                  filterId="rasci-exists"
-                  columnType="text"
-                  uniqueValues={uniqueRasciExists}
-                  selectedValues={rasciFilters.exists}
-                  onListChange={(selected) => {
-                    setRasciFilters((prev) => {
-                      const next = { ...prev, exists: selected };
-                      persistRasciFilters(next);
-                      return next;
-                    });
-                  }}
-                  openFilterId={openFilter}
-                  onOpenFilterChange={setOpenFilter}
-                  listOnly
-                />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 min-w-0 flex-1">
+                <CardTitle className="shrink-0">RASCI Metrics</CardTitle>
+                {departmentFilterSelect}
               </div>
+              {selectedDepartment && (
+              <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-muted-foreground">KPI</span>
+                  <ColumnFilter
+                    columnKey="rasci-kpi"
+                    columnLabel="KPI"
+                    filterId="rasci-kpi"
+                    columnType="text"
+                    uniqueValues={uniqueRasciKPIs}
+                    selectedValues={rasciFilters.kpi}
+                    onListChange={(selected) => {
+                      setRasciFilters((prev) => {
+                        const next = { ...prev, kpi: selected };
+                        persistRasciFilters(next);
+                        return next;
+                      });
+                    }}
+                    openFilterId={openFilter}
+                    onOpenFilterChange={setOpenFilter}
+                    listOnly
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-muted-foreground">Role</span>
+                  <ColumnFilter
+                    columnKey="rasci-role"
+                    columnLabel="Role"
+                    filterId="rasci-role"
+                    columnType="text"
+                    uniqueValues={uniqueRasciRoles}
+                    selectedValues={rasciFilters.role}
+                    onListChange={(selected) => {
+                      setRasciFilters((prev) => {
+                        const next = { ...prev, role: selected };
+                        persistRasciFilters(next);
+                        return next;
+                      });
+                    }}
+                    openFilterId={openFilter}
+                    onOpenFilterChange={setOpenFilter}
+                    listOnly
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-muted-foreground">Exists</span>
+                  <ColumnFilter
+                    columnKey="rasci-exists"
+                    columnLabel="Exists"
+                    filterId="rasci-exists"
+                    columnType="text"
+                    uniqueValues={uniqueRasciExists}
+                    selectedValues={rasciFilters.exists}
+                    onListChange={(selected) => {
+                      setRasciFilters((prev) => {
+                        const next = { ...prev, exists: selected };
+                        persistRasciFilters(next);
+                        return next;
+                      });
+                    }}
+                    openFilterId={openFilter}
+                    onOpenFilterChange={setOpenFilter}
+                    listOnly
+                  />
+                </div>
+              </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>
-            {!filteredHierarchical || filteredHierarchical.pillars.length === 0 ? (
+            {!selectedDepartment && rasciSummary.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-primary/20">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-primary/10 hover:bg-primary/15 border-b-2 border-primary/20">
+                      <TableHead className="font-bold text-foreground">Department</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">Total KPIs</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">Exists</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">Not Exists</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">Exists %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rasciSummary.map((row) => (
+                      <TableRow key={row.department} className="hover:bg-primary/5">
+                        <TableCell className="font-medium">
+                          <BidirectionalText>{row.department}</BidirectionalText>
+                        </TableCell>
+                        <TableCell className="text-right">{row.total_kpis}</TableCell>
+                        <TableCell className="text-right">{row.exists}</TableCell>
+                        <TableCell className="text-right">{row.not_exists}</TableCell>
+                        <TableCell className="text-right">{row.exists_percent}%</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : !filteredHierarchical || filteredHierarchical.pillars.length === 0 ? (
               <Card className="border-2 border-border">
-                <CardContent className="p-8 text-center">
+                <CardContent className="p-8 text-center space-y-4">
                   <p className="text-muted-foreground">
-                    No RASCI metrics with assigned roles found for this department.
+                    {!selectedDepartment
+                      ? 'No department RASCI summary available. Ensure "All Departments" is selected above and run "npm run dev" (which starts the wig-proxy).'
+                      : 'No RASCI metrics with assigned roles found for this department.'}
                   </p>
+                  {!selectedDepartment && (user?.role === 'CEO' || user?.role === 'Admin') && (
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          const data = await getRASCISummaryByDepartment();
+                          setRasciSummary(data || []);
+                          if ((data || []).length > 0) {
+                            toast({ title: 'Success', description: 'Summary loaded' });
+                          }
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : 'Failed to load summary';
+                          console.error('[RASCI Summary]', err);
+                          toast({ title: 'Error', description: msg, variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry Load Summary
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
@@ -2581,7 +2617,7 @@ export default function DepartmentObjectives() {
                                     objText = `${objNum} ${objText}`;
                                   } else if (!fullNumMatch) {
                                     // No number prefix, use as is
-                                    objText = objText;
+                                    // (keep objText unchanged)
                                   } else {
                                     // Has number prefix but couldn't extract objNum, just remove prefix
                                     objText = objText.replace(/^\d+(\.\d+)?\s*/, '').trim();
@@ -2598,7 +2634,7 @@ export default function DepartmentObjectives() {
                                   return (
                                     <Card 
                                       key={objIndex} 
-                                      className={`border-l-4 ${colors.borderLeft} bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group`}
+                                      className={`border-l-4 ${colors.borderLeft} bg-card border border-border/80 hover:shadow-md transition-all duration-200 group`}
                                     >
                                       <Accordion type="single" collapsible defaultValue={`objective-${pillarIndex}-${objIndex}`}>
                                         <AccordionItem value={`objective-${pillarIndex}-${objIndex}`} className="border-none">
@@ -2652,7 +2688,7 @@ export default function DepartmentObjectives() {
                                                                 {targetText}
                                                               </h4>
                                                             </div>
-                                                            <Badge variant="outline" className="border-primary/30 bg-white/50 dark:bg-gray-800/50">
+                                                            <Badge variant="outline" className="border-primary/30 bg-muted/60">
                                                               <TrendingUp className="h-3 w-3 mr-1" />
                                                               {target.kpis.length} KPIs
                                                             </Badge>
@@ -2667,7 +2703,7 @@ export default function DepartmentObjectives() {
                                                               return (
                                                                 <Card 
                                                                   key={kpiIndex} 
-                                                                  className={`border-l-4 ${colors.borderLeft} bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:shadow-lg transition-all duration-200 group`}
+                                                                  className={`border-l-4 ${colors.borderLeft} bg-card border border-border/80 hover:shadow-lg transition-all duration-200 group`}
                                                                 >
                                                                   <div className="p-4">
                                                                     <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
@@ -2826,8 +2862,7 @@ export default function DepartmentObjectives() {
             folder_link: editingMEKPI.me_folder_link || undefined,
           } : undefined}
         />
-      </div>
-    </div>
+    </AppLayout>
   );
 }
 

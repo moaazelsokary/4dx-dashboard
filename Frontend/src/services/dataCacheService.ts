@@ -14,7 +14,7 @@ const TEST_FUNCTION_URL = isLocalhost
 const ONEDRIVE_SAMPLE_URL = 'https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true';
 
 export interface CachedData {
-  data: any;
+  data: unknown;
   timestamp: number;
   isStale: boolean;
 }
@@ -47,7 +47,7 @@ export const dataCacheService = {
   },
 
   // Cache data with current timestamp
-  cacheData(data: any): void {
+  cacheData(data: unknown): void {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify(data));
       localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
@@ -67,7 +67,7 @@ export const dataCacheService = {
   },
 
   // Fetch OneDrive data (with caching)
-  async fetchOneDriveData(forceRefresh = false): Promise<any> {
+  async fetchOneDriveData(forceRefresh = false): Promise<unknown> {
     // Check cache first (unless forcing refresh)
     if (!forceRefresh) {
       const cached = this.getCachedData();
@@ -110,7 +110,7 @@ export const dataCacheService = {
       } else {
         throw new Error('No worksheets found in response');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('❌ Error fetching OneDrive data:', e);
       throw e;
     }

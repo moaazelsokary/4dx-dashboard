@@ -17,12 +17,12 @@ let versionCheckInterval: number | null = null;
  */
 export function getBuildVersion(): string {
   // In production, BUILD_VERSION will be replaced with actual version
-  // In development, return timestamp
+  // In development, return a stable string so we don't trigger false reloads
   const versionStr = String(BUILD_VERSION || '');
   if (versionStr.startsWith('__') && versionStr.endsWith('__')) {
-    return Date.now().toString();
+    return 'dev';
   }
-  return versionStr || Date.now().toString();
+  return versionStr || 'dev';
 }
 
 /**
@@ -148,17 +148,19 @@ function forceReload(): void {
  * Initialize version checking
  */
 export function initVersionCheck(): void {
+  const currentVersion = getBuildVersion();
+  // Skip version-check reload logic in development (would cause unnecessary reloads)
+  if (currentVersion === 'dev') {
+    return;
+  }
+
   // Store initial version (only if not already stored)
   const storedVersion = getStoredVersion();
-  const currentVersion = getBuildVersion();
-  
-  // Only store if we don't have a stored version yet (first load)
   if (!storedVersion) {
     storeVersion(currentVersion);
   }
 
   // Check for new version periodically (but not immediately)
-  // Wait a bit before starting periodic checks to avoid interfering with initial load
   setTimeout(() => {
     versionCheckInterval = window.setInterval(async () => {
       const hasNewVersion = await checkForNewVersion();

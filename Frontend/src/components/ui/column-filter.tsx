@@ -215,7 +215,7 @@ export function ColumnFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-96 max-w-[min(360px,90vw)] max-h-[min(320px,70vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
+        className="w-[min(100vw-3rem,22rem)] md:!w-[540px] md:!max-w-[540px] max-h-[min(320px,70vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
         align="start"
         side="bottom"
         sideOffset={2}

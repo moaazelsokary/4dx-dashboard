@@ -182,7 +182,7 @@ async function fillLockedValuesFromCache(pool, lock) {
       return;
     }
 
-    const { pms, odoo } = metricsData.data;
+    const { pms, odoo, derived = [] } = metricsData.data;
 
     // Months to fill (2026-01 to 2027-06)
     const months = [];
@@ -209,21 +209,27 @@ async function fillLockedValuesFromCache(pool, lock) {
         const objInfo = objInfoResult.recordset[0];
         if (!objInfo) continue;
 
-        // Compute target_value if monthly_target is locked and target_source is PMS (not manual)
-        if (lock.lock_monthly_target && mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
-          const pmsRow = pms.find(r => 
-            r.ProjectName === mapping.pms_project_name &&
-            r.MetricName === mapping.pms_metric_name &&
-            r.MonthYear === month
-          );
-          
-          if (pmsRow && pmsRow.Target !== null && pmsRow.Target !== undefined) {
+        // Compute target_value if monthly_target is locked and target_source is PMS or derived
+        if (lock.lock_monthly_target) {
+          let targetValue = null;
+          if (mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
+            const pmsRow = pms.find(r =>
+              r.ProjectName === mapping.pms_project_name &&
+              r.MetricName === mapping.pms_metric_name &&
+              r.MonthYear === month
+            );
+            targetValue = pmsRow?.Target;
+          } else if (mapping.target_source === 'derived' && mapping.derived_project_name && derived && derived.length) {
+            const derivedRow = derived.find(r => String(r.project).trim() === String(mapping.derived_project_name).trim() && (r.month || r.Month) === month);
+            targetValue = derivedRow?.target != null ? derivedRow.target : (derivedRow?.Target != null ? derivedRow.Target : null);
+          }
+          if (targetValue !== null && targetValue !== undefined) {
             // Write directly to department_monthly_data (config-api has database access)
             try {
               const writeRequest = pool.request();
               writeRequest.input('department_objective_id', sql.Int, objectiveId);
               writeRequest.input('month', sql.Date, `${month}-01`);
-              writeRequest.input('target_value', sql.Decimal(18, 2), pmsRow.Target);
+              writeRequest.input('target_value', sql.Decimal(18, 2), targetValue);
               writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
               writeRequest.input('department_id', sql.Int, objInfo.department_id);
 
@@ -244,7 +250,7 @@ async function fillLockedValuesFromCache(pool, lock) {
         }
 
         // Compute actual_value if monthly_actual is locked and mapping uses a source; write value or null for every month (so switching source clears months with no data)
-        const actualFromSource = mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created';
+        const actualFromSource = mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created' || mapping.actual_source === 'derived';
         if (lock.lock_monthly_actual && actualFromSource) {
           let actualValue = null;
           if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
@@ -260,6 +266,13 @@ async function fillLockedValuesFromCache(pool, lock) {
           } else if (mapping.actual_source === 'odoo_services_created' && mapping.odoo_project_name) {
             const odooRow = odoo.find(r => r.Project === mapping.odoo_project_name && r.Month === month);
             actualValue = odooRow?.ServicesCreated;
+          } else if (mapping.actual_source === 'derived' && mapping.derived_project_name && derived && derived.length) {
+            const derivedRow = derived.find(r => String(r.project).trim() === String(mapping.derived_project_name).trim() && (r.month || r.Month) === month);
+            if (derivedRow) {
+              const a = derivedRow.actual ?? derivedRow.Actual ?? 0;
+              const sd = derivedRow.servicesDone ?? derivedRow.ServicesDone ?? 0;
+              actualValue = (Number(a) || 0) + (Number(sd) || 0);
+            }
           }
 
           try {
@@ -348,8 +361,8 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
       logger.warn('fillValuesFromCacheForObjective: metrics API returned no data', { success: metricsData?.success });
       return;
     }
-    const { pms = [], odoo = [] } = metricsData.data;
-    logger.info(`fillValuesFromCacheForObjective: objective ${objectiveId} actual_source=${mapping.actual_source} pms rows=${pms.length} odoo rows=${odoo.length}`);
+    const { pms = [], odoo = [], derived = [] } = metricsData.data;
+    logger.info(`fillValuesFromCacheForObjective: objective ${objectiveId} actual_source=${mapping.actual_source} pms rows=${pms.length} odoo rows=${odoo.length} derived rows=${derived.length}`);
 
     const months = [];
     for (let year = 2026; year <= 2027; year++) {
@@ -365,36 +378,41 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
     for (const monthStr of months) {
       const monthDate = new Date(monthStr + '-01');
 
-      // Target from PMS if mapping says so
+      // Target from PMS or derived if mapping says so
+      let targetValue = null;
       if (mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
         const pmsRow = pms.find(r =>
           mapProj(r.ProjectName) === mapProj(mapping.pms_project_name) &&
           mapProj(r.MetricName) === mapProj(mapping.pms_metric_name) &&
           mapMonth(r) === monthStr
         );
-        if (pmsRow && pmsRow.Target != null) {
-          try {
-            const wr = pool.request();
-            wr.input('department_objective_id', sql.Int, objectiveId);
-            wr.input('month', sql.Date, monthDate);
-            wr.input('target_value', sql.Decimal(18, 2), pmsRow.Target);
-            wr.input('kpi', sql.NVarChar, objInfo.kpi);
-            wr.input('department_id', sql.Int, objInfo.department_id);
-            await wr.query(`
-              MERGE department_monthly_data AS target
-              USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
-              ON target.department_objective_id = source.department_objective_id AND target.month = source.month
-              WHEN MATCHED THEN UPDATE SET target_value = @target_value, kpi = @kpi, department_id = @department_id
-              WHEN NOT MATCHED THEN INSERT (department_objective_id, month, target_value, kpi, department_id)
-              VALUES (@department_objective_id, @month, @target_value, @kpi, @department_id);
-            `);
-          } catch (e) {
-            logger.error(`fillValuesFromCacheForObjective target ${objectiveId} ${monthStr}`, e);
-          }
+        targetValue = pmsRow?.Target;
+      } else if (mapping.target_source === 'derived' && mapping.derived_project_name && derived.length) {
+        const derivedRow = derived.find(r => mapProj(r.project) === mapProj(mapping.derived_project_name) && (r.month || r.Month) === monthStr);
+        targetValue = derivedRow?.target != null ? derivedRow.target : (derivedRow?.Target != null ? derivedRow.Target : null);
+      }
+      if (targetValue != null) {
+        try {
+          const wr = pool.request();
+          wr.input('department_objective_id', sql.Int, objectiveId);
+          wr.input('month', sql.Date, monthDate);
+          wr.input('target_value', sql.Decimal(18, 2), targetValue);
+          wr.input('kpi', sql.NVarChar, objInfo.kpi);
+          wr.input('department_id', sql.Int, objInfo.department_id);
+          await wr.query(`
+            MERGE department_monthly_data AS target
+            USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
+            ON target.department_objective_id = source.department_objective_id AND target.month = source.month
+            WHEN MATCHED THEN UPDATE SET target_value = @target_value, kpi = @kpi, department_id = @department_id
+            WHEN NOT MATCHED THEN INSERT (department_objective_id, month, target_value, kpi, department_id)
+            VALUES (@department_objective_id, @month, @target_value, @kpi, @department_id);
+          `);
+        } catch (e) {
+          logger.error(`fillValuesFromCacheForObjective target ${objectiveId} ${monthStr}`, e);
         }
       }
 
-      // Actual from PMS or Odoo: write value or null for every month (so switching source clears months with no data)
+      // Actual from PMS, Odoo, or derived: write value or null for every month (so switching source clears months with no data)
       let actualValue = null;
       if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
         const pmsRow = pms.find(r =>
@@ -409,9 +427,16 @@ async function fillValuesFromCacheForObjective(pool, objectiveId) {
       } else if (mapping.actual_source === 'odoo_services_created' && mapping.odoo_project_name) {
         const odooRow = odoo.find(r => mapProj(r.Project) === mapProj(mapping.odoo_project_name) && mapMonth(r) === monthStr);
         actualValue = odooRow?.ServicesCreated;
+      } else if (mapping.actual_source === 'derived' && mapping.derived_project_name && derived.length) {
+        const derivedRow = derived.find(r => mapProj(r.project) === mapProj(mapping.derived_project_name) && (r.month || r.Month) === monthStr);
+        if (derivedRow) {
+          const a = derivedRow.actual ?? derivedRow.Actual ?? 0;
+          const sd = derivedRow.servicesDone ?? derivedRow.ServicesDone ?? 0;
+          actualValue = (Number(a) || 0) + (Number(sd) || 0);
+        }
       }
 
-      if (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created') {
+      if (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created' || mapping.actual_source === 'derived') {
         try {
           const wr = pool.request();
           wr.input('department_objective_id', sql.Int, objectiveId);
@@ -856,8 +881,8 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
       `);
       const mapping = mapResult.recordset[0];
       if (mapping) {
-        if (fieldType === 'monthly_target' && mapping.target_source === 'pms_target') {
-          return { is_locked: true, lock_reason: 'Value from data source (PMS Target)', scope_type: 'data_source_mapping' };
+        if (fieldType === 'monthly_target' && (mapping.target_source === 'pms_target' || mapping.target_source === 'derived')) {
+          return { is_locked: true, lock_reason: mapping.target_source === 'derived' ? 'Value from data source (Derived)' : 'Value from data source (PMS Target)', scope_type: 'data_source_mapping' };
         }
         if (fieldType === 'monthly_actual') {
           if (mapping.actual_source === 'pms_actual') {
@@ -868,6 +893,9 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
           }
           if (mapping.actual_source === 'odoo_services_created') {
             return { is_locked: true, lock_reason: 'Value from data source (Odoo Services Created)', scope_type: 'data_source_mapping' };
+          }
+          if (mapping.actual_source === 'derived') {
+            return { is_locked: true, lock_reason: 'Value from data source (Derived)', scope_type: 'data_source_mapping' };
           }
         }
       }
@@ -2030,6 +2058,7 @@ const handler = rateLimiter('general')(
               m.target_source,
               m.actual_source,
               m.odoo_project_name,
+              m.derived_project_name,
               m.created_at,
               m.updated_at
             FROM objective_data_source_mapping m
@@ -2061,6 +2090,7 @@ const handler = rateLimiter('general')(
               m.target_source,
               m.actual_source,
               m.odoo_project_name,
+              m.derived_project_name,
               m.created_at,
               m.updated_at
             FROM objective_data_source_mapping m
@@ -2092,20 +2122,21 @@ const handler = rateLimiter('general')(
             pms_metric_name,
             target_source,
             actual_source,
-            odoo_project_name
+            odoo_project_name,
+            derived_project_name
           } = body;
 
-          // target_source: 'pms_target' = fill target from PMS; null/empty = manual
-          const targetSourceValue = (target_source === 'pms_target') ? 'pms_target' : null;
+          // target_source: 'pms_target' | 'derived' = fill target from source; null/empty = manual
+          const targetSourceValue = (target_source === 'pms_target' || target_source === 'derived') ? target_source : null;
 
-          // actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created'
-          if (!actual_source || !['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created'].includes(actual_source)) {
+          // actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived'
+          if (!actual_source || !['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived'].includes(actual_source)) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({
                 success: false,
-                error: 'actual_source is required and must be "manual", "pms_actual", "odoo_services_done", or "odoo_services_created"'
+                error: 'actual_source is required and must be "manual", "pms_actual", "odoo_services_done", "odoo_services_created", or "derived"'
               })
             };
           }
@@ -2118,6 +2149,19 @@ const handler = rateLimiter('general')(
               body: JSON.stringify({
                 success: false,
                 error: 'odoo_project_name is required when Actual From is Odoo ServicesDone or Odoo ServicesCreated'
+              })
+            };
+          }
+
+          // Validate: derived_project_name required when target or actual is derived
+          const needsDerived = targetSourceValue === 'derived' || actual_source === 'derived';
+          if (needsDerived && !derived_project_name) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'derived_project_name is required when Target From or Actual From is Derived'
               })
             };
           }
@@ -2142,6 +2186,7 @@ const handler = rateLimiter('general')(
           request.input('target_source', sql.NVarChar, targetSourceValue);
           request.input('actual_source', sql.NVarChar, actual_source);
           request.input('odoo_project_name', sql.NVarChar, odoo_project_name || null);
+          request.input('derived_project_name', sql.NVarChar, derived_project_name || null);
 
           // Use MERGE to handle both insert and update
           await request.query(`
@@ -2155,10 +2200,11 @@ const handler = rateLimiter('general')(
                 target_source = @target_source,
                 actual_source = @actual_source,
                 odoo_project_name = @odoo_project_name,
+                derived_project_name = @derived_project_name,
                 updated_at = GETDATE()
             WHEN NOT MATCHED THEN
-              INSERT (department_objective_id, pms_project_name, pms_metric_name, target_source, actual_source, odoo_project_name, created_at, updated_at)
-              VALUES (@department_objective_id, @pms_project_name, @pms_metric_name, @target_source, @actual_source, @odoo_project_name, GETDATE(), GETDATE());
+              INSERT (department_objective_id, pms_project_name, pms_metric_name, target_source, actual_source, odoo_project_name, derived_project_name, created_at, updated_at)
+              VALUES (@department_objective_id, @pms_project_name, @pms_metric_name, @target_source, @actual_source, @odoo_project_name, @derived_project_name, GETDATE(), GETDATE());
           `);
 
           // Log activity
@@ -2168,7 +2214,7 @@ const handler = rateLimiter('general')(
             action_type: 'update_mapping',
             target_field: 'objective_data_source_mapping',
             department_objective_id: id,
-            metadata: { pms_project_name, pms_metric_name, target_source: targetSourceValue, actual_source, odoo_project_name }
+            metadata: { pms_project_name, pms_metric_name, target_source: targetSourceValue, actual_source, odoo_project_name, derived_project_name }
           });
 
           // Fill monthly target/actual from cache for this objective (so monthly actual updates without needing a lock rule)
