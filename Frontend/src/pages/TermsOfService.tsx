@@ -1,8 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AppLayout } from '@/components/layout/AppLayout';
 
 const TermsOfService = () => {
+  const userData = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  const user = userData ? JSON.parse(userData) : null;
+
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
+    <AppLayout user={user} onSignOut={() => { localStorage.removeItem('user'); window.location.href = '/'; }} headerTitle="Terms of Service">
+      <div className="max-w-4xl">
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl">Terms of Service</CardTitle>
@@ -59,7 +64,8 @@ const TermsOfService = () => {
           </p>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

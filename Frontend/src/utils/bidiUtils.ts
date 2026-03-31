@@ -32,7 +32,7 @@ export const normalizeBidiText = (text: string): string => {
  * @param direction - Sort direction ('asc' or 'desc')
  * @returns Sorted array
  */
-export const sortBidiAware = <T extends Record<string, any>>(
+export const sortBidiAware = <T extends Record<string, unknown>>(
   data: T[],
   key: string,
   direction: 'asc' | 'desc' = 'asc'

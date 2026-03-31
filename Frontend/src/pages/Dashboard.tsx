@@ -5,16 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   LogOut, 
-  Calendar,
   Users,
   Building2,
   BarChart3,
   RefreshCw,
-  AlertCircle,
-  FolderOpen,
-  ArrowRight,
-  ArrowUpRight,
-  Power
+  AlertCircle
 } from "lucide-react";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
 import LagMetricsCard from "@/components/dashboard/LagMetricsCard";
@@ -26,9 +21,8 @@ import { toast } from "@/hooks/use-toast";
 import type { LagMetric } from "@/services/sharepointService";
 import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth } from "@/lib/utils";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
-import { hasPowerBIAccess } from "@/config/powerbi";
 import ExportButton from "@/components/shared/ExportButton";
-import OptimizedImage from "@/components/ui/OptimizedImage";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 interface User {
   username: string;
@@ -56,14 +50,6 @@ const Dashboard = () => {
   // SharePoint data hooks
   const { data: userData, isLoading, error, isCEO, refetch } = useUserData(user);
   const testConnection = useTestConnection();
-
-  // Debug logging
-  useEffect(() => {
-    console.log('[Dashboard] User data received:', userData);
-    console.log('[Dashboard] Is CEO:', isCEO);
-    console.log('[Dashboard] Is loading:', isLoading);
-    console.log('[Dashboard] Error:', error);
-  }, [userData, isCEO, isLoading, error]);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -232,8 +218,8 @@ const Dashboard = () => {
       let totalTarget = 0;
       let totalAchieved = 0;
       let monthCount = 0;
-      let achievedArr: number[] = [];
-      let targetArr: number[] = [];
+      const achievedArr: number[] = [];
+      const targetArr: number[] = [];
 
       // Check if this is a "نسبة" row
       const isPercentage = isPercentageRow(rowData);
@@ -584,90 +570,52 @@ const Dashboard = () => {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 sm:w-16 sm:h-16 flex items-center justify-center p-2">
-                <OptimizedImage 
-                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                  alt="Logo" 
-                  className="w-full h-full object-contain"
-                  sizes="64px"
-                />
-              </div>
-              <div>
-                <h1 className="text-base sm:text-xl font-bold text-foreground">
-                  {isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
-                </h1>
-                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                {user.role === "CEO" ? (
-                  <Badge variant="secondary" className="bg-accent text-accent-foreground w-fit text-xs">
-                    <Users className="w-3 h-3 mr-1" />
-                    CEO View
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
-                    <Building2 className="w-3 h-3 mr-1" />
-                    {getDepartmentDisplayName(user.departments[0])}
-                  </Badge>
-                )}
-                {/* Removed welcome message */}
-              </div>
-              
-              {/* Connection Status - Desktop Only */}
-              <div className="hidden sm:flex sm:flex-row sm:items-center gap-2">
-                {isLoading && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Syncing...
-                  </div>
-                )}
-                {error && (
-                  <div className="flex items-center gap-1 text-xs text-destructive">
-                    <AlertCircle className="w-3 h-3" />
-                    Connection Error
-                  </div>
-                )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="w-auto text-xs">
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Refresh Data
-                </Button>
-                {!isLoading && !error && displayData.length > 0 && (
-                  <ExportButton
-                    data={displayData.map(lag => ({
-                      'LAG Name': lag.name,
-                      'Department': lag.department || '',
-                      'Target': lag.target,
-                      'Achieved': lag.value,
-                      'Percentage': lag.target === 0 ? 'Not Yet' : `${((lag.value / lag.target) * 100).toFixed(2)}%`,
-                      'Trend': lag.trend || '',
-                      'Period': selectedPeriod,
-                    }))}
-                    filename={`dashboard-lag-metrics-${new Date().toISOString().split('T')[0]}`}
-                    title="LAG Metrics"
-                  />
-                )}
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="w-auto text-xs">
-                <LogOut className="w-4 h-4 mr-1" />
-                Sign Out
-              </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-4 space-y-4 pb-20 sm:pb-4">
-        {/* Mobile Buttons - Before Filters */}
-        <div className="flex gap-3 sm:hidden">
+    <AppLayout
+      user={user}
+      headerTitle={isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
+      headerSubtitle="Dashboard"
+      onSignOut={handleSignOut}
+      onRefresh={handleRefreshData}
+      exportSlot={
+        !isLoading && !error && displayData.length > 0 ? (
+          <ExportButton
+            asIcon
+            data={displayData.map(lag => ({
+              'LAG Name': lag.name,
+              'Department': lag.department || '',
+              'Target': lag.target,
+              'Achieved': lag.value,
+              'Percentage': lag.target === 0 ? 'Not Yet' : `${((lag.value / lag.target) * 100).toFixed(2)}%`,
+              'Trend': lag.trend || '',
+              'Period': selectedPeriod,
+            }))}
+            filename={`dashboard-lag-metrics-${new Date().toISOString().split('T')[0]}`}
+            title="LAG Metrics"
+          />
+        ) : null
+      }
+      badge={
+        user.role === "CEO" ? (
+          <Badge variant="secondary" className="bg-accent text-accent-foreground w-fit text-xs">
+            <Users className="w-3 h-3 mr-1" />
+            CEO View
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
+            <Building2 className="w-3 h-3 mr-1" />
+            {getDepartmentDisplayName(user.departments[0])}
+          </Badge>
+        )
+      }
+      status={
+        isLoading
+          ? 'loading'
+          : error
+            ? { type: 'error', message: 'Connection Error' }
+            : null
+      }
+      mobileActions={
+        <div className="flex gap-3">
           <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 text-xs">
             <RefreshCw className="w-4 h-4 mr-1" />
             Refresh Data
@@ -677,122 +625,13 @@ const Dashboard = () => {
             Sign Out
           </Button>
         </div>
-
-        {/* Combined Filters and Navigation */}
+      }
+    >
+        {/* Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Navigation - Takes 1/3 of the space, comes first on mobile */}
-              {user && (hasPowerBIAccess(user.role, user.departments || []) || user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                <div className="order-1 lg:order-2 lg:col-span-1">
-                  <div className="space-y-3">
-                    {(user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                      <>
-                        <div className="flex items-center gap-2 mb-3">
-                          <FolderOpen className="w-5 h-5 text-primary" />
-                          <h3 className="font-semibold text-base">Navigation</h3>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate('/summary')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Summary Overview</div>
-                          <div className="text-xs text-muted-foreground">High-level project summaries</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate('/project-details')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <FolderOpen className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Project Details</div>
-                          <div className="text-xs text-muted-foreground">Detailed project view</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                      </>
-                    )}
-
-                    {/* Power BI Dashboards Button - Show for all departments that have access */}
-                    {hasPowerBIAccess(user.role, user.departments || []) && (
-                      <>
-                        {!(user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                          <div className="flex items-center gap-2 mb-3">
-                            <Power className="w-5 h-5 text-primary" />
-                            <h3 className="font-semibold text-base">Navigation</h3>
-                          </div>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate('/powerbi')}
-                          className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <Power className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Power BI Dashboards</div>
-                          <div className="text-xs text-muted-foreground">Interactive data visualizations</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                      </>
-                    )}
-
-                    {/* Life Makers Project Brief Button - Only for CEO/Operations */}
-                    {(user.role === "CEO" || (user.role === "department" && user.departments.includes("operations"))) && (
-                      <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open('http://pms.lifemakers.org/', '_blank')}
-                      className="justify-start h-auto p-3 w-full hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
-                    >
-                      <div className="text-left flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          <BarChart3 className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-200" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Life Makers Project Brief</div>
-                          <div className="text-xs text-muted-foreground">All Time Documentation</div>
-                        </div>
-                        <div className="ml-auto flex-shrink-0">
-                          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
-                        </div>
-                      </div>
-                    </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Filters - Takes 2/3 of the space, comes second on mobile */}
-              <div className="order-2 lg:order-1 lg:col-span-2">
-                <DashboardFilters
+            <div className="w-full">
+              <DashboardFilters
                   selectedPeriod={selectedPeriod}
                   setSelectedPeriod={setSelectedPeriod}
                   selectedMonths={selectedMonths}
@@ -804,7 +643,6 @@ const Dashboard = () => {
                   endMonth={endMonth}
                   setEndMonth={setEndMonth}
                 />
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -823,7 +661,7 @@ const Dashboard = () => {
 
         {/* Error State */}
         {error && (
-          <Card className="border-destructive">
+          <Card className="border-destructive" role="alert">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="w-4 h-4" />
@@ -862,12 +700,16 @@ const Dashboard = () => {
           </div>
           
             {displayData.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-x-auto pb-1 -mx-1 px-1"
+                role="region"
+                aria-label="LAG measures grid"
+              >
                     {groupLagsForDisplay(displayData).map((group, idx) => (
                       group.indicators.length > 0 ? (
                         <div
                           key={group.average.id}
-                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center w-full md:col-span-2 lg:col-span-3 xl:col-span-4"
+                          className="border-2 border-primary/30 rounded-xl p-2 bg-card border-border flex flex-col items-center w-full md:col-span-2 lg:col-span-3 xl:col-span-4"
                         >
                           <div className="w-full">
               <LagMetricsCard
@@ -909,24 +751,21 @@ const Dashboard = () => {
             />
           </div>
         )}
-      </div>
 
       {/* Lead Measures Modal */}
       {!isCEO && (
-      <LeadMeasuresModal
-        isOpen={isLeadModalOpen}
-        onClose={() => setIsLeadModalOpen(false)}
-        lagName={selectedLag?.name || ""}
+        <LeadMeasuresModal
+          isOpen={isLeadModalOpen}
+          onClose={() => setIsLeadModalOpen(false)}
+          lagName={selectedLag?.name || ""}
           leads={(() => {
             if (!selectedLag) return [];
-            
-            // For department view, find the filtered lag in displayData by id
             const filteredLag = displayData.find(l => l.id === selectedLag.id);
             return filteredLag?.leads || [];
           })()}
-      />
+        />
       )}
-    </div>
+    </AppLayout>
   );
 };
 

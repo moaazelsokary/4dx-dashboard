@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,14 @@ const MONTHS = [
   '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
   '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06',
 ];
+
+function errStatus(err: unknown): number | undefined {
+  if (typeof err === 'object' && err !== null && 'status' in err) {
+    const s = (err as { status?: unknown }).status;
+    return typeof s === 'number' ? s : undefined;
+  }
+  return undefined;
+}
 
 export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: MonthlyDataEditorProps) {
   const [open, setOpen] = useState(false);
@@ -65,24 +73,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     retry: false,
   });
 
-  // Load department objective to check type
-  useEffect(() => {
-    if (open) {
-      const loadObjective = async () => {
-        try {
-          const objectives = await getDepartmentObjectives();
-          const objective = objectives.find(obj => obj.id === departmentObjectiveId);
-          setObjectiveType(objective?.type || null);
-        } catch (error) {
-          console.error('Error loading department objective:', error);
-        }
-      };
-      loadObjective();
-      loadData();
-    }
-  }, [open, departmentObjectiveId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       // Fetch fresh data from server with cache-busting
@@ -117,7 +108,24 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
     } finally {
       setLoading(false);
     }
-  };
+  }, [departmentObjectiveId]);
+
+  // Load department objective to check type
+  useEffect(() => {
+    if (open) {
+      const loadObjective = async () => {
+        try {
+          const objectives = await getDepartmentObjectives();
+          const objective = objectives.find(obj => obj.id === departmentObjectiveId);
+          setObjectiveType(objective?.type || null);
+        } catch (error) {
+          console.error('Error loading department objective:', error);
+        }
+      };
+      void loadObjective();
+      void loadData();
+    }
+  }, [open, departmentObjectiveId, loadData]);
 
   // Auto-save a single month's data
   const saveMonthData = async (month: string, monthData: MonthlyData) => {
@@ -436,7 +444,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
         setTimeout(() => setOpen(false), 1000);
       } else if (savedData.length > 0) {
         const friendlyErrors = failed.map(f => {
-          const apiError = { message: f.error.message, status: (f.error as any).status };
+          const apiError = { message: f.error.message, status: errStatus(f.error) };
           return getUserFriendlyError(apiError);
         });
         toast({
@@ -447,7 +455,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       } else {
         const friendlyError = getUserFriendlyError({ 
           message: failed[0].error.message, 
-          status: (failed[0].error as any).status 
+          status: errStatus(failed[0].error) 
         });
         toast({
           title: 'Save Failed',
@@ -460,7 +468,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       const error = err instanceof Error ? err : new Error('Failed to save monthly data');
       const friendlyError = getUserFriendlyError({ 
         message: error.message, 
-        status: (error as any).status 
+        status: errStatus(err) 
       });
       
       toast({
@@ -570,7 +578,7 @@ export default function MonthlyDataEditor({ departmentObjectiveId, trigger }: Mo
       const error = err instanceof Error ? err : new Error('Retry failed');
       const friendlyError = getUserFriendlyError({ 
         message: error.message, 
-        status: (error as any).status 
+        status: errStatus(err) 
       });
       toast({
         title: friendlyError.title || 'Error',

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import OptimizedImage from '@/components/ui/OptimizedImage';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,12 +42,12 @@ import {
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
 import { dataCacheService } from '@/services/dataCacheService';
 import { hasPowerBIAccess } from '@/config/powerbi';
-import NavigationBar from '@/components/shared/NavigationBar';
+import type { User } from '@/services/authService';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Set Mapbox access token from environment variable or fallback
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoibW9hem1haG1vdWQiLCJhIjoiY2x3czBvN2RsMDJudjJycXh5YmRjc2VzayJ9.ZslAr64T-7dusrhrUnw3RQ';
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN ;
 
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
@@ -59,18 +59,56 @@ const TEST_FUNCTION_URL = isLocalhost
   : '/.netlify/functions/test';
 const ONEDRIVE_SAMPLE_URL = 'https://lifemaker-my.sharepoint.com/:x:/r/personal/hamed_ibrahim_lifemakers_org/_layouts/15/Doc.aspx?sourcedoc=%7B084A3748-79EC-41B1-B3EB-8ECED81E5C53%7D&file=Projects%20Dashboard%202025%20-%20Internal%20tracker.xlsx&fromShare=true&action=default&mobileredirect=true';
 
+type ExcelRow = unknown[];
+type OneDriveWorkbook = Record<string, unknown>;
+
+type MetricTriple = { actual: number; target: number; variance: number };
+type ServiceMetricsBlock = {
+  volunteers: MetricTriple;
+  opportunities: MetricTriple;
+  training: MetricTriple;
+  expenditures: MetricTriple;
+  beneficiaries: MetricTriple;
+  cases: MetricTriple;
+};
+type ProcessedServiceRow = { serviceName: string; metrics: ServiceMetricsBlock };
+type ProcessedProjectRow = {
+  projectId: string;
+  projectName: string;
+  sourceOfFund: string;
+  durationMonths: number;
+  fundEGP: number;
+  geolocation: string;
+};
+type ProjectFilteredMetrics = {
+  services: ProcessedServiceRow[];
+  projects: ProcessedProjectRow[];
+};
+type MockDashboardMetrics = {
+  volunteers: MetricTriple;
+  opportunities: MetricTriple;
+  training: MetricTriple;
+  expenditures: MetricTriple;
+  beneficiaries: MetricTriple;
+  cases: MetricTriple;
+};
+
+function isMockDashboardMetrics(m: ProjectFilteredMetrics | MockDashboardMetrics): m is MockDashboardMetrics {
+  return m != null && 'volunteers' in m && !('services' in m);
+}
+
 const ProjectDetails: React.FC = () => {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<OneDriveWorkbook | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>(['all']); // Changed to array for multiple selection
   const [selectedProject, setSelectedProject] = useState('Basic needs');
   const [selectedChartMetric, setSelectedChartMetric] = useState('Volunteers');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   
   // Reactive filtering - recalculate when filters change (like department dashboard)
-  const [filteredMetrics, setFilteredMetrics] = useState<any>(null);
+  const [filteredMetrics, setFilteredMetrics] = useState<ProjectFilteredMetrics | null>(null);
   
   const navigate = useNavigate();
 
@@ -82,7 +120,7 @@ const ProjectDetails: React.FC = () => {
       return;
     }
     
-    const userObj = JSON.parse(userData);
+    const userObj = JSON.parse(userData) as User;
     // Only allow CEO, operations department, or project role
     if (userObj.role !== "CEO" && 
         !(userObj.role === "department" && userObj.departments.includes("operations")) &&
@@ -94,10 +132,10 @@ const ProjectDetails: React.FC = () => {
   }, [navigate]);
   
   // Process Services data from "Services Target Q Vs Actual" tab
-  const processServicesData = useCallback((servicesData: any) => {
+  const processServicesData = useCallback((servicesData: unknown) => {
     // Check if the data is an error object from Netlify function
-    if (servicesData && typeof servicesData === 'object' && servicesData.error) {
-      console.log('❌ Services Target Q Vs Actual tab has an error:', servicesData.error);
+    if (servicesData && typeof servicesData === 'object' && !Array.isArray(servicesData) && 'error' in servicesData) {
+      console.log('❌ Services Target Q Vs Actual tab has an error:', (servicesData as { error: unknown }).error);
       return [];
     }
     
@@ -212,10 +250,10 @@ const ProjectDetails: React.FC = () => {
   }, [selectedQuarters, selectedProject]);
 
   // Process Projects data from "Projects" tab
-  const processProjectsData = useCallback((projectsData: any) => {
+  const processProjectsData = useCallback((projectsData: unknown) => {
     // Check if the data is an error object from Netlify function
-    if (projectsData && typeof projectsData === 'object' && projectsData.error) {
-      console.log('❌ Projects tab has an error:', projectsData.error);
+    if (projectsData && typeof projectsData === 'object' && !Array.isArray(projectsData) && 'error' in projectsData) {
+      console.log('❌ Projects tab has an error:', (projectsData as { error: unknown }).error);
       return [];
     }
     
@@ -299,8 +337,8 @@ const ProjectDetails: React.FC = () => {
     // Process projects data
     const projectsData = data['Projects'];
     const servicesData = data['Services Target Q  Vs Actual'];
-    console.log('Projects data:', projectsData.length);
-    console.log('Services data:', servicesData.length);
+    console.log('Projects data:', Array.isArray(projectsData) ? projectsData.length : 0);
+    console.log('Services data:', Array.isArray(servicesData) ? servicesData.length : 0);
     
     // Process services data for the selected project and quarters
     const processedServices = processServicesData(servicesData);
@@ -346,12 +384,12 @@ const ProjectDetails: React.FC = () => {
     
     try {
       const data = await dataCacheService.fetchOneDriveData(forceRefresh);
-      setData(data);
-      console.log('✅ Worksheets set:', Object.keys(data));
-      console.log('📋 Available tabs:', Object.keys(data));
-    } catch (e: any) {
+      setData(data as OneDriveWorkbook);
+      console.log('✅ Worksheets set:', Object.keys(data as object));
+      console.log('📋 Available tabs:', Object.keys(data as object));
+    } catch (e: unknown) {
       console.error('❌ Error fetching OneDrive data:', e);
-      setError(e.message);
+      setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -394,7 +432,7 @@ const ProjectDetails: React.FC = () => {
 
 
   // Fallback to mock data if no real data available
-  const mockMetrics = {
+  const mockMetrics: MockDashboardMetrics = {
     volunteers: { actual: 4190, target: 518.5, variance: 807.91 },
     opportunities: { actual: 1431.5, target: 6059.5, variance: 23.62 },
     training: { actual: 12.5, target: 128.5, variance: 9.73 },
@@ -404,7 +442,7 @@ const ProjectDetails: React.FC = () => {
   };
 
   // Use reactive filtered data if available, otherwise fall back to mock data
-  const displayMetrics = filteredMetrics || mockMetrics;
+  const displayMetrics: ProjectFilteredMetrics | MockDashboardMetrics = filteredMetrics ?? mockMetrics;
   
   // Debug: Log what metrics are being displayed
   console.log('🔍 Current display metrics:', displayMetrics);
@@ -478,17 +516,18 @@ const ProjectDetails: React.FC = () => {
   };
 
   const calculateOverallHealth = () => {
-    if (!displayMetrics) return 0;
+    if (!displayMetrics || !isMockDashboardMetrics(displayMetrics)) return 0;
     
     const metrics = Object.values(displayMetrics);
-    const validMetrics = metrics.filter((metric: any) => 
-      metric.actual !== undefined && metric.actual !== null && !isNaN(metric.actual)
+    const validMetrics = metrics.filter(
+      (metric): metric is MetricTriple =>
+        metric.actual !== undefined && metric.actual !== null && !isNaN(metric.actual)
     );
     
     if (validMetrics.length === 0) return 0;
     
     // Calculate average of averages, but cap individual metrics at 100%
-    const cappedVariances = validMetrics.map((metric: any) => {
+    const cappedVariances = validMetrics.map((metric) => {
       const variance = metric.variance || 0;
       return Math.min(variance, 100); // Cap at 100%
     });
@@ -548,7 +587,7 @@ const ProjectDetails: React.FC = () => {
     
     // Skip header row and extract project names from Project_Name column (index 1)
     const projectNames = projectsData.slice(1)
-      .map((row: any[]) => row[1]) // Project_Name column
+      .map((row: ExcelRow) => row[1]) // Project_Name column
       .filter((name: string) => name && name.trim() !== '')
       .map((name: string) => name.trim());
     
@@ -562,7 +601,7 @@ const ProjectDetails: React.FC = () => {
   const getSelectedProjectData = () => {
     if (!selectedProject || !filteredMetrics?.projects) return null;
     
-    const project = filteredMetrics.projects.find((p: any) => 
+    const project = filteredMetrics.projects.find((p: ProcessedProjectRow) => 
       p.projectName.toLowerCase() === selectedProject.toLowerCase()
     );
     
@@ -660,18 +699,21 @@ const ProjectDetails: React.FC = () => {
   };
 
   // Mapbox Map Component
-  const EgyptMap: React.FC = () => {
+  const EgyptMap: React.FC<{ workbookData: OneDriveWorkbook | null; projectFilter: string }> = ({
+    workbookData,
+    projectFilter,
+  }) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
-    const dataRef = useRef(data); // Store data in ref to avoid re-renders
+    const dataRef = useRef<OneDriveWorkbook | null>(workbookData); // Store data in ref to avoid re-renders
     const [lng] = useState(31.2357); // Cairo longitude
     const [lat] = useState(30.0444); // Cairo latitude
     const [zoom] = useState(6);
 
-    // Update data ref when data changes
+    // Keep raw workbook on ref for marker updates (avoids stale closures)
     useEffect(() => {
-      dataRef.current = data;
-    }, [data]);
+      dataRef.current = workbookData;
+    }, [workbookData]);
 
     useEffect(() => {
       if (map.current) return; // initialize map only once
@@ -703,22 +745,7 @@ const ProjectDetails: React.FC = () => {
       };
     }, [lng, lat, zoom]);
 
-    // Update markers when selectedProject changes (ignore quarter filter)
-    useEffect(() => {
-      if (!map.current) return;
-
-      // Wait for map to load
-      map.current.on('load', () => {
-        updateGovernorateMarkers();
-      });
-
-      // If map is already loaded, update markers immediately
-      if (map.current.isStyleLoaded()) {
-        updateGovernorateMarkers();
-      }
-    }, [selectedProject]); // Only depend on selectedProject, not data or filteredMetrics
-
-        const updateGovernorateMarkers = () => {
+    const updateGovernorateMarkers = useCallback(() => {
       if (!map.current) return;
 
       // Remove existing governorate layers and sources
@@ -738,10 +765,11 @@ const ProjectDetails: React.FC = () => {
       // Get governorates for the selected project (ignore quarter filter)
       let governorates: string[] = [];
       
-      if (selectedProject && dataRef.current?.Projects) {
+      if (projectFilter && dataRef.current?.Projects) {
         // Check if the data is an error object from Netlify function
-        if (dataRef.current.Projects && typeof dataRef.current.Projects === 'object' && dataRef.current.Projects.error) {
-          console.log('❌ Map: Projects tab has an error:', dataRef.current.Projects.error);
+        const projectsTab = dataRef.current.Projects;
+        if (projectsTab && typeof projectsTab === 'object' && !Array.isArray(projectsTab) && 'error' in projectsTab) {
+          console.log('❌ Map: Projects tab has an error:', (projectsTab as { error: unknown }).error);
           return;
         }
         
@@ -753,10 +781,10 @@ const ProjectDetails: React.FC = () => {
         
         // Find the selected project in the raw projects data - use exact match or starts with
         const projectsData = dataRef.current.Projects;
-        const selectedProjectData = projectsData.find((project: any) => {
+        const selectedProjectData = projectsData.find((project: ExcelRow) => {
           const projectName = String(project[1] || '').trim(); // Project name is in column 1
           const projectLower = projectName.toLowerCase();
-          const selectedLower = selectedProject.toLowerCase();
+          const selectedLower = projectFilter.toLowerCase();
           return projectLower === selectedLower || projectLower.startsWith(selectedLower);
         });
         
@@ -769,16 +797,16 @@ const ProjectDetails: React.FC = () => {
         }
       }
 
-      console.log('🔍 Map: Selected project:', selectedProject);
+      console.log('🔍 Map: Selected project:', projectFilter);
       console.log('🔍 Map: Governorates for project:', governorates);
       // Only log if Projects data is an array
       if (Array.isArray(dataRef.current?.Projects)) {
-        console.log('🔍 Map: Available projects:', dataRef.current?.Projects?.slice(2).map((p: any) => ({ 
+        console.log('🔍 Map: Available projects:', dataRef.current?.Projects?.slice(2).map((p: ExcelRow) => ({ 
           name: p[1], 
           geolocation: p[5],
-          match: String(p[1] || '').toLowerCase().includes(selectedProject.toLowerCase())
+          match: String(p[1] || '').toLowerCase().includes(projectFilter.toLowerCase())
         })));
-        console.log('🔍 Map: All governorates in data:', [...new Set(dataRef.current?.Projects?.slice(2).flatMap((p: any) => 
+        console.log('🔍 Map: All governorates in data:', [...new Set(dataRef.current?.Projects?.slice(2).flatMap((p: ExcelRow) => 
           String(p[5] || '').split(',').map(g => g.trim()).filter(Boolean)
         ) || [])]);
       }
@@ -828,7 +856,7 @@ const ProjectDetails: React.FC = () => {
               },
               properties: {
                 governorate: governorate,
-                project: selectedProject
+                project: projectFilter
               }
             };
           }
@@ -931,7 +959,20 @@ const ProjectDetails: React.FC = () => {
           }
         });
       }
-    };
+    }, [projectFilter]);
+
+    // Update markers when project or workbook data changes
+    useEffect(() => {
+      if (!map.current) return;
+
+      map.current.on('load', () => {
+        updateGovernorateMarkers();
+      });
+
+      if (map.current.isStyleLoaded()) {
+        updateGovernorateMarkers();
+      }
+    }, [projectFilter, workbookData, updateGovernorateMarkers]);
 
     return (
       <div className="w-full h-96 rounded-lg overflow-hidden border border-gray-200 shadow-lg">
@@ -945,63 +986,21 @@ const ProjectDetails: React.FC = () => {
   const projectHealth = calculateProjectHealth();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            {/* Top Row: Logo, Title, Actions */}
-            <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="w-12 h-12 flex items-center justify-center p-1">
-                <OptimizedImage 
-                  src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                  alt="Logo" 
-                  className="w-full h-full object-contain"
-                  sizes="48px"
-                />
-              </div>
-              <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                  Project Details
-                </h1>
-                <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-              </div>
-            </div>
-            
-              <div className="flex items-center gap-2">
-                {loading && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Syncing...
-                  </div>
-                )}
-                {error && (
-                  <div className="flex items-center gap-1 text-xs text-destructive">
-                    <AlertCircle className="w-3 h-3" />
-                    Error
-                  </div>
-                )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="h-7 px-2 text-xs">
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
-                  <LogOut className="w-3 h-3 mr-1" />
-                  Sign Out
-                </Button>
-              </div>
-            </div>
-
-            {/* Navigation Row */}
-            <NavigationBar user={user} />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-4 space-y-4 pb-20 sm:pb-4">
-        {/* Mobile Buttons - Before Filters */}
-        <div className="flex gap-3 sm:hidden">
+    <AppLayout
+      user={user}
+      headerTitle="Project Details"
+      headerSubtitle="Life Makers Foundation - 4DX Methodology"
+      onSignOut={handleSignOut}
+      onRefresh={handleRefreshData}
+      status={
+        loading
+          ? 'loading'
+          : error
+            ? { type: 'error', message: 'Error' }
+            : null
+      }
+      mobileActions={
+        <div className="flex gap-3">
           <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 text-xs">
             <RefreshCw className="w-4 h-4 mr-1" />
             Refresh Data
@@ -1011,7 +1010,8 @@ const ProjectDetails: React.FC = () => {
             Sign Out
           </Button>
         </div>
-
+      }
+    >
         {/* Combined Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
           <CardContent className="p-6">
@@ -1170,7 +1170,7 @@ const ProjectDetails: React.FC = () => {
         )}
 
         {error && (
-          <Card className="border-red-200 bg-red-50">
+          <Card className="border-destructive/50 bg-destructive/10" role="alert">
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-red-600">
                 <AlertCircle className="w-5 h-5" />
@@ -1187,7 +1187,7 @@ const ProjectDetails: React.FC = () => {
              {selectedProjectData && filteredMetrics?.services && (
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  {/* Left Side - Services Table */}
-                 <Card className="backdrop-blur-md bg-white/20 border border-white/30 shadow-xl">
+                 <Card className="bg-card text-card-foreground border-border shadow-md">
                    <CardHeader>
                      <CardTitle className="flex items-center gap-2 text-base">
                        <BarChart3 className="w-4 h-4 text-primary" />
@@ -1195,19 +1195,23 @@ const ProjectDetails: React.FC = () => {
                      </CardTitle>
                    </CardHeader>
                    <CardContent>
-                     <div className="overflow-y-auto max-h-96">
-                       <table className="w-full">
+                     <div
+                       className="overflow-auto max-h-96 overscroll-x-contain"
+                       role="region"
+                       aria-label="Main services performance table"
+                     >
+                       <table className="w-full min-w-[320px]">
                          <thead>
-                           <tr className="border-b border-white/20">
-                             <th className="text-left py-3 px-4 font-medium text-sm text-muted-foreground">Service Name</th>
-                             <th className="text-right py-3 px-4 font-medium text-sm text-muted-foreground">Target</th>
-                             <th className="text-right py-3 px-4 font-medium text-sm text-muted-foreground">Actual</th>
-                             <th className="text-right py-3 px-4 font-medium text-sm text-muted-foreground">Percentage</th>
+                           <tr className="border-b border-border">
+                             <th scope="col" className="text-left py-3 px-4 font-medium text-sm text-muted-foreground">Service Name</th>
+                             <th scope="col" className="text-right py-3 px-4 font-medium text-sm text-muted-foreground">Target</th>
+                             <th scope="col" className="text-right py-3 px-4 font-medium text-sm text-muted-foreground">Actual</th>
+                             <th scope="col" className="text-right py-3 px-4 font-medium text-sm text-muted-foreground">Percentage</th>
                            </tr>
                          </thead>
                          <tbody>
-                           {filteredMetrics.services.map((service: any, index: number) => (
-                             <tr key={index} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                           {filteredMetrics.services.map((service: ProcessedServiceRow, index: number) => (
+                             <tr key={index} className="border-b border-border hover:bg-muted/40 transition-colors">
                                <td className="py-3 px-4 font-medium text-sm">
                                  {service.serviceName}
                                </td>
@@ -1287,7 +1291,7 @@ const ProjectDetails: React.FC = () => {
                    <CardContent>
                      {/* Egypt Map Visualization */}
                      <div className="flex justify-center">
-                       <EgyptMap />
+                       <EgyptMap workbookData={data} projectFilter={selectedProject} />
                      </div>
                    </CardContent>
                  </Card>
@@ -1310,10 +1314,9 @@ const ProjectDetails: React.FC = () => {
                 </CardContent>
               </Card>
             )}
-          </div>
-        )}
-      </div>
-    </div>
+            </div>
+          )}
+      </AppLayout>
   );
 };
 

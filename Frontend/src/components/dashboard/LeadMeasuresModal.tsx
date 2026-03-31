@@ -66,7 +66,7 @@ const LeadMeasuresModal = ({ isOpen, onClose, lagName, leads }: LeadMeasuresModa
             group.indicators.length > 0 ? (
               <div
                 key={group.average.id}
-                className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center w-full"
+                className="border-2 border-primary/30 rounded-xl p-2 bg-card border-border flex flex-col items-center w-full"
               >
                 {/* Remove '(Average)' from display name, keep badge */}
                 <LeadCard
@@ -101,7 +101,7 @@ function LeadCard({ lead, isAverage, isIndicator }: { lead: LeadMeasure; isAvera
   const isPositiveTrend = lead.trend > 0;
   const statusInfo = getStatusBadge(displayAchievementRate, isNotYet);
   return (
-    <Card className={`border-2 border-lead/20 bg-white/30 backdrop-blur-md border-white/30 shadow-lg ${isAverage ? 'ring-2 ring-primary/60' : ''}`}>
+    <Card className={`border-2 border-lead/20 bg-card text-card-foreground border-border shadow-md ${isAverage ? 'ring-2 ring-primary/60' : ''}`}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between text-sm font-medium gap-2">
           <div className="flex items-center gap-2">

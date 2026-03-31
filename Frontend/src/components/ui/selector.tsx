@@ -67,7 +67,7 @@ export function Selector({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="start">
+      <PopoverContent className="w-[min(100vw-3rem,25rem)] p-0" align="start">
         <div className="p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />

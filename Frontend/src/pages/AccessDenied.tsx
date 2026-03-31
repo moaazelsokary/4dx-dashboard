@@ -2,9 +2,12 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, ArrowLeft, Home } from "lucide-react";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 const AccessDenied = () => {
   const navigate = useNavigate();
+  const userData = localStorage.getItem("user");
+  const user = userData ? JSON.parse(userData) : null;
 
   const handleSignOut = () => {
     localStorage.removeItem("user");
@@ -16,7 +19,8 @@ const AccessDenied = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+    <AppLayout user={user} onSignOut={handleSignOut}>
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
       <Card className="w-full max-w-md border-destructive/20">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
@@ -55,7 +59,8 @@ const AccessDenied = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

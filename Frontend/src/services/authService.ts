@@ -169,23 +169,8 @@ export const getAuthHeader = (): Record<string, string> => {
     return {};
   }
   
-  // Debug: Log token presence (but not the actual token for security)
-  console.log('[Auth Service] Token found, creating Authorization header', {
-    tokenLength: token.length,
-    tokenPrefix: token.substring(0, 20) + '...',
-    tokenSuffix: '...' + token.substring(token.length - 10),
-  });
-  
-  const authHeader = {
+  return {
     'Authorization': `Bearer ${token}`,
   };
-  
-  console.log('[Auth Service] Authorization header created:', {
-    hasHeader: !!authHeader['Authorization'],
-    headerLength: authHeader['Authorization']?.length,
-    headerPrefix: authHeader['Authorization']?.substring(0, 30) + '...'
-  });
-  
-  return authHeader;
 };
 

@@ -1,15 +1,19 @@
 // SharePoint data caching service
-import { getDepartmentData } from './sharepointService';
+import { getDepartmentData, type LagMetric } from './sharepointService';
+
+export type DepartmentLagMap = Record<string, LagMetric[]>;
+
+type CachedSharePointPayload = DepartmentLagMap & {
+  timestamp: number;
+  isStale: boolean;
+};
 
 const SHAREPOINT_CACHE_KEY = 'sharepoint_data_cache';
 const SHAREPOINT_CACHE_TIMESTAMP_KEY = 'sharepoint_data_timestamp';
-const SHAREPOINT_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+// Infinite cache for 2025 Plan: no expiry, no refresh (use cached data only)
+const SHAREPOINT_CACHE_DURATION = Infinity;
 
-export interface SharePointCachedData {
-  [department: string]: any;
-  timestamp: number;
-  isStale: boolean;
-}
+export type SharePointCachedData = CachedSharePointPayload;
 
 export const sharePointCacheService = {
   // Get cached SharePoint data if it exists and is not stale
@@ -25,7 +29,7 @@ export const sharePointCacheService = {
       const data = JSON.parse(cachedData);
       const cacheTime = parseInt(timestamp);
       const now = Date.now();
-      const isStale = (now - cacheTime) > SHAREPOINT_CACHE_DURATION;
+      const isStale = SHAREPOINT_CACHE_DURATION !== Infinity && (now - cacheTime) > SHAREPOINT_CACHE_DURATION;
       
       return {
         ...data,
@@ -39,7 +43,7 @@ export const sharePointCacheService = {
   },
 
   // Cache SharePoint data with current timestamp
-  cacheData(data: { [department: string]: any }): void {
+  cacheData(data: DepartmentLagMap): void {
     try {
       localStorage.setItem(SHAREPOINT_CACHE_KEY, JSON.stringify(data));
       localStorage.setItem(SHAREPOINT_CACHE_TIMESTAMP_KEY, Date.now().toString());
@@ -60,7 +64,7 @@ export const sharePointCacheService = {
   },
 
   // Force refresh cache (clear and refetch)
-  async forceRefresh(): Promise<{ [department: string]: any }> {
+  async forceRefresh(): Promise<DepartmentLagMap> {
     console.log('🔄 Force refreshing SharePoint cache...');
     this.clearCache();
     return await this.fetchAllDepartmentsData(true);
@@ -86,7 +90,7 @@ export const sharePointCacheService = {
   },
 
   // Fetch SharePoint data for all departments (with caching)
-  async fetchAllDepartmentsData(forceRefresh = false): Promise<{ [department: string]: any }> {
+  async fetchAllDepartmentsData(forceRefresh = false): Promise<DepartmentLagMap> {
     // Check cache first (unless forcing refresh)
     if (!forceRefresh) {
       const cached = this.getCachedData();
@@ -129,7 +133,7 @@ export const sharePointCacheService = {
     );
     
     // Create a map of department to data
-    const departmentDataMap: { [key: string]: any } = {};
+    const departmentDataMap: DepartmentLagMap = {};
     
     // Start with existing cached data if available
     const cached = this.getCachedData();
@@ -177,13 +181,19 @@ export const sharePointCacheService = {
 
 // Make debug functions available globally for troubleshooting
 if (typeof window !== 'undefined') {
-  (window as any).debugSharePointCache = () => sharePointCacheService.debugCache();
-  (window as any).clearSharePointCache = () => sharePointCacheService.clearCache();
-  (window as any).forceRefreshSharePointCache = () => sharePointCacheService.forceRefresh();
-  
+  const w = window as Window & {
+    debugSharePointCache?: () => void;
+    clearSharePointCache?: () => void;
+    forceRefreshSharePointCache?: () => Promise<DepartmentLagMap>;
+    testDepartmentConnection?: (department: string) => Promise<{ success: boolean; message: string; details?: unknown }>;
+  };
+  w.debugSharePointCache = () => sharePointCacheService.debugCache();
+  w.clearSharePointCache = () => sharePointCacheService.clearCache();
+  w.forceRefreshSharePointCache = () => sharePointCacheService.forceRefresh();
+
   // Import test function for department testing
   import('./sharepointService').then(({ testDepartmentConnection }) => {
-    (window as any).testDepartmentConnection = testDepartmentConnection;
+    w.testDepartmentConnection = testDepartmentConnection;
   });
   
   console.log('🔧 SharePoint cache debug functions available:');

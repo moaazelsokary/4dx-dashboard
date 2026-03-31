@@ -6,13 +6,35 @@ import fs from "fs";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  const isProduction = mode === "production";
   // Generate build version (timestamp for each build)
   const buildVersion = Date.now().toString();
   
   return {
+    esbuild: isProduction ? { drop: ["console", "debugger"] } : undefined,
     server: {
       host: "::",
       port: 8080,
+      strictPort: true,
+      hmr: {
+        clientPort: 8080,
+        host: 'localhost',
+        protocol: 'ws',
+      },
+      proxy: {
+        // RASCI summary served by auth-proxy (3000)
+        '/api/wig/rasci/summary-by-department': {
+          target: 'http://127.0.0.1:3000',
+          changeOrigin: true,
+          secure: false,
+        },
+        // Other wig APIs from wig-proxy (3003)
+        '/api/wig': {
+          target: 'http://127.0.0.1:3003',
+          changeOrigin: true,
+          secure: false,
+        },
+      },
     },
     plugins: [
       react(),
@@ -85,6 +107,11 @@ export default defineConfig(({ mode }) => {
           entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash].[ext]',
+          manualChunks(id) {
+            if (id.includes("node_modules/mapbox-gl")) return "mapbox-gl";
+            if (id.includes("node_modules/recharts")) return "recharts";
+            if (id.includes("node_modules/@tanstack/react-query")) return "react-query";
+          },
         },
       },
       // Generate manifest for version tracking

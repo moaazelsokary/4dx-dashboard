@@ -9,6 +9,12 @@ export interface ErrorMessage {
   action?: string;
 }
 
+/** Error thrown from API helpers with HTTP status and friendly copy attached */
+export interface AppError extends Error {
+  status?: number;
+  friendlyError?: ErrorMessage;
+}
+
 /**
  * Get user-friendly error message based on error type
  */
@@ -64,7 +70,9 @@ export function getUserFriendlyError(error: {
       case 500:
         return {
           title: 'Server Error',
-          description: 'The server encountered an error. Please try again in a moment.',
+          description: (error.message && error.message !== 'An unexpected error occurred')
+            ? error.message
+            : 'The server encountered an error. Please try again in a moment.',
           action: 'Retrying...',
         };
       case 502:

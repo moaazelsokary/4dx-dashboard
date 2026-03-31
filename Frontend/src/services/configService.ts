@@ -17,7 +17,7 @@ import type {
 import { getAuthHeader } from './authService';
 import { getCsrfHeader } from '@/utils/csrf';
 import { handleApiError, isAuthError, shouldRetry, getRetryDelay, handleAuthError } from '@/utils/apiErrorHandler';
-import { getUserFriendlyError } from '@/utils/errorMessages';
+import { getUserFriendlyError, type AppError } from '@/utils/errorMessages';
 import { requestQueue } from '@/utils/requestQueue';
 
 const isLocalhost = window.location.hostname === 'localhost';
@@ -102,9 +102,9 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
         // Get user-friendly error message
         const friendlyError = getUserFriendlyError(apiError);
-        const error = new Error(friendlyError.description);
-        (error as any).status = response.status;
-        (error as any).friendlyError = friendlyError;
+        const error = new Error(friendlyError.description) as AppError;
+        error.status = response.status;
+        error.friendlyError = friendlyError;
         throw error;
       }
 
@@ -151,9 +151,9 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
         
         const apiError = await handleApiError(lastError);
         const friendlyError = getUserFriendlyError(apiError);
-        const finalError = new Error(friendlyError.description);
-        (finalError as any).status = apiError.status;
-        (finalError as any).friendlyError = friendlyError;
+        const finalError = new Error(friendlyError.description) as AppError;
+        finalError.status = apiError.status;
+        finalError.friendlyError = friendlyError;
         throw finalError;
       }
 
@@ -161,9 +161,9 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       const apiError = await handleApiError(lastError);
       if (!shouldRetry(apiError, attempt, MAX_RETRIES)) {
         const friendlyError = getUserFriendlyError(apiError);
-        const finalError = new Error(friendlyError.description);
-        (finalError as any).status = apiError.status;
-        (finalError as any).friendlyError = friendlyError;
+        const finalError = new Error(friendlyError.description) as AppError;
+        finalError.status = apiError.status;
+        finalError.friendlyError = friendlyError;
         throw finalError;
       }
 
@@ -316,7 +316,10 @@ export async function getObjectivesByKPIs(kpiIds: string[], userIds?: number[]):
 
 // ========== ACTIVITY LOGS ==========
 
-export async function getLogs(filters?: LogFilters): Promise<{ data: ActivityLog[]; pagination: any }> {
+export async function getLogs(filters?: LogFilters): Promise<{
+  data: ActivityLog[];
+  pagination: Record<string, unknown>;
+}> {
   const params = new URLSearchParams();
   if (filters) {
     if (filters.user_id) params.append('user_id', filters.user_id.toString());

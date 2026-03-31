@@ -72,7 +72,7 @@ const LagMetricsCard = ({ lag, onClick, small = false }: LagMetricsCardProps) =>
 
   return (
     <Card 
-      className={`border-2 border-lag/20 bg-white/30 backdrop-blur-md border-white/30 shadow-lg transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${isAverage ? 'ring-2 ring-primary/60' : ''} ${small ? 'scale-95 text-xs p-1' : ''}`}
+      className={`border-2 border-lag/20 bg-card text-card-foreground border-border shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer ${isAverage ? 'ring-2 ring-primary/60' : ''} ${small ? 'scale-95 text-xs p-1' : ''}`}
       onClick={() => onClick(lag.id)}
     >
       <CardHeader className={`pb-2 ${small ? 'p-2' : 'p-3 sm:p-4'}`}>

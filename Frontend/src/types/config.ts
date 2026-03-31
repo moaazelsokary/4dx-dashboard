@@ -143,11 +143,13 @@ export interface ObjectiveDataSourceMapping {
   department_objective_id: number;
   pms_project_name: string | null;
   pms_metric_name: string | null;
-  /** 'pms_target' = fill monthly target from PMS; null = manual (user edits) */
-  target_source: 'pms_target' | null;
-  /** 'manual' = edit actual manually; 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' = fill from source */
-  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created';
+  /** 'pms_target' | 'derived' = fill monthly target from source; null = manual (user edits) */
+  target_source: 'pms_target' | 'derived' | null;
+  /** 'manual' = edit actual manually; 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived' = fill from source */
+  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived';
   odoo_project_name: string | null;
+  /** Used when target_source or actual_source is 'derived' (project name from derived_metrics) */
+  derived_project_name: string | null;
   created_at?: string;
   updated_at?: string;
   // Denormalized fields for display
@@ -160,11 +162,12 @@ export interface ObjectiveDataSourceMapping {
 export interface MappingFormData {
   pms_project_name: string;
   pms_metric_name: string;
-  /** 'pms_target' = from PMS; 'manual' or null = Manual (edit manually) */
-  target_source: 'pms_target' | 'manual' | null;
-  /** 'manual' = edit actual manually (default); 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' = fill from source */
-  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created';
+  /** 'pms_target' | 'derived' = from source; 'manual' or null = Manual (edit manually) */
+  target_source: 'pms_target' | 'derived' | 'manual' | null;
+  /** 'manual' = edit actual manually (default); 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived' = fill from source */
+  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived';
   odoo_project_name?: string; // Required when actual_source is Odoo-based
+  derived_project_name?: string; // Required when target_source or actual_source is derived
 }
 
 export interface PermissionFormData {

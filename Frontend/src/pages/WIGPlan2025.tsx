@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  LogOut, 
   Calendar,
   Users,
   Building2,
@@ -22,13 +21,12 @@ import LeadMeasuresModal from "@/components/dashboard/LeadMeasuresModal";
 import DepartmentHealth from "@/components/dashboard/DepartmentHealth";
 import CEODashboard from "@/components/dashboard/CEODashboard";
 import { useUserData, useTestConnection } from "@/hooks/useSharePointData";
+import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { toast } from "@/hooks/use-toast";
 import type { LagMetric } from "@/services/sharepointService";
 import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth } from "@/lib/utils";
-import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { hasPowerBIAccess } from "@/config/powerbi";
-import NavigationBar from "@/components/shared/NavigationBar";
-import OptimizedImage from "@/components/ui/OptimizedImage";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 interface User {
   username: string;
@@ -150,15 +148,12 @@ const WIGPlan2025 = () => {
   };
 
   const handleRefreshData = () => {
-    // Clear SharePoint cache
-    sharePointCacheService.clearCache();
+    // 2025 Plan: no refresh - use cached data only (cache never expires)
     
-    // Refetch data using React Query
     refetch();
-    
     toast({
       title: "Data refreshed",
-      description: "Latest data has been loaded.",
+      description: "Using cached data.",
     });
   };
 
@@ -232,8 +227,8 @@ const WIGPlan2025 = () => {
       let totalTarget = 0;
       let totalAchieved = 0;
       let monthCount = 0;
-      let achievedArr: number[] = [];
-      let targetArr: number[] = [];
+      const achievedArr: number[] = [];
+      const targetArr: number[] = [];
 
       // Check if this is a "نسبة" row
       const isPercentage = isPercentageRow(rowData);
@@ -584,84 +579,33 @@ const WIGPlan2025 = () => {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5">
-      {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex flex-col gap-2">
-            {/* Top Row: Logo, Title, Actions */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 flex items-center justify-center p-1">
-                  <OptimizedImage 
-                    src="/lovable-uploads/5e72745e-18ec-46d6-8375-e9912bdb8bdd.png" 
-                    alt="Logo" 
-                    className="w-full h-full object-contain"
-                    sizes="48px"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold text-foreground">
-                    {isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
-                  </h1>
-                  <p className="text-xs text-muted-foreground">Life Makers Foundation - 4DX Methodology</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                {user.role === "CEO" ? (
-                  <Badge variant="secondary" className="bg-accent text-accent-foreground w-fit text-xs">
-                    <Users className="w-3 h-3 mr-1" />
-                    CEO View
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
-                    <Building2 className="w-3 h-3 mr-1" />
-                    {getDepartmentDisplayName(user.departments[0])}
-                  </Badge>
-                )}
-                {isLoading && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Syncing...
-                  </div>
-                )}
-                {error && (
-                  <div className="flex items-center gap-1 text-xs text-destructive">
-                    <AlertCircle className="w-3 h-3" />
-                    Error
-                  </div>
-                )}
-                <Button variant="outline" size="sm" onClick={handleRefreshData} className="h-7 px-2 text-xs">
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSignOut} className="h-7 px-2 text-xs">
-                  <LogOut className="w-3 h-3 mr-1" />
-                  Sign Out
-                </Button>
-              </div>
-            </div>
-
-            {/* Navigation Row */}
-            <NavigationBar user={user} />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-4 space-y-4 pb-20 sm:pb-4">
-        {/* Mobile Buttons - Before Filters */}
-        <div className="flex gap-3 sm:hidden">
-          <Button variant="outline" size="sm" onClick={handleRefreshData} className="flex-1 text-xs">
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Refresh Data
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleSignOut} className="flex-1 text-xs">
-            <LogOut className="w-4 h-4 mr-1" />
-            Sign Out
-          </Button>
-        </div>
-
+    <AppLayout
+      user={user}
+      headerTitle={isCEO ? "CEO Dashboard" : "LAG Measures Dashboard"}
+      headerSubtitle="WIG Plan 2025"
+      onSignOut={handleSignOut}
+      onRefresh={handleRefreshData}
+      badge={
+        user.role === "CEO" ? (
+          <Badge variant="secondary" className="bg-accent text-accent-foreground w-fit text-xs">
+            <Users className="w-3 h-3 mr-1" />
+            CEO View
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-primary text-primary w-fit text-xs">
+            <Building2 className="w-3 h-3 mr-1" />
+            {getDepartmentDisplayName(user.departments[0])}
+          </Badge>
+        )
+      }
+      status={
+        isLoading
+          ? 'loading'
+          : error
+            ? { type: 'error', message: 'Error' }
+            : null
+      }
+    >
         {/* Filters */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
           <CardContent className="p-6">
@@ -699,7 +643,7 @@ const WIGPlan2025 = () => {
 
         {/* Error State */}
         {error && (
-          <Card className="border-destructive">
+          <Card className="border-destructive" role="alert">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="w-4 h-4" />
@@ -738,12 +682,16 @@ const WIGPlan2025 = () => {
           </div>
           
             {displayData.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-x-auto pb-1 -mx-1 px-1"
+                role="region"
+                aria-label="LAG measures grid"
+              >
                     {groupLagsForDisplay(displayData).map((group, idx) => (
                       group.indicators.length > 0 ? (
                         <div
                           key={group.average.id}
-                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center w-full md:col-span-2 lg:col-span-3 xl:col-span-4"
+                          className="border-2 border-primary/30 rounded-xl p-2 bg-card border-border flex flex-col items-center w-full md:col-span-2 lg:col-span-3 xl:col-span-4"
                         >
                           <div className="w-full">
               <LagMetricsCard
@@ -785,24 +733,21 @@ const WIGPlan2025 = () => {
             />
           </div>
         )}
-      </div>
 
       {/* Lead Measures Modal */}
       {!isCEO && (
-      <LeadMeasuresModal
-        isOpen={isLeadModalOpen}
-        onClose={() => setIsLeadModalOpen(false)}
-        lagName={selectedLag?.name || ""}
+        <LeadMeasuresModal
+          isOpen={isLeadModalOpen}
+          onClose={() => setIsLeadModalOpen(false)}
+          lagName={selectedLag?.name || ""}
           leads={(() => {
             if (!selectedLag) return [];
-            
-            // For department view, find the filtered lag in displayData by id
             const filteredLag = displayData.find(l => l.id === selectedLag.id);
             return filteredLag?.leads || [];
           })()}
-      />
+        />
       )}
-    </div>
+    </AppLayout>
   );
 };
 

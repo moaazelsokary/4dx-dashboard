@@ -285,7 +285,7 @@ const CEODashboard = ({ departmentData, onLagClick }: CEODashboardProps) => {
                       group.indicators.length > 0 ? (
                         <div
                           key={group.average.id}
-                          className="border-2 border-primary/30 rounded-xl p-2 bg-white/60 flex flex-col items-center col-span-1 md:col-span-2 xl:col-span-4 w-full"
+                          className="border-2 border-primary/30 rounded-xl p-2 bg-card border-border flex flex-col items-center col-span-1 md:col-span-2 xl:col-span-4 w-full"
                         >
                           <LagMetricsCard
                             lag={{ ...group.average, name: group.average.name.replace(/\s*\(Average\)$/, '') }}

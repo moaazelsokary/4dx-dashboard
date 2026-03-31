@@ -601,6 +601,109 @@ app.get('/api/wig/rasci', async (req, res) => {
   }
 });
 
+// RASCI summary by department - MUST be before /rasci/department/:code to avoid param capture
+app.get('/api/wig/rasci/summary-by-department', async (req, res) => {
+  try {
+    setNoCacheHeaders(res);
+    const pool = await getPool();
+
+    const kpiDelimiter = '||';
+    function normalizeKPI(kpi) {
+      if (!kpi) return '';
+      return (kpi.replace(/^\d+(\.\d+)*\s*/, '').trim() || kpi).trim().toLowerCase();
+    }
+    function matchKPI(rasciKpi, deptKpis) {
+      if (!rasciKpi || !deptKpis || !Array.isArray(deptKpis)) return false;
+      const rNorm = normalizeKPI(rasciKpi);
+      const rOrig = (rasciKpi || '').trim().toLowerCase();
+      for (const d of deptKpis) {
+        if (d == null) continue;
+        const parts = (d + '').includes(kpiDelimiter) ? (d + '').split(kpiDelimiter).map((k) => (k || '').trim()).filter(Boolean) : [d];
+        for (const p of parts) {
+          if (p == null) continue;
+          const dNorm = normalizeKPI(p);
+          const dOrig = (p + '').trim().toLowerCase();
+          if (rNorm === dNorm || rOrig === dNorm || rNorm === dOrig || rOrig === dOrig) return true;
+        }
+      }
+      return false;
+    }
+
+    const [deptResult, rasciResult, deptObjResult] = await Promise.all([
+      pool.request().query('SELECT id, name, code FROM departments ORDER BY name'),
+      pool.request().query(`
+        SELECT DISTINCT kpi, department
+        FROM rasci_metrics
+        WHERE responsible = 1 OR accountable = 1 OR supportive = 1 OR consulted = 1 OR informed = 1
+        ORDER BY department
+      `),
+      pool.request().query(`
+        SELECT do.department_id, do.kpi, d.name as department_name, d.code as department_code
+        FROM department_objectives do
+        INNER JOIN departments d ON do.department_id = d.id
+      `)
+    ]);
+
+    const EXCLUDED = ['Administration', 'Volunteer Management'];
+    const departments = (deptResult?.recordset || []).filter(
+      (d) => !EXCLUDED.includes(String(d?.name || '').trim())
+    );
+    const rasciRows = rasciResult?.recordset || [];
+    const deptObjRows = deptObjResult?.recordset || [];
+
+    const deptObjByDeptId = {};
+    for (const row of deptObjRows || []) {
+      if (row?.department_id == null) continue;
+      if (!deptObjByDeptId[row.department_id]) deptObjByDeptId[row.department_id] = [];
+      if (row.kpi != null) deptObjByDeptId[row.department_id].push(row.kpi);
+    }
+
+    const rasciByDeptId = {};
+    for (const d of departments) {
+      rasciByDeptId[d.id] = { name: d.name, kpis: [] };
+    }
+    function rasciDeptMatchesDb(rasciDept, dbDept) {
+      const r = (rasciDept || '').trim().toLowerCase();
+      const n = (dbDept.name || '').toLowerCase();
+      const c = (dbDept.code || '').toLowerCase();
+      if (r === n || r === c) return true;
+      if (c === 'dfr') {
+        return r === 'direct fundraising / resource mobilization' || r === 'dfr' || r.includes('direct fundraising') || r.includes('resource mobilization');
+      }
+      return false;
+    }
+    for (const row of rasciRows) {
+      const rasciDept = (row.department || '').trim();
+      const dbDept = departments.find((d) => rasciDeptMatchesDb(rasciDept, d));
+      if (!dbDept) continue;
+      const entry = rasciByDeptId[dbDept.id];
+      if (!entry.kpis.includes(row.kpi)) entry.kpis.push(row.kpi);
+    }
+
+    const summary = departments.map((d) => {
+      const { name, kpis } = rasciByDeptId[d.id];
+      const totalKPIs = kpis.length;
+      const deptKpis = deptObjByDeptId[d.id] || [];
+      const exists = kpis.filter((k) => matchKPI(k, deptKpis)).length;
+      const notExists = totalKPIs - exists;
+      const existsPercent = totalKPIs > 0 ? Math.round((exists / totalKPIs) * 100) : 0;
+      return {
+        department: name,
+        department_code: d.code,
+        total_kpis: totalKPIs,
+        exists,
+        not_exists: notExists,
+        exists_percent: existsPercent
+      };
+    });
+
+    res.json(summary);
+  } catch (error) {
+    console.error('[WIG Proxy] rasci/summary-by-department error:', error?.message, error?.stack);
+    handleError(res, error, 'Error getting RASCI summary by department');
+  }
+});
+
 app.get('/api/wig/rasci/kpi/:kpi', async (req, res) => {
   try {
     setNoCacheHeaders(res);
@@ -1009,14 +1112,48 @@ app.get('/api/wig/kpi-breakdown/:kpi', async (req, res) => {
   }
 });
 
+// Combined Dashboard Data (matches Netlify wig-api /department-dashboard-data)
+app.get('/api/wig/department-dashboard-data', async (req, res) => {
+  try {
+    const departmentCode = req.query.department_code || null;
+    const base = `http://127.0.0.1:${PORT}`;
+
+    const [departmentObjectives, mainObjectives, departments, rasci, hierarchicalPlan, rasciSummary] = await Promise.all([
+      fetch(`${base}/api/wig/department-objectives${departmentCode ? `?department_code=${encodeURIComponent(departmentCode)}` : ''}`).then((r) => r.json()),
+      fetch(`${base}/api/wig/main-objectives`).then((r) => r.json()),
+      fetch(`${base}/api/wig/departments`).then((r) => r.json()),
+      departmentCode ? fetch(`${base}/api/wig/rasci/department/${encodeURIComponent(departmentCode)}`).then((r) => r.json()) : Promise.resolve([]),
+      fetch(`${base}/api/wig/main-objectives/hierarchy`).then((r) => r.json()),
+      !departmentCode ? fetch(`${base}/api/wig/rasci/summary-by-department`).then((r) => r.json()).catch((err) => { console.warn('[WIG Proxy] rasci/summary-by-department failed:', err?.message); return []; }) : Promise.resolve([]),
+    ]);
+
+    setNoCacheHeaders(res);
+    res.json({
+      departmentObjectives,
+      mainObjectives,
+      departments,
+      rasci,
+      hierarchicalPlan,
+      rasciSummary: rasciSummary || [],
+    });
+  } catch (error) {
+    handleError(res, error, 'Error getting department dashboard data');
+  }
+});
+
 // Department Routes
+const EXCLUDED_DEPARTMENTS = ['Administration', 'Volunteer Management'];
+
 app.get('/api/wig/departments', async (req, res) => {
   try {
     setNoCacheHeaders(res);
     const pool = await getPool();
     const request = pool.request();
     const result = await request.query('SELECT * FROM departments ORDER BY name');
-    res.json(result.recordset);
+    const filtered = (result.recordset || []).filter(
+      (d) => !EXCLUDED_DEPARTMENTS.includes(String(d?.name || '').trim())
+    );
+    res.json(filtered);
   } catch (error) {
     handleError(res, error, 'Error getting departments');
   }
@@ -1176,6 +1313,12 @@ app.post('/api/wig/monthly-data', async (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'wig-proxy' });
+});
+
+// 404 handler - log unmatched paths for debugging
+app.use((req, res) => {
+  console.warn('[WIG Proxy] 404 - No route for:', req.method, req.path || req.url);
+  res.status(404).json({ error: 'Not found', path: req.path || req.url });
 });
 
 app.listen(PORT, () => {

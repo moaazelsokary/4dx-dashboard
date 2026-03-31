@@ -388,6 +388,8 @@ const handler = rateLimiter('general')(
     } else if (path.startsWith('/rasci/department/') && method === 'GET') {
       const departmentCode = decodeURIComponent(path.split('/department/')[1]);
       result = await getRASCIByDepartment(pool, departmentCode);
+    } else if (path === '/rasci/summary-by-department' && method === 'GET') {
+      result = await getRASCISummaryByDepartment(pool);
     } else if (path === '/rasci' && method === 'POST') {
       result = await createOrUpdateRASCI(pool, body);
     } else if (path.startsWith('/rasci/') && method === 'DELETE') {
@@ -1961,22 +1963,115 @@ async function getKPIBreakdown(pool, kpi) {
   };
 }
 
+// Departments without objectives (excluded from filter and RASCI summary)
+const EXCLUDED_DEPARTMENTS = ['Administration', 'Volunteer Management'];
+
 // Department Functions
 async function getDepartments(pool) {
   const request = pool.request();
   const result = await request.query('SELECT * FROM departments ORDER BY name');
-  return result.recordset;
+  return (result.recordset || []).filter(
+    (d) => !EXCLUDED_DEPARTMENTS.includes(String(d?.name || '').trim())
+  );
+}
+
+// RASCI summary by department (for All Departments view)
+async function getRASCISummaryByDepartment(pool) {
+  const kpiDelimiter = '||';
+  function normalizeKPI(kpi) {
+    if (!kpi) return '';
+    return (kpi.replace(/^\d+(\.\d+)*\s*/, '').trim() || kpi).trim().toLowerCase();
+  }
+  function matchKPI(rasciKpi, deptKpis) {
+    const rNorm = normalizeKPI(rasciKpi);
+    const rOrig = (rasciKpi || '').trim().toLowerCase();
+    for (const d of deptKpis) {
+      const parts = (d || '').includes(kpiDelimiter) ? (d || '').split(kpiDelimiter).map((k) => k.trim()).filter(Boolean) : [d || ''];
+      for (const p of parts) {
+        const dNorm = normalizeKPI(p);
+        const dOrig = (p || '').trim().toLowerCase();
+        if (rNorm === dNorm || rOrig === dNorm || rNorm === dOrig || rOrig === dOrig) return true;
+      }
+    }
+    return false;
+  }
+
+  const [deptResult, rasciResult, deptObjResult] = await Promise.all([
+    pool.request().query('SELECT id, name, code FROM departments ORDER BY name'),
+    pool.request().query(`
+      SELECT DISTINCT kpi, department
+      FROM rasci_metrics
+      WHERE responsible = 1 OR accountable = 1 OR supportive = 1 OR consulted = 1 OR informed = 1
+      ORDER BY department
+    `),
+    pool.request().query(`
+      SELECT do.department_id, do.kpi, d.name as department_name, d.code as department_code
+      FROM department_objectives do
+      INNER JOIN departments d ON do.department_id = d.id
+    `)
+  ]);
+
+  const departments = (deptResult.recordset || []).filter(
+    (d) => !EXCLUDED_DEPARTMENTS.includes(String(d?.name || '').trim())
+  );
+  const rasciRows = rasciResult.recordset;
+  const deptObjRows = deptObjResult.recordset;
+
+  const deptObjByDeptId = {};
+  for (const row of deptObjRows) {
+    if (!deptObjByDeptId[row.department_id]) deptObjByDeptId[row.department_id] = [];
+    deptObjByDeptId[row.department_id].push(row.kpi);
+  }
+
+  const rasciByDeptId = {};
+  for (const d of departments) {
+    rasciByDeptId[d.id] = { name: d.name, kpis: [] };
+  }
+  function rasciDeptMatchesDb(rasciDept, dbDept) {
+    const r = (rasciDept || '').trim().toLowerCase();
+    const n = (dbDept.name || '').toLowerCase();
+    const c = (dbDept.code || '').toLowerCase();
+    if (r === n || r === c) return true;
+    if (c === 'dfr') {
+      return r === 'direct fundraising / resource mobilization' || r === 'dfr' || r.includes('direct fundraising') || r.includes('resource mobilization');
+    }
+    return false;
+  }
+  for (const row of rasciRows) {
+    const rasciDept = (row.department || '').trim();
+    const dbDept = departments.find((d) => rasciDeptMatchesDb(rasciDept, d));
+    if (!dbDept) continue;
+    const entry = rasciByDeptId[dbDept.id];
+    if (!entry.kpis.includes(row.kpi)) entry.kpis.push(row.kpi);
+  }
+
+  return departments.map((d) => {
+    const { name, kpis } = rasciByDeptId[d.id];
+    const totalKPIs = kpis.length;
+    const deptKpis = deptObjByDeptId[d.id] || [];
+    const exists = kpis.filter((k) => matchKPI(k, deptKpis)).length;
+    const notExists = totalKPIs - exists;
+    const existsPercent = totalKPIs > 0 ? Math.round((exists / totalKPIs) * 100) : 0;
+    return {
+      department: name,
+      department_code: d.code,
+      total_kpis: totalKPIs,
+      exists,
+      not_exists: notExists,
+      exists_percent: existsPercent
+    };
+  });
 }
 
 // Combined Dashboard Data Function
 async function getDepartmentDashboardData(pool, departmentCode) {
-  // Call all 5 functions in parallel
-  const [departmentObjectives, mainObjectives, departments, rasci, hierarchicalPlan] = await Promise.all([
+  const [departmentObjectives, mainObjectives, departments, rasci, hierarchicalPlan, rasciSummary] = await Promise.all([
     getDepartmentObjectives(pool, { department_code: departmentCode }),
     getMainObjectives(pool, {}),
     getDepartments(pool),
     departmentCode ? getRASCIByDepartment(pool, departmentCode) : Promise.resolve([]),
     getHierarchicalPlan(pool),
+    !departmentCode ? getRASCISummaryByDepartment(pool) : Promise.resolve([]),
   ]);
 
   return {
@@ -1985,6 +2080,7 @@ async function getDepartmentDashboardData(pool, departmentCode) {
     departments,
     rasci,
     hierarchicalPlan,
+    rasciSummary: rasciSummary || [],
   };
 }
 

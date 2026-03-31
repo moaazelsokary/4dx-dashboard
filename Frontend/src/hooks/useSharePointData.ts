@@ -47,7 +47,7 @@ export const useDepartmentData = (
       return data;
     },
     enabled: !!department && department !== 'CEO',
-    staleTime: 5 * 60 * 1000, // 5 minutes - match cache duration
+    staleTime: Infinity, // 2025 Plan: use cached data only, never refetch
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
@@ -142,7 +142,7 @@ export const useAllDepartmentsData = () => {
       
       return departmentDataMap;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes - match cache duration
+    staleTime: Infinity, // 2025 Plan: use cached data only, never refetch
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });

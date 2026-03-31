@@ -1,5 +1,5 @@
 // React hook for checking lock status
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { LockCheckResponse } from '@/types/config';
 import { checkLockStatus, checkLockStatusBatch } from '@/services/configService';
@@ -74,13 +74,16 @@ export function useBatchLockStatus(
   });
 
   // Create a map for easy lookup
-  const lockMap = new Map<string, LockCheckResponse>();
-  if (data?.results) {
-    data.results.forEach((result) => {
-      const key = `${result.field_type}-${result.department_objective_id}${result.month ? `-${result.month}` : ''}`;
-      lockMap.set(key, result);
-    });
-  }
+  const lockMap = useMemo(() => {
+    const map = new Map<string, LockCheckResponse>();
+    if (data?.results) {
+      data.results.forEach((result) => {
+        const key = `${result.field_type}-${result.department_objective_id}${result.month ? `-${result.month}` : ''}`;
+        map.set(key, result);
+      });
+    }
+    return map;
+  }, [data?.results]);
 
   // Helper function to get lock status for a specific field
   const getLockStatus = useCallback(

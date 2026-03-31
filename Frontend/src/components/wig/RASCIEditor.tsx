@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,7 +37,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
         setKpis(kpiList);
         setDepartments(deptList);
         
-        if (kpiList.length > 0 && !selectedKPI) {
+        if (kpiList.length > 0 && !initialKPI?.trim()) {
           setSelectedKPI(kpiList[0]);
         }
       } catch (err) {
@@ -52,16 +52,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
     };
 
     fetchData();
-  }, []);
-
-  useEffect(() => {
-    if (selectedKPI) {
-      loadRASCIForKPI(selectedKPI);
-      if (onKPIChange) {
-        onKPIChange(selectedKPI);
-      }
-    }
-  }, [selectedKPI]);
+  }, [initialKPI]);
 
   // Helper function to normalize department names for matching
   // Always use "Direct Fundraising / Resource Mobilization" for DFR
@@ -101,7 +92,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
     return false;
   };
 
-  const loadRASCIForKPI = async (kpi: string) => {
+  const loadRASCIForKPI = useCallback(async (kpi: string) => {
     try {
       setLoading(true);
       const data = await getRASCIByKPI(kpi);
@@ -139,9 +130,9 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
       });
       
       setRasciData(rasciMap);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading RASCI data for KPI:', kpi, err);
-      const errorMessage = err?.message || err?.toString() || 'Unknown error';
+      const errorMessage = err instanceof Error ? err.message : String(err);
       toast({
         title: 'Error',
         description: `Failed to load RASCI data: ${errorMessage}`,
@@ -150,7 +141,13 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
     } finally {
       setLoading(false);
     }
-  };
+  }, [departments]);
+
+  useEffect(() => {
+    if (!selectedKPI) return;
+    void loadRASCIForKPI(selectedKPI);
+    onKPIChange?.(selectedKPI);
+  }, [selectedKPI, loadRASCIForKPI, onKPIChange]);
 
   const updateRASCI = (departmentName: string, field: keyof Omit<RASCI, 'id' | 'kpi' | 'department' | 'created_at' | 'updated_at'>, value: boolean) => {
     const updated = new Map(rasciData);
@@ -181,7 +178,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
 
     try {
       setSaving(true);
-      const promises: Promise<any>[] = [];
+      const promises: Array<Promise<RASCI | { success: boolean; deletedRows: number }>> = [];
       
       rasciData.forEach((rasci) => {
         const hasAnyRole = rasci.responsible || rasci.accountable || rasci.supportive || rasci.consulted || rasci.informed;
@@ -222,7 +219,7 @@ export default function RASCIEditor({ kpi: initialKPI, onKPIChange, readOnly = f
       console.log('RASCI save results:', results);
       
       // Process results
-      const successful: any[] = [];
+      const successful: unknown[] = [];
       const failed: Array<{ department: string; error: Error }> = [];
       
       let index = 0;

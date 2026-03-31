@@ -12,13 +12,13 @@ import type {
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
 import { handleApiError, isAuthError, shouldRetry, getRetryDelay, handleAuthError } from '@/utils/apiErrorHandler';
-import { getUserFriendlyError } from '@/utils/errorMessages';
+import { getUserFriendlyError, type AppError } from '@/utils/errorMessages';
 import { requestQueue } from '@/utils/requestQueue';
 
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
 const API_BASE_URL = isLocalhost
-  ? 'http://localhost:3003/api/wig'
+  ? '/api/wig'  // Proxied to wig-proxy (3003) by Vite in dev
   : '/.netlify/functions/wig-api';
 
 const REQUEST_TIMEOUT = 30000; // 30 seconds
@@ -113,9 +113,9 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
         // Get user-friendly error message
         const friendlyError = getUserFriendlyError(apiError);
-        const error = new Error(friendlyError.description);
-        (error as any).status = response.status;
-        (error as any).friendlyError = friendlyError;
+        const error = new Error(friendlyError.description) as AppError;
+        error.status = response.status;
+        error.friendlyError = friendlyError;
         throw error;
       }
 
@@ -163,9 +163,9 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
         
         const apiError = await handleApiError(lastError);
         const friendlyError = getUserFriendlyError(apiError);
-        const finalError = new Error(friendlyError.description);
-        (finalError as any).status = apiError.status;
-        (finalError as any).friendlyError = friendlyError;
+        const finalError = new Error(friendlyError.description) as AppError;
+        finalError.status = apiError.status;
+        finalError.friendlyError = friendlyError;
         throw finalError;
       }
 
@@ -173,9 +173,9 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       const apiError = await handleApiError(lastError);
       if (!shouldRetry(apiError, attempt, MAX_RETRIES)) {
         const friendlyError = getUserFriendlyError(apiError);
-        const finalError = new Error(friendlyError.description);
-        (finalError as any).status = apiError.status;
-        (finalError as any).friendlyError = friendlyError;
+        const finalError = new Error(friendlyError.description) as AppError;
+        finalError.status = apiError.status;
+        finalError.friendlyError = friendlyError;
         throw finalError;
       }
 
@@ -300,6 +300,16 @@ export async function getDepartments(): Promise<Department[]> {
   return fetchAPI<Department[]>('/departments');
 }
 
+// RASCI summary per department (when All Departments is selected)
+export interface RASCISummaryByDepartment {
+  department: string;
+  department_code?: string;
+  total_kpis: number;
+  exists: number;
+  not_exists: number;
+  exists_percent: number;
+}
+
 // Combined Dashboard Data
 export interface DepartmentDashboardData {
   departmentObjectives: DepartmentObjective[];
@@ -307,6 +317,8 @@ export interface DepartmentDashboardData {
   departments: Department[];
   rasci: RASCIWithExistence[];
   hierarchicalPlan: HierarchicalPlan;
+  /** Per-department RASCI summary when All Departments is selected */
+  rasciSummary?: RASCISummaryByDepartment[];
 }
 
 export async function getDepartmentDashboardData(departmentCode?: string): Promise<DepartmentDashboardData> {
@@ -315,6 +327,10 @@ export async function getDepartmentDashboardData(departmentCode?: string): Promi
   
   const query = queryParams.toString();
   return fetchAPI<DepartmentDashboardData>(`/department-dashboard-data${query ? `?${query}` : ''}`);
+}
+
+export async function getRASCISummaryByDepartment(): Promise<RASCISummaryByDepartment[]> {
+  return fetchAPI<RASCISummaryByDepartment[]>('/rasci/summary-by-department');
 }
 
 // Plan Checkers

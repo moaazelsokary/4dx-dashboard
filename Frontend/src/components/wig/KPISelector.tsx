@@ -132,7 +132,7 @@ export default function KPISelector({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] max-w-[min(400px,90vw)] max-h-[min(420px,85vh)] p-0 flex flex-col overflow-hidden" align="start">
+      <PopoverContent className="w-[min(100vw-3rem,22rem)] md:!w-[600px] md:!max-w-[600px] max-h-[min(420px,85vh)] p-0 flex flex-col overflow-hidden" align="start">
         <div className="p-3 space-y-2 flex-shrink-0 border-b">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />

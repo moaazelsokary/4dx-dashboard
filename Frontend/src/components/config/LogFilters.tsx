@@ -49,7 +49,7 @@ export default function LogFilters({ filters, onFiltersChange }: LogFiltersProps
     setLocalFilters(filters);
   }, [filters]);
 
-  const handleFilterChange = (key: keyof LogFiltersType, value: any) => {
+  const handleFilterChange = <K extends keyof LogFiltersType>(key: K, value: LogFiltersType[K]) => {
     const newFilters = { ...localFilters, [key]: value, page: 1 }; // Reset to page 1 on filter change
     setLocalFilters(newFilters);
     onFiltersChange(newFilters);

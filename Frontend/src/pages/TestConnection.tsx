@@ -3,11 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { testSharePointConnection, getDepartmentData } from "@/services/sharepointService";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 const TestConnection = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string>("");
   const navigate = useNavigate();
+  const userData = localStorage.getItem("user");
+  const user = userData ? JSON.parse(userData) : null;
 
   // Authentication check
   useEffect(() => {
@@ -63,7 +66,8 @@ const TestConnection = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <AppLayout user={user} onSignOut={() => { localStorage.removeItem("user"); navigate("/"); }} headerTitle="Test Connection">
+      <div className="flex justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>SharePoint Connection Test</CardTitle>
@@ -103,7 +107,8 @@ const TestConnection = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

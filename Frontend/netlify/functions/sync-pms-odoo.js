@@ -203,7 +203,7 @@ async function fetchOdooData() {
         LEFT JOIN implementation_teams 
             ON implementation_teams.id = case_implementation_implementation_teams_rel.implementation_teams_id
         WHERE (case_implementation.create_date IS NOT NULL AND TO_CHAR(case_implementation.create_date, 'YYYY-MM') >= '2026-01')
-        AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project')
+        AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project','Palestinians','Ramadan 2026','Dar W Salama Project Team')
         GROUP BY implementation_teams.name, TO_CHAR(case_implementation.create_date, 'YYYY-MM')
 
         UNION ALL
@@ -219,7 +219,7 @@ async function fetchOdooData() {
         LEFT JOIN implementation_teams 
             ON implementation_teams.id = case_implementation_implementation_teams_rel.implementation_teams_id
         WHERE (case_implementation.actual_date IS NOT NULL AND TO_CHAR(case_implementation.actual_date, 'YYYY-MM') >= '2026-01')
-        AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project')
+        AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project','Palestinians','Ramadan 2026','Dar W Salama Project Team')
         GROUP BY implementation_teams.name, TO_CHAR(case_implementation.actual_date, 'YYYY-MM')
     ) AS combined
     GROUP BY Project, Month
@@ -312,19 +312,18 @@ async function writeToCache(pmsData, odooData) {
     if (odooData && odooData.length > 0) {
       let odooAdded = 0;
       for (const row of odooData) {
-        // Support both object ({ Project, Month, ServicesCreated, ServicesDone })
-        // and array format ([Project, Month, ServicesCreated, ServicesDone])
+        // Support object ({ Project/project, Month/month, ... }), array format, and lowercase (PostgreSQL)
         const projectRaw = (row && typeof row === 'object' && !Array.isArray(row))
-          ? row.Project
+          ? (row.Project ?? row.project)
           : (Array.isArray(row) ? row[0] : null);
         const monthRaw = (row && typeof row === 'object' && !Array.isArray(row))
-          ? row.Month
+          ? (row.Month ?? row.month)
           : (Array.isArray(row) ? row[1] : null);
         const servicesCreatedRaw = (row && typeof row === 'object' && !Array.isArray(row))
-          ? row.ServicesCreated
+          ? (row.ServicesCreated ?? row.servicescreated)
           : (Array.isArray(row) ? row[2] : null);
         const servicesDoneRaw = (row && typeof row === 'object' && !Array.isArray(row))
-          ? row.ServicesDone
+          ? (row.ServicesDone ?? row.servicesdone)
           : (Array.isArray(row) ? row[3] : null);
 
         const project = projectRaw != null && String(projectRaw).trim() !== '' ? String(projectRaw).trim() : null;

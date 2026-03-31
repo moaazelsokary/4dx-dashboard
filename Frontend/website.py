@@ -30,7 +30,7 @@ FROM
     LEFT JOIN implementation_teams 
         ON implementation_teams.id = case_implementation_implementation_teams_rel.implementation_teams_id
     WHERE (case_implementation.create_date IS NOT NULL AND TO_CHAR(case_implementation.create_date, 'YYYY-MM') >= '2026-01')
-	AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project')
+	AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project','Palestinians','Ramadan 2026','Dar W Salama Project Team')
     GROUP BY implementation_teams.name, TO_CHAR(case_implementation.create_date, 'YYYY-MM')
 
     UNION ALL
@@ -46,7 +46,7 @@ FROM
     LEFT JOIN implementation_teams 
         ON implementation_teams.id = case_implementation_implementation_teams_rel.implementation_teams_id
     WHERE (case_implementation.actual_date IS NOT NULL AND TO_CHAR(case_implementation.actual_date, 'YYYY-MM') >= '2026-01')
-	AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project')
+	AND implementation_teams.name IN ('Basic Need','Emergency Team','Humanitarian Assistance Team', 'Dafa 2025', 'Sawa','NRC','Steps Forward','Qift Project','Palestinians','Ramadan 2026','Dar W Salama Project Team')
     GROUP BY implementation_teams.name, TO_CHAR(case_implementation.actual_date, 'YYYY-MM')
 ) AS combined
 GROUP BY Project, Month

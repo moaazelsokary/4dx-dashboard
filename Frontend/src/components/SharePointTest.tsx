@@ -5,9 +5,20 @@ import { Badge } from '@/components/ui/badge';
 import { RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 import { getDepartmentData, getDepartmentFiles } from '@/services/sharepointService';
 
+type LagMeasureSample = {
+  name?: string;
+  value?: number;
+  target?: number;
+  leads?: unknown[];
+};
+
 const SharePointTest = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string; data?: any } | null>(null);
+  const [result, setResult] = useState<{
+    success: boolean;
+    message: string;
+    data?: LagMeasureSample[];
+  } | null>(null);
 
   const testConnection = async () => {
     setIsLoading(true);
@@ -96,7 +107,7 @@ const SharePointTest = () => {
               <div className="mt-4">
                 <h4 className="font-medium text-green-800 mb-2">Sample Data:</h4>
                 <div className="space-y-2">
-                  {result.data.slice(0, 3).map((lag: any, index: number) => (
+                  {result.data.slice(0, 3).map((lag, index: number) => (
                     <div key={index} className="p-2 bg-white rounded border">
                       <div className="font-medium text-sm">{lag.name}</div>
                       <div className="text-xs text-gray-600">
