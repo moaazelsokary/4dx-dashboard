@@ -45,7 +45,6 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
 import { dataCacheService } from '@/services/dataCacheService';
-import { hasPowerBIAccess } from '@/config/powerbi';
 import type { User } from '@/services/authService';
 
 type ExcelRow = unknown[];

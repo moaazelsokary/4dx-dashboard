@@ -8,7 +8,6 @@ import { toast } from '@/hooks/use-toast';
 import HierarchicalPlanView from '@/components/wig/HierarchicalPlanView';
 import MainPlanTable from '@/components/wig/MainPlanTable';
 import RASCIEditor from '@/components/wig/RASCIEditor';
-import WBSMindMapView from '@/components/wig/WBSMindMapView';
 import type { HierarchicalPlan, MainPlanObjective } from '@/types/wig';
 import { LogOut, RefreshCw, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,7 +23,7 @@ export default function MainPlanObjectives() {
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') || '';
   const activeTab = useMemo(() => {
-    if (['view', 'wbs', 'rasci', 'table'].includes(tabParam)) return tabParam;
+    if (['view', 'rasci', 'table'].includes(tabParam)) return tabParam;
     return 'view';
   }, [tabParam]);
   const navigate = useNavigate();
@@ -161,20 +160,6 @@ export default function MainPlanObjectives() {
           <TabsContent value="view" className="mt-0">
             {hierarchicalData && hierarchicalData.pillars.length > 0 ? (
               <HierarchicalPlanView data={hierarchicalData} />
-            ) : (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center text-muted-foreground py-8">
-                    No plan data available. Add objectives in Table View.
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="wbs" className="mt-0">
-            {hierarchicalData && hierarchicalData.pillars.length > 0 ? (
-              <WBSMindMapView data={hierarchicalData} />
             ) : (
               <Card>
                 <CardContent className="pt-6">

@@ -53,8 +53,8 @@ export function AppLayout({
           'w-12 hover:w-56 overflow-hidden'
         )}
       >
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <SidebarNav user={user} title={headerTitle} subtitle={headerSubtitle} className="flex-1" />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <SidebarNav user={user} title={headerTitle} subtitle={headerSubtitle} className="min-h-0 flex-1" />
         </div>
       </aside>
 
@@ -78,8 +78,17 @@ export function AppLayout({
                       <Menu className="h-5 w-5" />
                     </Button>
                   </SheetTrigger>
-                  <SheetContent side="left" className="w-56 p-0 pt-12">
-                    <SidebarNav user={user} expanded title={headerTitle} subtitle={headerSubtitle} className="w-full py-4 px-3" />
+                  <SheetContent
+                    side="left"
+                    className="flex h-full max-h-full w-56 min-h-0 flex-col overflow-hidden p-0 pt-12"
+                  >
+                    <SidebarNav
+                      user={user}
+                      expanded
+                      title={headerTitle}
+                      subtitle={headerSubtitle}
+                      className="min-h-0 flex-1 px-3 py-4"
+                    />
                   </SheetContent>
                 </Sheet>
                 {/* Mobile: show title in header when sidebar closed */}

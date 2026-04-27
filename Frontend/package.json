@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run proxies\" \"vite\"",
+    "vite:only": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

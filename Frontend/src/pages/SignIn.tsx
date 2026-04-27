@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { dataCacheService } from "@/services/dataCacheService";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { signIn } from "@/services/authService";
+import { canAccessAppPath } from "@/utils/routeAccess";
 import OptimizedImage from "@/components/ui/OptimizedImage";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
@@ -44,12 +45,15 @@ const SignIn = () => {
           console.error('❌ Data pre-loading failed:', error);
         });
 
-        // Redirect based on role
-        if (result.user.role === "project") {
+        // Redirect: optional per-user default route, else role defaults
+        const u = result.user;
+        if (u.defaultRoute && String(u.defaultRoute).trim() && canAccessAppPath(String(u.defaultRoute).trim(), u)) {
+          navigate(String(u.defaultRoute).trim());
+        } else if (u.role === "project") {
           navigate("/summary");
-        } else if (result.user.role === "CEO") {
+        } else if (u.role === "CEO") {
           navigate("/main-plan");
-        } else if (result.user.role === "department") {
+        } else if (u.role === "department") {
           navigate("/department-objectives");
         } else {
           navigate("/dashboard");

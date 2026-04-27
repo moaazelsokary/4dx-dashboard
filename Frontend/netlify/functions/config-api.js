@@ -1,6 +1,8 @@
 // Configuration API - Lock management, activity logs, and user permissions
 const sql = require('mssql');
 const rateLimiter = require('./utils/rate-limiter');
+const { handleAccountsCrud } = require('./utils/user-accounts-crud.cjs');
+const { handlePowerbiDashboardsCrud } = require('./utils/powerbi-dashboards-crud.cjs');
 const authMiddleware = require('./utils/auth-middleware');
 const logger = require('./utils/logger');
 
@@ -989,8 +991,11 @@ const handler = rateLimiter('general')(
       
       // GET /mappings/:id is allowed for any authenticated user (so Monthly Data Editor can show source badges)
       const isGetSingleMapping = resource === 'mappings' && method === 'GET' && id;
+      // GET /powerbi-dashboards — catalog for Power BI page & user form (any signed-in user)
+      const isPowerbiCatalogListGet =
+        resource === 'powerbi-dashboards' && method === 'GET' && pathParts.length === 1;
       // All other endpoints require Admin or CEO role
-      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping) {
+      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping && !isPowerbiCatalogListGet) {
         const isAdmin = user.role === 'Admin' || user.role === 'CEO';
         if (!isAdmin) {
           logger.warn(`[Config API] Access denied:`, {
@@ -2413,6 +2418,68 @@ const handler = rateLimiter('general')(
             body: JSON.stringify({ success: true, data: stats })
           };
         }
+      }
+
+      // ========== POWER BI DASHBOARD CATALOG (dbo.powerbi_dashboards) ==========
+      if (resource === 'powerbi-dashboards') {
+        let body = {};
+        if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+          try {
+            body = JSON.parse(event.body || '{}');
+          } catch (e) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Invalid JSON body' }),
+            };
+          }
+        }
+        const slug = pathParts.length > 1 ? pathParts[1] : null;
+        const isAdmin = user.role === 'Admin' || user.role === 'CEO';
+        const result = await handlePowerbiDashboardsCrud({
+          pool,
+          method,
+          slug,
+          body,
+          user,
+          isAdmin,
+        });
+        return {
+          statusCode: result.statusCode,
+          headers,
+          body: JSON.stringify(result.json),
+        };
+      }
+
+      // ========== ACCOUNTS (admin user CRUD) ==========
+      if (resource === 'accounts') {
+        const accountId =
+          pathParts[1] && !isNaN(parseInt(pathParts[1], 10)) ? parseInt(pathParts[1], 10) : null;
+        let body = {};
+        if (method === 'POST' || method === 'PUT') {
+          try {
+            body = JSON.parse(event.body || '{}');
+          } catch (e) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Invalid JSON body' }),
+            };
+          }
+        }
+        const result = await handleAccountsCrud({
+          pool,
+          method,
+          accountId,
+          body,
+          user,
+          logActivity,
+        });
+        return {
+          statusCode: result.statusCode,
+          headers,
+          body: JSON.stringify(result.json),
+        };
       }
 
       // ========== USERS ENDPOINT (for dropdowns) ==========

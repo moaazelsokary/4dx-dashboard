@@ -257,7 +257,10 @@ const handler = rateLimiter('login')(async (event, context) => {
           password_hash,
           role,
           departments,
-          is_active
+          is_active,
+          default_route,
+          allowed_routes,
+          powerbi_dashboard_ids
         FROM users
         WHERE username = @username
       `);
@@ -345,6 +348,27 @@ const handler = rateLimiter('login')(async (event, context) => {
       departments = user.departments ? user.departments.split(',').map(d => d.trim()) : [];
     }
 
+    const parseJsonArrayColumn = (val) => {
+      if (val == null || val === '') return null;
+      try {
+        let raw = val;
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(raw)) {
+          raw = raw.toString('utf8');
+        }
+        const x = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(x) ? x : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const defaultRoute =
+      user.default_route && String(user.default_route).trim()
+        ? String(user.default_route).trim()
+        : null;
+    const allowedRoutes = parseJsonArrayColumn(user.allowed_routes);
+    const powerbiDashboardIds = parseJsonArrayColumn(user.powerbi_dashboard_ids);
+
     // Generate JWT token
     let token;
     try {
@@ -354,6 +378,9 @@ const handler = rateLimiter('login')(async (event, context) => {
           username: user.username,
           role: user.role,
           departments: departments,
+          defaultRoute: defaultRoute || undefined,
+          allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
+          powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
         },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRY }
@@ -371,6 +398,9 @@ const handler = rateLimiter('login')(async (event, context) => {
       username: user.username,
       role: user.role,
       departments: departments,
+      defaultRoute: defaultRoute || null,
+      allowedRoutes,
+      powerbiDashboardIds,
     };
 
     logger.info('User signed in successfully', { username: user.username, role: user.role });

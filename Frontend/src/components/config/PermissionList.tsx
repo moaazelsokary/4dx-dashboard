@@ -88,10 +88,10 @@ export default function PermissionList() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>User Permissions</CardTitle>
+            <CardTitle>Objectives permissions</CardTitle>
             <Button onClick={handleAdd} size="sm">
               <Plus className="w-4 h-4 mr-2" />
-              Add Permission
+              Add objectives permission
             </Button>
           </div>
         </CardHeader>

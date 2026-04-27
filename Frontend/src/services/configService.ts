@@ -13,6 +13,11 @@ import type {
   PermissionFormData,
   ObjectiveDataSourceMapping,
   MappingFormData,
+  AccountUser,
+  AccountPayload,
+  PowerbiDashboardRecord,
+  PowerbiDashboardPayload,
+  PowerbiDashboardUpdatePayload,
 } from '@/types/config';
 import { getAuthHeader } from './authService';
 import { getCsrfHeader } from '@/utils/csrf';
@@ -20,10 +25,8 @@ import { handleApiError, isAuthError, shouldRetry, getRetryDelay, handleAuthErro
 import { getUserFriendlyError, type AppError } from '@/utils/errorMessages';
 import { requestQueue } from '@/utils/requestQueue';
 
-const isLocalhost = window.location.hostname === 'localhost';
-const API_BASE_URL = isLocalhost
-  ? 'http://localhost:3000/.netlify/functions/config-api'
-  : '/.netlify/functions/config-api';
+/** Same-origin in dev (Vite proxies to auth-proxy :3000) and on Netlify — avoids cross-port delays/CORS. */
+const API_BASE_URL = '/.netlify/functions/config-api';
 
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 3;
@@ -471,6 +474,58 @@ export interface User {
 
 export async function getUsers(): Promise<User[]> {
   return fetchAPI<User[]>('/users');
+}
+
+// ========== ACCOUNTS (admin) ==========
+
+export async function getAccounts(): Promise<AccountUser[]> {
+  return fetchAPI<AccountUser[]>('/accounts');
+}
+
+export async function createAccount(payload: AccountPayload & { username: string; password: string; role: string }): Promise<AccountUser> {
+  return fetchAPI<AccountUser>('/accounts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAccount(id: number, payload: AccountPayload): Promise<AccountUser> {
+  return fetchAPI<AccountUser>(`/accounts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** React Query key for Power BI catalog (shared across pages). */
+export const POWERBI_DASHBOARDS_QUERY_KEY = ['powerbi-dashboards'] as const;
+
+export async function getPowerbiDashboards(): Promise<PowerbiDashboardRecord[]> {
+  return fetchAPI<PowerbiDashboardRecord[]>('/powerbi-dashboards');
+}
+
+export async function createPowerbiDashboard(payload: PowerbiDashboardPayload): Promise<PowerbiDashboardRecord> {
+  return fetchAPI<PowerbiDashboardRecord>('/powerbi-dashboards', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePowerbiDashboard(
+  id: string,
+  payload: PowerbiDashboardUpdatePayload
+): Promise<PowerbiDashboardRecord> {
+  const slug = encodeURIComponent(id.trim().toLowerCase());
+  return fetchAPI<PowerbiDashboardRecord>(`/powerbi-dashboards/${slug}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePowerbiDashboard(id: string): Promise<{ id: string }> {
+  const slug = encodeURIComponent(id.trim().toLowerCase());
+  return fetchAPI<{ id: string }>(`/powerbi-dashboards/${slug}`, {
+    method: 'DELETE',
+  });
 }
 
 // ========== OBJECTIVE DATA SOURCE MAPPINGS ==========
