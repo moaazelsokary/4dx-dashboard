@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Home, Users, BarChart3, History, ArrowUpRight, Settings } from 'lucide-react';
 import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
 import { OdooIcon } from '@/components/icons/OdooIcon';
-import { hasPowerBIAccess } from '@/config/powerbi';
+import { hasPowerBINavigationAccess } from '@/config/powerbi';
 
 interface NavigationBarProps {
   user: {
@@ -29,7 +29,7 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
   const isAdmin = user.role === 'Admin';
   const isDepartment = user.role === 'department';
   const isOperations = isDepartment && user.departments?.includes('operations');
-  const hasPowerBI = hasPowerBIAccess(user.role, user.departments || []);
+  const hasPowerBI = hasPowerBINavigationAccess(user);
   const canAccessAdmin = isCEO || isAdmin;
 
   // Determine which pages user can access

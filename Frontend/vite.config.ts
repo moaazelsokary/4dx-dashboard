@@ -3,6 +3,38 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import fs from "fs";
+import type { ProxyOptions } from "vite";
+
+/**
+ * Dev-only: routes below forward to auth-proxy (Node) on port 3000.
+ * If nothing listens there, the browser sees an opaque 500 — we log and return JSON instead.
+ */
+function devProxyToAuthBackend(): ProxyOptions {
+  return {
+    target: "http://127.0.0.1:3000",
+    changeOrigin: true,
+    secure: false,
+    configure(proxy) {
+      proxy.on("error", (err, _req, res) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(
+          `[Vite proxy] Cannot reach auth-proxy at :3000 (${msg}). From the Frontend folder run: npm run auth-proxy  — or use: npm run dev (starts Vite + all local proxies).`
+        );
+        const r = res as { headersSent?: boolean; writeHead?: (c: number, h: Record<string, string>) => void; end?: (b: string) => void };
+        if (r && !r.headersSent && typeof r.writeHead === "function") {
+          r.writeHead(503, { "Content-Type": "application/json" });
+          r.end(
+            JSON.stringify({
+              success: false,
+              error:
+                "Development: auth-proxy is not running on port 3000. From the Frontend folder run `npm run auth-proxy`, or use `npm run dev` (starts Vite and all proxies including auth-proxy).",
+            })
+          );
+        }
+      });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -22,12 +54,14 @@ export default defineConfig(({ mode }) => {
         protocol: 'ws',
       },
       proxy: {
+        // Auth + Netlify-shaped routes (auth-proxy on 3000) — same-origin in dev so fetch uses port 8080
+        "/api/auth": devProxyToAuthBackend(),
+        // Same handler as /api/auth/session (Netlify function shape in dev)
+        "/.netlify/functions/auth-session": devProxyToAuthBackend(),
+        "/.netlify/functions/config-api": devProxyToAuthBackend(),
+        "/.netlify/functions/metrics-api": devProxyToAuthBackend(),
         // RASCI summary served by auth-proxy (3000)
-        '/api/wig/rasci/summary-by-department': {
-          target: 'http://127.0.0.1:3000',
-          changeOrigin: true,
-          secure: false,
-        },
+        "/api/wig/rasci/summary-by-department": devProxyToAuthBackend(),
         // Other wig APIs from wig-proxy (3003)
         '/api/wig': {
           target: 'http://127.0.0.1:3003',

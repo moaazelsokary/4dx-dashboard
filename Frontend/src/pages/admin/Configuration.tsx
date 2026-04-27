@@ -6,9 +6,11 @@ import LockRuleList from '@/components/config/LockRuleList';
 import LogViewer from '@/components/config/LogViewer';
 import PermissionList from '@/components/config/PermissionList';
 import DataSourceMappingList from '@/components/config/DataSourceMappingList';
+import UserList from '@/components/config/UserList';
+import PowerbiDashboardList from '@/components/config/PowerbiDashboardList';
 import type { User } from '@/services/authService';
 
-const CONFIG_TABS = ['locks', 'logs', 'permissions', 'mappings'] as const;
+const CONFIG_TABS = ['locks', 'logs', 'permissions', 'mappings', 'users', 'powerbi-dashboards'] as const;
 
 function isConfigTab(t: string): t is (typeof CONFIG_TABS)[number] {
   return (CONFIG_TABS as readonly string[]).includes(t);
@@ -64,6 +66,14 @@ export default function Configuration() {
 
           <TabsContent value="mappings" className="mt-0">
             <DataSourceMappingList />
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-0">
+            <UserList />
+          </TabsContent>
+
+          <TabsContent value="powerbi-dashboards" className="mt-0">
+            <PowerbiDashboardList />
           </TabsContent>
         </Tabs>
     </AppLayout>

@@ -6,11 +6,8 @@
 import { getAuthHeader } from './authService';
 import { handleApiError } from '@/utils/apiErrorHandler';
 
-// Use local proxy for development, Netlify function for production
-const isLocalhost = window.location.hostname === 'localhost';
-const API_BASE_URL = isLocalhost
-  ? 'http://localhost:3000/.netlify/functions/metrics-api'
-  : '/.netlify/functions/metrics-api';
+// Same-origin: Vite proxies /.netlify/functions/metrics-api → auth-proxy in dev
+const API_BASE_URL = '/.netlify/functions/metrics-api';
 
 const CACHE_KEY = 'pms_odoo_metrics_cache';
 const CACHE_TIMESTAMP_KEY = 'pms_odoo_metrics_cache_timestamp';

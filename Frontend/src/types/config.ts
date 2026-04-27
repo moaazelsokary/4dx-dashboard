@@ -180,3 +180,57 @@ export interface PermissionFormData {
   can_edit_monthly_actual: boolean;
   can_view_reports: boolean;
 }
+
+/** Admin Users tab — full account row from GET /accounts */
+export interface AccountUser {
+  id: number;
+  username: string;
+  role: string;
+  departments: string[];
+  is_active: boolean;
+  default_route: string | null;
+  allowed_routes: string[] | null;
+  powerbi_dashboard_ids: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** dbo.powerbi_dashboards row — GET /powerbi-dashboards */
+export interface PowerbiDashboardRecord {
+  id: string;
+  name: string;
+  title: string;
+  embed_url: string;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** POST /powerbi-dashboards body */
+export interface PowerbiDashboardPayload {
+  id: string;
+  name: string;
+  title: string;
+  embed_url?: string;
+  sort_order?: number;
+}
+
+/** PUT /powerbi-dashboards/:id body (partial) */
+export interface PowerbiDashboardUpdatePayload {
+  name?: string;
+  title?: string;
+  embed_url?: string;
+  sort_order?: number;
+}
+
+/** POST /accounts or PUT /accounts/:id body */
+export interface AccountPayload {
+  username?: string;
+  password?: string;
+  role?: string;
+  departments?: string[];
+  is_active?: boolean;
+  default_route?: string | null;
+  allowed_routes?: string[] | null;
+  powerbi_dashboard_ids?: string[] | null;
+}

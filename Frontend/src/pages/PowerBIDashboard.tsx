@@ -1,34 +1,78 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  RefreshCw,
-  LogOut,
-  Power,
-  BarChart3,
-  AlertCircle
-} from 'lucide-react';
-import { POWERBI_CONFIG, getDashboardById, getAccessibleDashboards, type DashboardConfig } from '@/config/powerbi';
+import { RefreshCw, BarChart3, AlertCircle } from 'lucide-react';
+import {
+  getDashboardFromCatalog,
+  getAccessibleDashboards,
+  mergePowerbiCatalogRows,
+  getPowerbiRoutingCatalog,
+  type DashboardConfig,
+} from '@/config/powerbi';
+import { getPowerbiDashboards, POWERBI_DASHBOARDS_QUERY_KEY } from '@/services/configService';
 import { AppLayout } from '@/components/layout/AppLayout';
-import type { User } from '@/services/authService';
+import {
+  getAuthToken,
+  getEffectivePowerbiDashboardIds,
+  fetchAuthSession,
+  mergeSessionIntoStoredUser,
+  signOut,
+  type User,
+} from '@/services/authService';
 
 const PowerBIDashboard: React.FC = () => {
   const [selectedDashboard, setSelectedDashboard] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  /** DB snapshot from GET session; set when `sessionStatus === 'ready'` */
+  const [pbiFromDb, setPbiFromDb] = useState<string[] | null | undefined>(undefined);
+  /** Until `ready`, do not fall back to JWT inherit (that shows every dashboard for case users). */
+  const [sessionStatus, setSessionStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
   const navigate = useNavigate();
 
-  // Get accessible dashboards based on user role and departments
-  const dashboards: DashboardConfig[] = useMemo(
-    () => (user ? getAccessibleDashboards(user.role, user.departments || []) : []),
-    [user]
-  );
+  const authTokenSnapshot = getAuthToken();
+
+  const { data: catalogRows, isLoading: catalogLoading } = useQuery({
+    queryKey: POWERBI_DASHBOARDS_QUERY_KEY,
+    queryFn: getPowerbiDashboards,
+    staleTime: 60_000,
+  });
+
+  const catalog = useMemo(() => {
+    if (catalogRows && catalogRows.length > 0) {
+      return mergePowerbiCatalogRows(catalogRows);
+    }
+    return getPowerbiRoutingCatalog();
+  }, [catalogRows]);
+
+  // dbo.users.powerbi_dashboard_ids via fetchAuthSession (JWT userId). Not before DB responds.
+  const dashboards: DashboardConfig[] = useMemo(() => {
+    if (!user) return [];
+    if (sessionStatus === 'loading' || catalogLoading) {
+      return [];
+    }
+    let ids: string[] | null | undefined;
+    if (sessionStatus === 'ready') {
+      ids = pbiFromDb;
+    } else {
+      ids = getEffectivePowerbiDashboardIds(user);
+    }
+    if (ids === null || ids === undefined) {
+      return getAccessibleDashboards(user.role, user.departments || [], catalog);
+    }
+    if (ids.length === 0) return [];
+    return ids
+      .map((id) => getDashboardFromCatalog(catalog, id))
+      .filter((d): d is DashboardConfig => d != null);
+  }, [user, authTokenSnapshot, pbiFromDb, sessionStatus, catalog, catalogLoading]);
 
   // Authentication check
   useEffect(() => {
@@ -47,6 +91,28 @@ const PowerBIDashboard: React.FC = () => {
     
     setUser(userObj as User);
   }, [navigate]);
+
+  // Load dbo.users.powerbi_dashboard_ids (authoritative for this page)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setSessionStatus('loading');
+      const session = await fetchAuthSession();
+      if (cancelled) return;
+      if (session) {
+        setPbiFromDb(session.powerbiDashboardIds ?? null);
+        const merged = mergeSessionIntoStoredUser(session);
+        if (merged) setUser(merged);
+        setSessionStatus('ready');
+      } else {
+        setPbiFromDb(undefined);
+        setSessionStatus('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadDashboard = useCallback(() => {
     const dashboard = dashboards.find(d => d.id === selectedDashboard);
@@ -84,8 +150,7 @@ const PowerBIDashboard: React.FC = () => {
   }, [selectedDashboard, loadDashboard]);
 
   const handleSignOut = () => {
-    localStorage.removeItem("user");
-    navigate("/");
+    signOut(true);
   };
 
 
@@ -108,6 +173,29 @@ const PowerBIDashboard: React.FC = () => {
       onSignOut={handleSignOut}
       onRefresh={refreshDashboard}
     >
+        {sessionStatus === 'error' && (
+          <Alert variant="destructive" className="mb-4 max-w-3xl">
+            <AlertTitle>Could not load dashboard permissions from the database</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p>
+                For local development, run the auth backend on port 3000 (auth-proxy) next to Vite. Then reload this page.
+                If the problem continues, sign out and sign in again so your session can read{' '}
+                <code className="text-xs bg-background/80 px-1 rounded">users.powerbi_dashboard_ids</code>.
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={() => window.location.reload()}>
+                Reload page
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {(sessionStatus === 'loading' || catalogLoading) && (
+          <p className="text-sm text-muted-foreground mb-4 flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+            Loading allowed dashboards from the database…
+          </p>
+        )}
+
         {/* Dashboard Selection */}
         <Card className="mb-6">
           <CardHeader>
@@ -118,9 +206,15 @@ const PowerBIDashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="flex items-center space-x-4">
-              <Select value={selectedDashboard} onValueChange={handleDashboardChange}>
-                <SelectTrigger className="w-80">
-                  <SelectValue placeholder="Select a dashboard" />
+              <Select
+                value={selectedDashboard}
+                onValueChange={handleDashboardChange}
+                disabled={sessionStatus === 'loading' || catalogLoading}
+              >
+                <SelectTrigger className="w-80 max-w-full min-h-11">
+                  <SelectValue
+                    placeholder={sessionStatus === 'loading' || catalogLoading ? 'Loading…' : 'Select a dashboard'}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {dashboards.map((dashboard) => (

@@ -9,6 +9,7 @@ import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Wifi, WifiOff } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import GuardedRoute from "@/components/auth/GuardedRoute";
 
 // Lazy load all route components
 const SignIn = lazy(() => import("./pages/SignIn"));
@@ -27,6 +28,11 @@ const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Configuration = lazy(() => import("./pages/admin/Configuration"));
 const PMSOdooMetrics = lazy(() => import("./pages/PMSOdooMetrics"));
+const VolunteersPage = lazy(() => import("./pages/strategic-topics/VolunteersPage"));
+const RefugeesPage = lazy(() => import("./pages/strategic-topics/RefugeesPage"));
+const ReturneesPage = lazy(() => import("./pages/strategic-topics/ReturneesPage"));
+const ReliefPage = lazy(() => import("./pages/strategic-topics/ReliefPage"));
+const AwarenessPage = lazy(() => import("./pages/strategic-topics/AwarenessPage"));
 
 const queryClient = new QueryClient();
 
@@ -79,20 +85,25 @@ const App = () => (
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/" element={<SignIn />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/wig-plan-2025" element={<WIGPlan2025 />} />
-              <Route path="/main-plan" element={<MainPlanObjectives />} />
-              <Route path="/department-objectives" element={<DepartmentObjectives />} />
-              <Route path="/test" element={<TestConnection />} />
-              <Route path="/summary" element={<Summary />} />
-              <Route path="/project-details" element={<ProjectDetails />} />
-              <Route path="/powerbi" element={<PowerBIDashboard />} />
-              <Route path="/access-denied" element={<AccessDenied />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/terms-of-service" element={<TermsOfService />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/admin/configuration" element={<Configuration />} />
-              <Route path="/pms-odoo-metrics" element={<PMSOdooMetrics />} />
+              <Route path="/access-denied" element={<AccessDenied />} />
+              <Route path="/dashboard" element={<GuardedRoute><Dashboard /></GuardedRoute>} />
+              <Route path="/wig-plan-2025" element={<GuardedRoute><WIGPlan2025 /></GuardedRoute>} />
+              <Route path="/main-plan" element={<GuardedRoute><MainPlanObjectives /></GuardedRoute>} />
+              <Route path="/main-plan/volunteers" element={<GuardedRoute><VolunteersPage /></GuardedRoute>} />
+              <Route path="/main-plan/refugees" element={<GuardedRoute><RefugeesPage /></GuardedRoute>} />
+              <Route path="/main-plan/returnees" element={<GuardedRoute><ReturneesPage /></GuardedRoute>} />
+              <Route path="/main-plan/relief" element={<GuardedRoute><ReliefPage /></GuardedRoute>} />
+              <Route path="/main-plan/awareness" element={<GuardedRoute><AwarenessPage /></GuardedRoute>} />
+              <Route path="/department-objectives" element={<GuardedRoute><DepartmentObjectives /></GuardedRoute>} />
+              <Route path="/test" element={<GuardedRoute><TestConnection /></GuardedRoute>} />
+              <Route path="/summary" element={<GuardedRoute><Summary /></GuardedRoute>} />
+              <Route path="/project-details" element={<GuardedRoute><ProjectDetails /></GuardedRoute>} />
+              <Route path="/powerbi" element={<GuardedRoute><PowerBIDashboard /></GuardedRoute>} />
+              <Route path="/settings" element={<GuardedRoute><Settings /></GuardedRoute>} />
+              <Route path="/admin/configuration" element={<GuardedRoute><Configuration /></GuardedRoute>} />
+              <Route path="/pms-odoo-metrics" element={<GuardedRoute><PMSOdooMetrics /></GuardedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

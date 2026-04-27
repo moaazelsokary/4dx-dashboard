@@ -104,6 +104,47 @@
   }
 }
 
+@layer components {
+  /**
+   * Left nav: no scrollbar until pointer is over the nav or it has focus
+   * (hover / :focus-within for keyboard) — similar to Cursor’s agent list
+   */
+  .scrollbar-app-sidebar {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-app-sidebar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .scrollbar-app-sidebar:hover,
+  .scrollbar-app-sidebar:focus-within {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.38) transparent;
+  }
+
+  .scrollbar-app-sidebar:hover::-webkit-scrollbar,
+  .scrollbar-app-sidebar:focus-within::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .scrollbar-app-sidebar:hover::-webkit-scrollbar-track,
+  .scrollbar-app-sidebar:focus-within::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-app-sidebar:hover::-webkit-scrollbar-thumb,
+  .scrollbar-app-sidebar:focus-within::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.36);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-app-sidebar:hover::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.55);
+  }
+}
+
 /* Custom animations for dashboard */
 @keyframes pulse-health {
   0%, 100% {

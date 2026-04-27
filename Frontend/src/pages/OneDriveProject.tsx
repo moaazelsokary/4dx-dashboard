@@ -41,14 +41,12 @@ import {
 } from 'recharts';
 import { getCurrentQuarter as getCurrentQuarterUtil } from '@/lib/utils';
 import { dataCacheService } from '@/services/dataCacheService';
-import { hasPowerBIAccess } from '@/config/powerbi';
 import type { User } from '@/services/authService';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Set Mapbox access token from environment variable or fallback
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN ;
-
 // Use local proxy for development, Netlify function for production
 const isLocalhost = window.location.hostname === 'localhost';
 const ONEDRIVE_FUNCTION_URL = isLocalhost 

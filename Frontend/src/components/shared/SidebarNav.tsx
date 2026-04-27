@@ -3,17 +3,14 @@ import { useState, useEffect } from 'react';
 import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
 import { OdooIcon } from '@/components/icons/OdooIcon';
-import { WBSIcon } from '@/components/icons/WBSIcon';
 import { RASCIIcon } from '@/components/icons/RASCIIcon';
-import { hasPowerBIAccess } from '@/config/powerbi';
 import { cn } from '@/lib/utils';
 import { AppLogo } from '@/components/shared/AppLogo';
+import type { User } from '@/services/authService';
+import { canAccessAppPath } from '@/utils/routeAccess';
 
 interface SidebarNavProps {
-  user: {
-    role: string;
-    departments?: string[];
-  } | null;
+  user: User | null;
   /** When true, always show labels (e.g. in mobile drawer) */
   expanded?: boolean;
   /** Page title - shown in sidebar (from header) */
@@ -35,6 +32,13 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     setExpandedSections((prev) => {
       const next = new Set(prev);
       if (location.pathname === '/main-plan' || location.pathname.startsWith('/main-plan')) next.add('main-plan');
+      if (location.pathname.startsWith('/main-plan/volunteers')
+        || location.pathname.startsWith('/main-plan/refugees')
+        || location.pathname.startsWith('/main-plan/returnees')
+        || location.pathname.startsWith('/main-plan/relief')
+        || location.pathname.startsWith('/main-plan/awareness')) {
+        next.add('strategic-topics');
+      }
       if (location.pathname === '/department-objectives' || location.pathname.startsWith('/department-objectives')) next.add('department-objectives');
       if (location.pathname.startsWith('/admin/configuration')) next.add('configuration');
       return next;
@@ -46,36 +50,42 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     return (
       <nav
         className={cn(
-          'flex flex-col gap-1 py-2 w-full',
+          'flex h-full min-h-0 max-h-full w-full min-w-0 flex-1 flex-col gap-1 py-2',
           expanded ? 'w-56' : 'min-w-12',
           className
         )}
       >
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="flex items-center justify-center p-2 rounded-md hover:bg-primary/10 mb-2 mx-auto min-h-11 min-w-11 w-[52px] h-[52px] transition-transform duration-150 ease-out group-hover/sidebar:scale-[1.08] origin-center"
-          aria-label="Home"
-        >
-          <AppLogo className="w-full h-full" />
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          aria-current={location.pathname === '/' ? 'page' : undefined}
-          className={cn(
-            'flex items-center gap-3 w-full min-w-0 min-h-10 px-3 py-2 rounded-md text-xs transition-colors text-left hover:bg-primary/10 hover:text-foreground text-muted-foreground'
-          )}
-        >
-          <span
+        <div className="shrink-0">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="mb-2 flex h-[52px] min-h-11 w-[52px] min-w-11 items-center justify-center rounded-md p-2 mx-auto transition-colors duration-150 hover:bg-primary/10"
+            aria-label="Home"
+          >
+            <AppLogo className="h-full w-full" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-app-sidebar">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            aria-current={location.pathname === '/' ? 'page' : undefined}
             className={cn(
-            'truncate transition-all duration-150 ease-out min-w-0 flex-1',
-            expanded ? 'opacity-100' : 'opacity-0 max-w-0 overflow-hidden flex-1 group-hover/sidebar:opacity-100 group-hover/sidebar:max-w-none'
+              'flex min-h-10 w-full min-w-0 items-center gap-3 rounded-md px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground'
             )}
           >
-            Sign in
-          </span>
-        </button>
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate transition-all duration-150 ease-out',
+                expanded
+                  ? 'opacity-100'
+                  : 'max-w-0 flex-1 overflow-hidden opacity-0 group-hover/sidebar:max-w-none group-hover/sidebar:opacity-100'
+              )}
+            >
+              Sign in
+            </span>
+          </button>
+        </div>
       </nav>
     );
   }
@@ -84,14 +94,12 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
   const isAdmin = user.role === 'Admin';
   const isDepartment = user.role === 'department';
   const isOperations = isDepartment && user.departments?.includes('operations');
-  const hasPowerBI = hasPowerBIAccess(user.role, user.departments || []);
   const canAccessAdmin = isCEO || isAdmin;
 
   const canAccessWIGPlan = isCEO || isDepartment;
   const canAccessMainPlan = isCEO || isDepartment;
   const canAccessDepartmentObjectives = isCEO || isAdmin || isDepartment;
   const canAccessSummary = isCEO || isOperations;
-  const canAccessPowerBI = hasPowerBI;
 
   const shouldShowButton = (path: string) => {
     if (isCEO || isAdmin) return true;
@@ -142,7 +150,9 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     tab: string,
     label: string,
     defaultTab?: boolean,
-    Icon?: React.ElementType
+    Icon?: React.ElementType,
+    iconSrc?: string,
+    iconClassName?: string
   ) => {
     const isActive = location.pathname === path && (currentTab === tab || (defaultTab && !currentTab));
     const handleClick = () => navigate(`${path}${tab ? `?tab=${tab}` : ''}`);
@@ -160,7 +170,16 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
             : 'hover:bg-primary/10 hover:text-foreground text-muted-foreground'
         )}
       >
-        {Icon && <Icon className="w-4 h-4 shrink-0" />}
+        {iconSrc ? (
+          <img
+            src={iconSrc}
+            alt=""
+            aria-hidden="true"
+            className={cn('h-6 w-6 shrink-0 object-contain', iconClassName)}
+          />
+        ) : (
+          Icon && <Icon className="w-4 h-4 shrink-0" />
+        )}
         <span
           className={cn(
             'truncate transition-all duration-150 ease-out min-w-0 flex-1',
@@ -183,7 +202,17 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     Icon: React.ElementType,
     children: React.ReactNode[]
   ) => {
-    const isParentActive = location.pathname === path || (key === 'configuration' && location.pathname.startsWith('/admin/configuration'));
+    const isParentActive =
+      location.pathname === path
+      || (key === 'configuration' && location.pathname.startsWith('/admin/configuration'))
+      || (key === 'strategic-topics'
+        && (
+          location.pathname.startsWith('/main-plan/volunteers')
+          || location.pathname.startsWith('/main-plan/refugees')
+          || location.pathname.startsWith('/main-plan/returnees')
+          || location.pathname.startsWith('/main-plan/relief')
+          || location.pathname.startsWith('/main-plan/awareness')
+        ));
     const isExpanded = expandedSections.has(key) || isParentActive;
     const handleClick = () => {
       setExpandedSections((prev) => {
@@ -242,29 +271,56 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
 
   const items: React.ReactNode[] = [];
 
-  if (canAccessMainPlan) {
+  if (canAccessMainPlan && canAccessAppPath('/main-plan', user)) {
     const mainPlanSub = [
       subNavItem('main-view', '/main-plan', 'view', 'View', true, Home),
-      subNavItem('main-wbs', '/main-plan', 'wbs', 'WBS', undefined, WBSIcon),
       subNavItem('main-rasci', '/main-plan', 'rasci', 'RASCI', undefined, RASCIIcon),
       subNavItem('main-table', '/main-plan', 'table', 'Table', undefined, FileSpreadsheet),
     ];
     items.push(navItemWithChildren('main-plan', '/main-plan', 'Strategic Plan 2026', Home, mainPlanSub));
   }
-  if (canAccessDepartmentObjectives && shouldShowButton('/department-objectives')) {
+  if (canAccessMainPlan && canAccessAppPath('/main-plan/volunteers', user)) {
+    const strategicTopicsSub = [
+      subNavItem('main-volunteers', '/main-plan/volunteers', '', 'Volunteers', undefined, undefined, '/volunteers.png'),
+      subNavItem('main-refugees', '/main-plan/refugees', '', 'Refugees', undefined, undefined, '/Refugees.png'),
+      subNavItem(
+        'main-returnees',
+        '/main-plan/returnees',
+        '',
+        'Returnees',
+        undefined,
+        undefined,
+        '/Returnees.png',
+        '[filter:brightness(0)_saturate(100%)_invert(52%)_sepia(61%)_saturate(654%)_hue-rotate(120deg)_brightness(92%)_contrast(97%)]'
+      ),
+      subNavItem('main-relief', '/main-plan/relief', '', 'Relief', undefined, undefined, '/Relief.png'),
+      subNavItem(
+        'main-awareness',
+        '/main-plan/awareness',
+        '',
+        'Awareness',
+        undefined,
+        undefined,
+        '/Awareness.png',
+        '[filter:brightness(0)_saturate(100%)_invert(52%)_sepia(61%)_saturate(654%)_hue-rotate(120deg)_brightness(92%)_contrast(97%)]'
+      ),
+    ];
+    items.push(navItemWithChildren('strategic-topics', '/main-plan/volunteers', 'Strategic Topics', Users, strategicTopicsSub));
+  }
+  if (canAccessDepartmentObjectives && canAccessAppPath('/department-objectives', user) && shouldShowButton('/department-objectives')) {
     const deptSub = [
       subNavItem('dept-objectives', '/department-objectives', 'objectives', 'Objectives', true, FileSpreadsheet),
       subNavItem('dept-rasci', '/department-objectives', 'rasci', 'RASCI Metrics', undefined, RASCIIcon),
     ];
     items.push(navItemWithChildren('department-objectives', '/department-objectives', isCEO ? 'Department Objectives' : 'My Objectives', Users, deptSub));
   }
-  if (canAccessPowerBI && shouldShowButton('/powerbi')) {
+  if (canAccessAppPath('/powerbi', user) && shouldShowButton('/powerbi')) {
     items.push(navItem('powerbi', '/powerbi', 'Power BI Dashboards', PowerBIIcon));
   }
-  if (canAccessAdmin && shouldShowButton('/pms-odoo-metrics')) {
+  if (canAccessAdmin && canAccessAppPath('/pms-odoo-metrics', user) && shouldShowButton('/pms-odoo-metrics')) {
     items.push(navItem('pms-odoo-metrics', '/pms-odoo-metrics', 'PMS & Odoo Metrics', OdooIcon));
   }
-  if (canAccessWIGPlan && shouldShowButton('/wig-plan-2025')) {
+  if (canAccessWIGPlan && canAccessAppPath('/wig-plan-2025', user) && shouldShowButton('/wig-plan-2025')) {
     items.push(navItem('wig-plan-2025', '/wig-plan-2025', '2025 Plan', BarChart3));
   }
   // Projects Summary and Projects Details hidden from UI
@@ -273,11 +329,13 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
       navItem('projects-website', '/summary', 'Projects Website', History, () => window.open('http://pms.lifemakers.org/', '_blank'))
     );
   }
-  if (canAccessAdmin && shouldShowButton('/admin/configuration')) {
+  if (canAccessAdmin && canAccessAppPath('/admin/configuration', user) && shouldShowButton('/admin/configuration')) {
     const configSub = [
       subNavItem('config-locks', '/admin/configuration', 'locks', 'Lock Management', true),
       subNavItem('config-logs', '/admin/configuration', 'logs', 'Activity Logs'),
-      subNavItem('config-permissions', '/admin/configuration', 'permissions', 'User Permissions'),
+      subNavItem('config-permissions', '/admin/configuration', 'permissions', 'Objectives permissions'),
+      subNavItem('config-users', '/admin/configuration', 'users', 'Users'),
+      subNavItem('config-pbi', '/admin/configuration', 'powerbi-dashboards', 'Power BI dashboards'),
       subNavItem('config-mappings', '/admin/configuration', 'mappings', 'DataSource Mapping'),
     ];
     items.push(navItemWithChildren('configuration', '/admin/configuration', 'Configuration', Settings, configSub));
@@ -285,34 +343,38 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
   return (
     <nav
       className={cn(
-        'flex flex-col gap-1 py-2 w-full',
+        'flex h-full min-h-0 max-h-full w-full min-w-0 flex-1 flex-col gap-1 py-2',
         expanded ? 'w-56' : 'min-w-12',
         className
       )}
     >
-      <button
-        type="button"
-        onClick={() => navigate('/dashboard')}
-        aria-current={location.pathname === '/dashboard' ? 'page' : undefined}
-        className="flex items-center justify-center p-2 rounded-md hover:bg-primary/10 mb-2 mx-auto min-h-11 min-w-11 w-[52px] h-[52px] transition-transform duration-150 ease-out group-hover/sidebar:scale-[1.08] origin-center"
-        aria-label="Home"
-      >
-        <AppLogo className="w-full h-full" />
-      </button>
-      {(title || subtitle) && (
-        <div
-          className={cn(
-            'overflow-hidden transition-all duration-150 ease-out min-w-0',
-            expanded
-              ? 'opacity-100 w-full px-3 mb-2'
-              : 'opacity-0 max-w-0 px-0 mb-0 w-full group-hover/sidebar:opacity-100 group-hover/sidebar:max-w-none group-hover/sidebar:px-3 group-hover/sidebar:mb-2'
-          )}
+      <div className="shrink-0">
+        <button
+          type="button"
+          onClick={() => navigate('/main-plan?tab=view')}
+          aria-current={location.pathname === '/main-plan' ? 'page' : undefined}
+          className="mb-2 flex h-[52px] min-h-11 w-[52px] min-w-11 items-center justify-center rounded-md p-2 mx-auto transition-colors duration-150 hover:bg-primary/10"
+          aria-label="Home"
         >
-          {title && <h2 className="text-xs font-semibold text-foreground truncate">{title}</h2>}
-          {subtitle && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{subtitle}</p>}
-        </div>
-      )}
-      {items}
+          <AppLogo className="h-full w-full" />
+        </button>
+        {(title || subtitle) && (
+          <div
+            className={cn(
+              'min-w-0 overflow-hidden transition-all duration-150 ease-out',
+              expanded
+                ? 'mb-2 w-full px-3 opacity-100'
+                : 'mb-0 w-full max-w-0 px-0 opacity-0 group-hover/sidebar:mb-2 group-hover/sidebar:max-w-none group-hover/sidebar:px-3 group-hover/sidebar:opacity-100'
+            )}
+          >
+            {title && <h2 className="truncate text-xs font-semibold text-foreground">{title}</h2>}
+            {subtitle && <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{subtitle}</p>}
+          </div>
+        )}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden scrollbar-app-sidebar">
+        {items}
+      </div>
     </nav>
   );
 }

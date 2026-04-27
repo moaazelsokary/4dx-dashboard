@@ -25,7 +25,6 @@ import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { toast } from "@/hooks/use-toast";
 import type { LagMetric } from "@/services/sharepointService";
 import { getCurrentMonth, getCurrentQuarter, getPreviousMonth, getDefaultMonth } from "@/lib/utils";
-import { hasPowerBIAccess } from "@/config/powerbi";
 import { AppLayout } from "@/components/layout/AppLayout";
 
 interface User {

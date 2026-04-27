@@ -4,6 +4,8 @@ const cors = require('cors');
 const sql = require('mssql');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { handleAccountsCrud } = require('./netlify/functions/utils/user-accounts-crud.cjs');
+const { handlePowerbiDashboardsCrud } = require('./netlify/functions/utils/powerbi-dashboards-crud.cjs');
 
 const app = express();
 const PORT = 3000;
@@ -148,7 +150,10 @@ app.post('/api/auth/signin', async (req, res) => {
         password_hash,
         role,
         departments,
-        is_active
+        is_active,
+        default_route,
+        allowed_routes,
+        powerbi_dashboard_ids
       FROM users
       WHERE username = @username
     `);
@@ -196,6 +201,27 @@ app.post('/api/auth/signin', async (req, res) => {
       departments = user.departments ? user.departments.split(',').map(d => d.trim()) : [];
     }
 
+    const parseJsonArrayColumn = (val) => {
+      if (val == null || val === '') return null;
+      try {
+        let raw = val;
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(raw)) {
+          raw = raw.toString('utf8');
+        }
+        const x = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(x) ? x : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const defaultRoute =
+      user.default_route && String(user.default_route).trim()
+        ? String(user.default_route).trim()
+        : null;
+    const allowedRoutes = parseJsonArrayColumn(user.allowed_routes);
+    const powerbiDashboardIds = parseJsonArrayColumn(user.powerbi_dashboard_ids);
+
     // Generate JWT token
     const token = jwt.sign(
       {
@@ -203,6 +229,9 @@ app.post('/api/auth/signin', async (req, res) => {
         username: user.username,
         role: user.role,
         departments: departments,
+        defaultRoute: defaultRoute || undefined,
+        allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
+        powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRY }
@@ -212,6 +241,9 @@ app.post('/api/auth/signin', async (req, res) => {
       username: user.username,
       role: user.role,
       departments: departments,
+      defaultRoute: defaultRoute || null,
+      allowedRoutes,
+      powerbiDashboardIds,
     };
 
     console.log('[Auth Proxy] User signed in successfully:', user.username, 'Role:', user.role);
@@ -231,6 +263,77 @@ app.post('/api/auth/signin', async (req, res) => {
     });
   }
 });
+
+// GET session — Power BI / route overrides from DB (JWT must match current user id)
+app.options('/api/auth/session', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-CSRF-Token');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.sendStatus(200);
+});
+
+function parseJsonArrayColumnSession(val) {
+  if (val == null || val === '') return null;
+  if (Array.isArray(val)) return val;
+  try {
+    let raw = val;
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(raw)) {
+      raw = raw.toString('utf8');
+    }
+    const x = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(x) ? x : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleAuthSession(req, res) {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const auth = req.headers?.authorization || req.headers?.Authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+  try {
+    const token = auth.slice(7);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const userId = decoded.userId ?? decoded.id;
+    if (userId == null) {
+      return res.status(401).json({ success: false, error: 'Invalid token payload' });
+    }
+    const dbPool = await getDbPool();
+    const result = await dbPool
+      .request()
+      .input('id', sql.Int, userId)
+      .query(`
+        SELECT default_route, allowed_routes, powerbi_dashboard_ids
+        FROM users
+        WHERE id = @id
+      `);
+    if (!result.recordset || result.recordset.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    const row = result.recordset[0];
+    const defaultRoute =
+      row.default_route && String(row.default_route).trim()
+        ? String(row.default_route).trim()
+        : null;
+    return res.json({
+      success: true,
+      user: {
+        defaultRoute,
+        allowedRoutes: parseJsonArrayColumnSession(row.allowed_routes),
+        powerbiDashboardIds: parseJsonArrayColumnSession(row.powerbi_dashboard_ids),
+      },
+    });
+  } catch (e) {
+    console.error('[Auth Proxy] session error:', e.message);
+    return res.status(401).json({ success: false, error: 'Invalid or expired session' });
+  }
+}
+
+app.get('/api/auth/session', handleAuthSession);
+app.get('/.netlify/functions/auth-session', handleAuthSession);
 
 // Compute derived metric rows from pms/odoo data and definition
 function computeDerivedRows(pms, odoo, derivedDef) {
@@ -285,7 +388,13 @@ function getUserFromRequest(req) {
   try {
     const token = auth.slice(7);
     const decoded = jwt.verify(token, JWT_SECRET);
-    return { username: decoded.username, role: decoded.role };
+    const uid = decoded.userId ?? decoded.id;
+    return {
+      id: uid,
+      userId: uid,
+      username: decoded.username,
+      role: decoded.role,
+    };
   } catch {
     return null;
   }
@@ -832,6 +941,200 @@ app.put('/.netlify/functions/config-api/mappings/:id', requireConfigAuth, async 
       return res.status(400).json({ success: false, error: 'objective_data_source_mapping table does not exist. Run migrations first.' });
     }
     console.error('[Auth Proxy] PUT mapping error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Config-api accounts (local dev — mirrors Netlify config-api)
+function requireAccountsAdmin(req, res, next) {
+  const u = getUserFromRequest(req);
+  if (!u) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+  if (u.role !== 'Admin' && u.role !== 'CEO') {
+    return res.status(403).json({ success: false, error: 'Access denied. Admin or CEO role required.' });
+  }
+  req.accountsUser = u;
+  next();
+}
+
+app.options('/.netlify/functions/config-api/accounts', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+  res.sendStatus(200);
+});
+app.options('/.netlify/functions/config-api/accounts/:id', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+  res.sendStatus(200);
+});
+
+app.get('/.netlify/functions/config-api/accounts', requireAccountsAdmin, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const pool = await getDbPool();
+    const result = await handleAccountsCrud({
+      pool,
+      method: 'GET',
+      accountId: null,
+      body: {},
+      user: req.accountsUser,
+      logActivity: null,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] GET accounts error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/.netlify/functions/config-api/accounts', requireAccountsAdmin, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const pool = await getDbPool();
+    const result = await handleAccountsCrud({
+      pool,
+      method: 'POST',
+      accountId: null,
+      body: req.body || {},
+      user: req.accountsUser,
+      logActivity: null,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] POST accounts error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/.netlify/functions/config-api/accounts/:id', requireAccountsAdmin, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ success: false, error: 'Invalid id' });
+  try {
+    const pool = await getDbPool();
+    const result = await handleAccountsCrud({
+      pool,
+      method: 'PUT',
+      accountId: id,
+      body: req.body || {},
+      user: req.accountsUser,
+      logActivity: null,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] PUT accounts error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.options('/.netlify/functions/config-api/powerbi-dashboards', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+  res.sendStatus(200);
+});
+app.options('/.netlify/functions/config-api/powerbi-dashboards/:slug', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+  res.sendStatus(200);
+});
+
+app.get('/.netlify/functions/config-api/powerbi-dashboards', async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const u = getUserFromRequest(req);
+  if (!u) return res.status(401).json({ success: false, error: 'Authentication required' });
+  try {
+    const pool = await getDbPool();
+    const isAdmin = u.role === 'Admin' || u.role === 'CEO';
+    const result = await handlePowerbiDashboardsCrud({
+      pool,
+      method: 'GET',
+      slug: null,
+      body: {},
+      user: u,
+      isAdmin,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] GET powerbi-dashboards error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/.netlify/functions/config-api/powerbi-dashboards', requireAccountsAdmin, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const pool = await getDbPool();
+    const u = req.accountsUser;
+    const isAdmin = u.role === 'Admin' || u.role === 'CEO';
+    const result = await handlePowerbiDashboardsCrud({
+      pool,
+      method: 'POST',
+      slug: null,
+      body: req.body || {},
+      user: u,
+      isAdmin,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] POST powerbi-dashboards error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/.netlify/functions/config-api/powerbi-dashboards/:slug', requireAccountsAdmin, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const slug = req.params.slug;
+  if (!slug) return res.status(400).json({ success: false, error: 'Missing slug' });
+  try {
+    const pool = await getDbPool();
+    const u = req.accountsUser;
+    const isAdmin = u.role === 'Admin' || u.role === 'CEO';
+    const result = await handlePowerbiDashboardsCrud({
+      pool,
+      method: 'PUT',
+      slug,
+      body: req.body || {},
+      user: u,
+      isAdmin,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] PUT powerbi-dashboards error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/.netlify/functions/config-api/powerbi-dashboards/:slug', requireAccountsAdmin, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const slug = req.params.slug;
+  if (!slug) return res.status(400).json({ success: false, error: 'Missing slug' });
+  try {
+    const pool = await getDbPool();
+    const u = req.accountsUser;
+    const isAdmin = u.role === 'Admin' || u.role === 'CEO';
+    const result = await handlePowerbiDashboardsCrud({
+      pool,
+      method: 'DELETE',
+      slug,
+      body: {},
+      user: u,
+      isAdmin,
+    });
+    res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    console.error('[Auth Proxy] DELETE powerbi-dashboards error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
