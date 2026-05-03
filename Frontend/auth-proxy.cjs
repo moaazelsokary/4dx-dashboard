@@ -1,3 +1,4 @@
+require('dotenv').config({ path: '.env' });
 require('dotenv').config({ path: '.env.local' });
 const express = require('express');
 const cors = require('cors');
@@ -730,6 +731,7 @@ app.post('/.netlify/functions/config-api/locks/check-batch', (req, res) => {
     field_type: c.field_type,
     department_objective_id: c.department_objective_id,
     month: c.month,
+    objective_kind: c.objective_kind || 'bau',
   }));
   res.json({ success: true, data: { results } });
 });
@@ -941,6 +943,123 @@ app.put('/.netlify/functions/config-api/mappings/:id', requireConfigAuth, async 
       return res.status(400).json({ success: false, error: 'objective_data_source_mapping table does not exist. Run migrations first.' });
     }
     console.error('[Auth Proxy] PUT mapping error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Strategic objective data source mapping (local dev — mirrors Netlify config-api)
+app.get('/.netlify/functions/config-api/strategic-mappings', requireConfigAuth, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const user = req.configUser;
+  if (user.role !== 'Admin' && user.role !== 'CEO') {
+    return res.status(403).json({ success: false, error: 'Access denied. Admin or CEO role required.' });
+  }
+  try {
+    const p = await getDbPool();
+    const result = await p.request().query(`
+      SELECT
+        m.strategic_department_objective_id AS strategic_department_objective_id,
+        s.kpi, s.activity, s.department_id, d.name AS department_name,
+        m.pms_project_name, m.pms_metric_name, m.target_source, m.actual_source,
+        m.odoo_project_name, m.derived_project_name, m.created_at, m.updated_at
+      FROM strategic_objective_data_source_mapping m
+      INNER JOIN strategic_department_objectives s ON m.strategic_department_objective_id = s.id
+      LEFT JOIN departments d ON s.department_id = d.id
+      ORDER BY s.department_id, s.kpi, s.activity
+    `);
+    res.json({ success: true, data: result.recordset });
+  } catch (err) {
+    console.error('[Auth Proxy] GET strategic-mappings error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/.netlify/functions/config-api/strategic-mappings/:id', requireConfigAuth, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ success: false, error: 'Invalid id' });
+  try {
+    const p = await getDbPool();
+    const r = await p.request().input('sid', sql.Int, id).query(`
+      SELECT
+        m.strategic_department_objective_id AS strategic_department_objective_id,
+        s.kpi, s.activity, s.department_id, d.name AS department_name,
+        m.pms_project_name, m.pms_metric_name, m.target_source, m.actual_source,
+        m.odoo_project_name, m.derived_project_name, m.created_at, m.updated_at
+      FROM strategic_objective_data_source_mapping m
+      INNER JOIN strategic_department_objectives s ON m.strategic_department_objective_id = s.id
+      LEFT JOIN departments d ON s.department_id = d.id
+      WHERE m.strategic_department_objective_id = @sid
+    `);
+    if (r.recordset.length === 0) return res.status(404).json({ success: false, error: 'Strategic mapping not found' });
+    res.json({ success: true, data: r.recordset[0] });
+  } catch (err) {
+    console.error('[Auth Proxy] GET strategic-mapping error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/.netlify/functions/config-api/strategic-mappings/:id', requireConfigAuth, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const user = req.configUser;
+  if (user.role !== 'Admin' && user.role !== 'CEO') {
+    return res.status(403).json({ success: false, error: 'Access denied. Admin or CEO role required.' });
+  }
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ success: false, error: 'Invalid id' });
+  const body = req.body || {};
+  const {
+    pms_project_name,
+    pms_metric_name,
+    target_source,
+    actual_source,
+    odoo_project_name,
+    derived_project_name,
+  } = body;
+  const targetSourceValue = target_source === 'pms_target' || target_source === 'derived' ? target_source : null;
+  if (!actual_source || !['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived'].includes(actual_source)) {
+    return res.status(400).json({ success: false, error: 'actual_source invalid' });
+  }
+  if ((actual_source === 'odoo_services_done' || actual_source === 'odoo_services_created') && !odoo_project_name) {
+    return res.status(400).json({ success: false, error: 'odoo_project_name required for Odoo actual sources' });
+  }
+  const needsDerived = targetSourceValue === 'derived' || actual_source === 'derived';
+  if (needsDerived && !derived_project_name) {
+    return res.status(400).json({ success: false, error: 'derived_project_name required for derived sources' });
+  }
+  const needsPms = targetSourceValue === 'pms_target' || actual_source === 'pms_actual';
+  if (needsPms && (!pms_project_name || !pms_metric_name)) {
+    return res.status(400).json({ success: false, error: 'PMS project and metric required' });
+  }
+  try {
+    const p = await getDbPool();
+    await p
+      .request()
+      .input('strategic_department_objective_id', sql.Int, id)
+      .input('pms_project_name', sql.NVarChar, pms_project_name || null)
+      .input('pms_metric_name', sql.NVarChar, pms_metric_name || null)
+      .input('target_source', sql.NVarChar, targetSourceValue)
+      .input('actual_source', sql.NVarChar, actual_source)
+      .input('odoo_project_name', sql.NVarChar, odoo_project_name || null)
+      .input('derived_project_name', sql.NVarChar, derived_project_name || null)
+      .query(`
+        MERGE strategic_objective_data_source_mapping AS target
+        USING (SELECT @strategic_department_objective_id AS strategic_department_objective_id) AS source
+        ON target.strategic_department_objective_id = source.strategic_department_objective_id
+        WHEN MATCHED THEN UPDATE SET
+          pms_project_name = @pms_project_name, pms_metric_name = @pms_metric_name,
+          target_source = @target_source, actual_source = @actual_source,
+          odoo_project_name = @odoo_project_name, derived_project_name = @derived_project_name, updated_at = GETDATE()
+        WHEN NOT MATCHED THEN INSERT (strategic_department_objective_id, pms_project_name, pms_metric_name, target_source, actual_source, odoo_project_name, derived_project_name, created_at, updated_at)
+        VALUES (@strategic_department_objective_id, @pms_project_name, @pms_metric_name, @target_source, @actual_source, @odoo_project_name, @derived_project_name, GETDATE(), GETDATE());
+      `);
+    const gr = await p.request().input('sid', sql.Int, id).query(`SELECT * FROM strategic_objective_data_source_mapping WHERE strategic_department_objective_id = @sid`);
+    res.json({ success: true, data: gr.recordset[0] });
+  } catch (err) {
+    console.error('[Auth Proxy] PUT strategic-mapping error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });

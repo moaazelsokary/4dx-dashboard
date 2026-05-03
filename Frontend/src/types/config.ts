@@ -85,6 +85,8 @@ export interface LockCheckRequest {
   department_objective_id: number;
   month?: string; // YYYY-MM format for monthly fields
   user_id?: number;
+  /** Defaults to bau. Use strategic for strategic_department_objectives IDs. */
+  objective_kind?: 'bau' | 'strategic';
 }
 
 export interface LockCheckResponse {
@@ -99,7 +101,14 @@ export interface BatchLockCheckRequest {
 }
 
 export interface BatchLockCheckResponse {
-  results: Array<LockCheckResponse & { field_type: TargetField; department_objective_id: number; month?: string }>;
+  results: Array<
+    LockCheckResponse & {
+      field_type: TargetField;
+      department_objective_id: number;
+      month?: string;
+      objective_kind?: 'bau' | 'strategic';
+    }
+  >;
 }
 
 export interface LockRuleFormData {
@@ -137,6 +146,23 @@ export interface LogStats {
   by_action_type: Record<ActionType, number>;
   by_user: Array<{ user_id: number; username: string; count: number }>;
   recent_activity: ActivityLog[];
+}
+
+/** Same shape as BAU mapping but keyed by strategic_department_objectives.id */
+export interface StrategicObjectiveDataSourceMapping {
+  strategic_department_objective_id: number;
+  pms_project_name: string | null;
+  pms_metric_name: string | null;
+  target_source: 'pms_target' | 'derived' | null;
+  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived';
+  odoo_project_name: string | null;
+  derived_project_name: string | null;
+  created_at?: string;
+  updated_at?: string;
+  kpi?: string;
+  activity?: string;
+  department_id?: number;
+  department_name?: string;
 }
 
 export interface ObjectiveDataSourceMapping {

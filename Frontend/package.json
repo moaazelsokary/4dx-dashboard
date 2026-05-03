@@ -22,6 +22,7 @@
     "import-wig": "node scripts/import-wig-data.cjs",
     "import-rasci": "node scripts/import-rasci-data.cjs",
     "import-rasci-dept": "node scripts/import-rasci-by-dept.cjs scripts/rasci-data.txt",
+    "generate-strategic-seed": "node scripts/generate-strategic-kpis-seed.cjs",
     "ensure-all-kpis-rasci": "node scripts/ensure-all-kpis-rasci.cjs",
     "init-all-kpis-rasci": "node scripts/init-all-kpis-rasci.cjs",
     "migrate-type-constraint": "node scripts/run-type-constraint-migration.cjs",

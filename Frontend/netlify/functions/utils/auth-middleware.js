@@ -5,8 +5,7 @@
 
 const jwt = require('jsonwebtoken');
 const logger = require('./logger');
-
-const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'your-secret-key-change-in-production';
+const { collectJwtSecrets } = require('./jwt-secrets.cjs');
 
 /**
  * Extract JWT token from Authorization header
@@ -82,19 +81,24 @@ function extractToken(event) {
  * Verify JWT token and extract user info
  */
 function verifyToken(token) {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return {
-      valid: true,
-      user: decoded,
-    };
-  } catch (error) {
-    logger.warn('Token verification failed', { error: error.message });
-    return {
-      valid: false,
-      error: error.message,
-    };
+  const secrets = collectJwtSecrets();
+  let lastErr = null;
+  for (const secret of secrets) {
+    try {
+      const decoded = jwt.verify(token, secret);
+      return {
+        valid: true,
+        user: decoded,
+      };
+    } catch (error) {
+      lastErr = error;
+    }
   }
+  logger.warn('Token verification failed', { error: lastErr?.message });
+  return {
+    valid: false,
+    error: lastErr?.message,
+  };
 }
 
 /**
@@ -163,10 +167,8 @@ function authMiddleware(options = {}) {
         return handler(event, context);
       }
 
-      // Skip auth check for GET requests if optional
-      if (optional && event.httpMethod === 'GET') {
-        return handler(event, context);
-      }
+      // Do not short-circuit optional GETs: if Authorization is present, verify JWT and
+      // set event.user (needed for role-scoped fields, e.g. strategic admin columns).
 
       // Debug: Log all headers for POST requests to diagnose issues
       const isWriteRequest = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(event.httpMethod.toUpperCase());

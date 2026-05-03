@@ -2,6 +2,7 @@
 const sql = require('mssql');
 const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
+const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
 
 let pool = null;
 
@@ -370,6 +371,39 @@ const handler = rateLimiter('general')(
     } else if (path === '/department-objectives/update-order' && method === 'POST') {
       result = await updateDepartmentObjectivesOrder(pool, body);
     }
+    // Strategic department objectives (no RASCI; sensitive fields stripped unless Admin/CEO)
+    else if (path === '/strategic-department-objectives' && method === 'GET') {
+      const strategicRole = (event.user && (event.user.role || event.user.Role)) || '';
+      result = await strategicHandlers.getStrategicDepartmentObjectives(
+        pool,
+        queryParams,
+        strategicRole
+      );
+    } else if (
+      /^\/strategic-department-objectives\/\d+\/main-objectives$/.test(path) &&
+      method === 'GET'
+    ) {
+      const sid = parseInt(path.split('/')[2], 10);
+      result = await strategicHandlers.getStrategicMainObjectiveLinks(pool, sid);
+    } else if (
+      /^\/strategic-department-objectives\/\d+\/main-objectives$/.test(path) &&
+      method === 'PUT'
+    ) {
+      const sid = parseInt(path.split('/')[2], 10);
+      result = await strategicHandlers.putStrategicMainObjectiveLinks(pool, sid, body);
+    } else if (path === '/strategic-department-objectives' && method === 'POST') {
+      const strategicRole = (event.user && (event.user.role || event.user.Role)) || '';
+      result = await strategicHandlers.createStrategicDepartmentObjective(pool, body, strategicRole);
+    } else if (/^\/strategic-department-objectives\/\d+$/.test(path) && method === 'PUT') {
+      const sid = parseInt(path.split('/')[2], 10);
+      const strategicRole = (event.user && (event.user.role || event.user.Role)) || '';
+      result = await strategicHandlers.updateStrategicDepartmentObjective(pool, sid, body, strategicRole);
+    } else if (/^\/strategic-department-objectives\/\d+$/.test(path) && method === 'DELETE') {
+      const sid = parseInt(path.split('/')[2], 10);
+      result = await strategicHandlers.deleteStrategicDepartmentObjective(pool, sid, event.user);
+    } else if (path === '/strategic-department-objectives/update-order' && method === 'POST') {
+      result = await strategicHandlers.updateStrategicDepartmentObjectivesOrder(pool, body);
+    }
     // RASCI Metrics
     else if (path === '/rasci' && method === 'GET') {
       result = await getRASCI(pool, queryParams);
@@ -428,6 +462,11 @@ const handler = rateLimiter('general')(
       result = await getMonthlyData(pool, departmentObjectiveId);
     } else if (path === '/monthly-data' && method === 'POST') {
       result = await createOrUpdateMonthlyData(pool, body, event);
+    } else if (path.startsWith('/strategic-monthly-data/') && method === 'GET') {
+      const strategicDeptObjId = parseInt(path.split('/strategic-monthly-data/')[1].split('/')[0], 10);
+      result = await strategicHandlers.getStrategicMonthlyData(pool, strategicDeptObjId);
+    } else if (path === '/strategic-monthly-data' && method === 'POST') {
+      result = await strategicHandlers.createOrUpdateStrategicMonthlyData(pool, body);
     }
     // Combined Dashboard Data
     else if (path === '/department-dashboard-data' && method === 'GET') {
@@ -469,6 +508,20 @@ const handler = rateLimiter('general')(
       sqlError = 'Table does not exist. Please run database initialization script.';
     } else if (error.message && error.message.includes('Cannot find')) {
       sqlError = 'Database object not found.';
+    }
+
+    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 600) {
+      return {
+        statusCode: error.statusCode,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          error: error.message || 'Request failed',
+          success: false,
+        }),
+      };
     }
     
     return {

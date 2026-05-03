@@ -18,6 +18,7 @@ import type {
   PowerbiDashboardRecord,
   PowerbiDashboardPayload,
   PowerbiDashboardUpdatePayload,
+  StrategicObjectiveDataSourceMapping,
 } from '@/types/config';
 import { getAuthHeader } from './authService';
 import { getCsrfHeader } from '@/utils/csrf';
@@ -213,7 +214,8 @@ export async function deleteLock(id: number): Promise<void> {
 export async function checkLockStatus(
   fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
-  month?: string
+  month?: string,
+  objectiveKind: 'bau' | 'strategic' = 'bau'
 ): Promise<LockCheckResponse> {
   const params = new URLSearchParams({
     field_type: fieldType,
@@ -221,6 +223,9 @@ export async function checkLockStatus(
   });
   if (month) {
     params.append('month', month);
+  }
+  if (objectiveKind === 'strategic') {
+    params.append('objective_kind', 'strategic');
   }
   return fetchAPI<LockCheckResponse>(`/locks/check?${params.toString()}`);
 }
@@ -237,7 +242,8 @@ export async function checkLockStatusBatch(
 export async function checkOperationLock(
   operation: 'add' | 'delete',
   kpi?: string,
-  departmentId?: number
+  departmentId?: number,
+  objectiveKind: 'bau' | 'strategic' = 'bau'
 ): Promise<{ is_locked: boolean; lock_reason?: string }> {
   const params = new URLSearchParams({
     operation,
@@ -247,6 +253,9 @@ export async function checkOperationLock(
   }
   if (departmentId) {
     params.append('department_id', departmentId.toString());
+  }
+  if (objectiveKind === 'strategic') {
+    params.append('objective_kind', 'strategic');
   }
   return fetchAPI<{ is_locked: boolean; lock_reason?: string }>(`/locks/check-operation?${params.toString()}`);
 }
@@ -543,6 +552,26 @@ export async function createOrUpdateMapping(
   mappingData: MappingFormData
 ): Promise<ObjectiveDataSourceMapping> {
   return fetchAPI<ObjectiveDataSourceMapping>(`/mappings/${departmentObjectiveId}`, {
+    method: 'PUT',
+    body: JSON.stringify(mappingData),
+  });
+}
+
+export async function getStrategicMappings(): Promise<StrategicObjectiveDataSourceMapping[]> {
+  return fetchAPI<StrategicObjectiveDataSourceMapping[]>('/strategic-mappings');
+}
+
+export async function getStrategicMapping(
+  strategicDepartmentObjectiveId: number
+): Promise<StrategicObjectiveDataSourceMapping> {
+  return fetchAPI<StrategicObjectiveDataSourceMapping>(`/strategic-mappings/${strategicDepartmentObjectiveId}`);
+}
+
+export async function createOrUpdateStrategicMapping(
+  strategicDepartmentObjectiveId: number,
+  mappingData: MappingFormData
+): Promise<StrategicObjectiveDataSourceMapping> {
+  return fetchAPI<StrategicObjectiveDataSourceMapping>(`/strategic-mappings/${strategicDepartmentObjectiveId}`, {
     method: 'PUT',
     body: JSON.stringify(mappingData),
   });

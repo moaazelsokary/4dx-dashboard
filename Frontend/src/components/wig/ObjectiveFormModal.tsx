@@ -17,19 +17,35 @@ import { useLockStatus } from '@/hooks/useLockStatus';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Lock as LockIcon } from 'lucide-react';
 import KPISelector from '@/components/wig/KPISelector';
-import type { DepartmentObjective } from '@/types/wig';
+import type { DepartmentObjective, MainPlanObjective } from '@/types/wig';
 import { cn } from '@/lib/utils';
 
 const KPI_DELIMITER = '||';
 const TYPE_DELIMITER = '||';
 
+function canViewStrategicSensitiveFormFields(role: string | undefined): boolean {
+  const r = (role ?? '').trim().toLowerCase();
+  return r === 'admin' || r === 'ceo';
+}
+
 interface ObjectiveFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: 'add' | 'edit';
-  initialData?: Partial<DepartmentObjective>;
+  initialData?: Partial<DepartmentObjective> & {
+    definition?: string | null;
+    measurement_aspect?: string | null;
+    meeting_notes?: string | null;
+    me_e?: string | null;
+    active?: string | null;
+    notes?: string | null;
+    main_objective_ids?: number[];
+  };
   onSave: (data: Partial<DepartmentObjective>) => Promise<void>;
   existingResponsiblePersons?: string[];
+  objectiveKind?: 'bau' | 'strategic';
+  mainPlanObjectives?: MainPlanObjective[];
+  userRole?: string;
 }
 
 export default function ObjectiveFormModal({
@@ -39,7 +55,11 @@ export default function ObjectiveFormModal({
   initialData,
   onSave,
   existingResponsiblePersons = [],
+  objectiveKind = 'bau',
+  mainPlanObjectives = [],
+  userRole,
 }: ObjectiveFormModalProps) {
+  const isStrategic = objectiveKind === 'strategic';
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -54,10 +74,18 @@ export default function ObjectiveFormModal({
   const [mov, setMov] = useState('');
   const [responsibleSuggestions, setResponsibleSuggestions] = useState<string[]>([]);
   const [showResponsibleSuggestions, setShowResponsibleSuggestions] = useState(false);
+  const [definition, setDefinition] = useState('');
+  const [measurementAspect, setMeasurementAspect] = useState('');
+  const [meetingNotes, setMeetingNotes] = useState('');
+  const [meE, setMeE] = useState('');
+  const [active, setActive] = useState('');
+  const [notes, setNotes] = useState('');
+  /** Strategic: single main-plan objective linked to KPI picker */
+  const [pickedMainPlanId, setPickedMainPlanId] = useState<number | null>(null);
   
   // Parse KPI string to array
-  const parseKPIs = (kpiStr: string | undefined): string[] => {
-    if (!kpiStr) return [];
+  const parseKPIs = (kpiStr: string | undefined | null): string[] => {
+    if (kpiStr == null || kpiStr === '') return [];
     if (kpiStr.includes(KPI_DELIMITER)) {
       return kpiStr.split(KPI_DELIMITER).filter(k => k.trim());
     }
@@ -95,7 +123,8 @@ export default function ObjectiveFormModal({
     'target',
     initialData?.id || null,
     undefined,
-    open && mode === 'edit' && !!initialData?.id && !!objectiveType
+    open && mode === 'edit' && !!initialData?.id && !!objectiveType,
+    isStrategic ? 'strategic' : 'bau'
   );
 
   // Check if ANY field is locked by "All Department Objectives" lock
@@ -105,7 +134,8 @@ export default function ObjectiveFormModal({
     'all_fields',
     initialData?.id || null,
     undefined,
-    open && mode === 'edit' && !!initialData?.id && !!objectiveType
+    open && mode === 'edit' && !!initialData?.id && !!objectiveType,
+    isStrategic ? 'strategic' : 'bau'
   );
 
   // Initialize form data
@@ -120,6 +150,15 @@ export default function ObjectiveFormModal({
       setTargetType(initialData.target_type || 'number');
       setResponsiblePerson(initialData.responsible_person || '');
       setMov(initialData.mov || '');
+      setDefinition((initialData as { definition?: string }).definition || '');
+      setMeasurementAspect((initialData as { measurement_aspect?: string }).measurement_aspect || '');
+      setMeetingNotes((initialData as { meeting_notes?: string }).meeting_notes || '');
+      setMeE((initialData as { me_e?: string }).me_e || '');
+      setActive((initialData as { active?: string }).active || '');
+      setNotes((initialData as { notes?: string }).notes || '');
+      setPickedMainPlanId(
+        isStrategic ? ((initialData.main_objective_id as number | null | undefined) ?? null) : null
+      );
 
       // Initialize KPI types
       const typesMap: Record<number, 'Direct' | 'In direct'> = {};
@@ -137,8 +176,15 @@ export default function ObjectiveFormModal({
       setTargetType('number');
       setResponsiblePerson('');
       setMov('');
+      setDefinition('');
+      setMeasurementAspect('');
+      setMeetingNotes('');
+      setMeE('');
+      setActive('');
+      setNotes('');
+      setPickedMainPlanId(null);
     }
-  }, [open, initialData, mode]);
+  }, [open, initialData, mode, isStrategic]);
 
   // Auto-focus first input when modal opens
   useEffect(() => {
@@ -150,8 +196,25 @@ export default function ObjectiveFormModal({
   }, [open]);
 
   // Handle KPI selection change
+  const handleMainPlanObjectivePick = (m: MainPlanObjective | null) => {
+    setPickedMainPlanId(m?.id ?? null);
+    if (m) {
+      setActivity((prev) => (prev.trim() ? prev : m.objective || ''));
+      setActivityTarget((prev) => {
+        if (prev > 0) return prev;
+        const n = Number(m.annual_target);
+        return Number.isFinite(n) ? Math.round(n * 10) / 10 : prev;
+      });
+      setTargetType(String(m.target).includes('%') ? 'percentage' : 'number');
+    }
+  };
+
   const handleKPIChange = (value: string | string[]) => {
-    const newKPIs = Array.isArray(value) ? value : [value];
+    const newKPIs = Array.isArray(value)
+      ? value.map((s) => String(s).trim()).filter(Boolean)
+      : String(value ?? '').trim()
+        ? [String(value).trim()]
+        : [];
     setKpis(newKPIs);
     
     // Initialize types for new KPIs
@@ -191,32 +254,37 @@ export default function ObjectiveFormModal({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (kpis.length === 0) {
+    if (!isStrategic && kpis.length === 0) {
       newErrors.kpi = 'Please select at least one KPI';
     }
 
-    if (!activity.trim()) {
+    if (!isStrategic && !activity.trim()) {
       newErrors.activity = 'Activity is required';
     }
 
-    if (activityTarget <= 0) {
+    if (!isStrategic && activityTarget <= 0) {
       newErrors.activityTarget = 'Target must be greater than 0';
     }
+    if (isStrategic && activityTarget < 0) {
+      newErrors.activityTarget = 'Target cannot be negative';
+    }
 
-    if (!responsiblePerson.trim()) {
+    if (!isStrategic && !responsiblePerson.trim()) {
       newErrors.responsiblePerson = 'Responsible person is required';
     }
 
-    if (!mov.trim()) {
+    if (!isStrategic && !mov.trim()) {
       newErrors.mov = 'MOV is required';
     }
 
-    // Validate all KPIs have types
-    kpis.forEach((_, index) => {
-      if (!kpiTypes[index]) {
-        newErrors[`kpiType_${index}`] = 'Type is required for each KPI';
-      }
-    });
+    // Validate all KPIs have types (BAU multi-KPI only)
+    if (!isStrategic) {
+      kpis.forEach((_, index) => {
+        if (!kpiTypes[index]) {
+          newErrors[`kpiType_${index}`] = 'Type is required for each KPI';
+        }
+      });
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -263,7 +331,15 @@ export default function ObjectiveFormModal({
         ? kpis.map((_, index) => kpiTypes[index] || 'Direct').join(TYPE_DELIMITER)
         : (kpiTypes[0] || 'Direct');
 
-      const saveData: Partial<DepartmentObjective> = {
+      const saveData: Partial<DepartmentObjective> & {
+        definition?: string | null;
+        measurement_aspect?: string | null;
+        meeting_notes?: string | null;
+        me_e?: string | null;
+        active?: string | null;
+        notes?: string | null;
+        main_objective_ids?: number[];
+      } = {
         kpi: kpis.join(KPI_DELIMITER),
         activity: activity.trim(),
         type: typeString as 'Direct' | 'In direct',
@@ -272,9 +348,26 @@ export default function ObjectiveFormModal({
         responsible_person: responsiblePerson.trim(),
         mov: mov.trim(),
         ...(initialData?.id && { id: initialData.id }),
-        ...(initialData?.main_objective_id !== undefined && { main_objective_id: initialData.main_objective_id }),
+        ...(!isStrategic &&
+          initialData?.main_objective_id !== undefined && {
+            main_objective_id: initialData.main_objective_id,
+          }),
         ...(initialData?.department_id !== undefined && { department_id: initialData.department_id }),
       };
+
+      if (isStrategic) {
+        const joined = kpis.join(KPI_DELIMITER);
+        saveData.kpi = joined.trim() === '' ? null : joined;
+        saveData.activity = activity.trim() === '' ? null : activity.trim();
+        saveData.definition = definition.trim() || null;
+        saveData.measurement_aspect = measurementAspect.trim() || null;
+        saveData.meeting_notes = meetingNotes.trim() || null;
+        saveData.me_e = meE.trim() || null;
+        saveData.active = active.trim() || null;
+        saveData.notes = notes.trim() || null;
+        saveData.main_objective_id = pickedMainPlanId ?? null;
+        saveData.main_objective_ids = pickedMainPlanId != null ? [pickedMainPlanId] : [];
+      }
 
       await onSave(saveData);
       
@@ -344,7 +437,8 @@ export default function ObjectiveFormModal({
           {/* KPI Selector */}
           <div className="space-y-2" data-field="kpi">
             <Label htmlFor="kpi-selector">
-              KPI <span className="text-destructive">*</span>
+              {isStrategic ? 'KPI (main plan)' : 'KPI'}{' '}
+              {!isStrategic && <span className="text-destructive">*</span>}
               {mode === 'edit' && isAllFieldsLocked && (
                 <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
@@ -354,6 +448,11 @@ export default function ObjectiveFormModal({
                 <TooltipTrigger asChild>
                   <div className="relative">
                     <KPISelector
+                      kpiSource={isStrategic ? 'mainplan' : 'rasci'}
+                      mainPlanObjectives={mainPlanObjectives}
+                      selectedMainPlanObjectiveId={isStrategic ? pickedMainPlanId : null}
+                      onMainPlanObjectiveChange={isStrategic ? handleMainPlanObjectivePick : undefined}
+                      multiple={!isStrategic}
                       value={kpis}
                       onValueChange={(value) => {
                         if (mode === 'edit' && isAllFieldsLocked) {
@@ -366,7 +465,9 @@ export default function ObjectiveFormModal({
                         }
                         handleKPIChange(value);
                       }}
-                      placeholder="Select one or more KPIs"
+                      placeholder={
+                        isStrategic ? 'Select KPI from main plan objectives' : 'Select one or more KPIs'
+                      }
                       disabled={mode === 'edit' && isAllFieldsLocked}
                     />
                     {mode === 'edit' && isAllFieldsLocked && (
@@ -510,7 +611,7 @@ export default function ObjectiveFormModal({
           {/* Activity */}
           <div className="space-y-2" data-field="activity">
             <Label htmlFor="activity">
-              Activity <span className="text-destructive">*</span>
+              Activity {!isStrategic && <span className="text-destructive">*</span>}
               {mode === 'edit' && isAllFieldsLocked && (
                 <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
@@ -566,7 +667,7 @@ export default function ObjectiveFormModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2" data-field="activityTarget">
               <Label htmlFor="activity-target">
-                Target <span className="text-destructive">*</span>
+                Target {!isStrategic && <span className="text-destructive">*</span>}
                 {mode === 'edit' && isTargetLocked && (
                   <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
                 )}
@@ -620,7 +721,7 @@ export default function ObjectiveFormModal({
             </div>
             <div className="space-y-2" data-field="targetType">
               <Label htmlFor="target-type">
-                Target Type <span className="text-destructive">*</span>
+                Target Type {!isStrategic && <span className="text-destructive">*</span>}
                 {mode === 'edit' && isTargetLocked && (
                   <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
                 )}
@@ -754,7 +855,8 @@ export default function ObjectiveFormModal({
           {/* MOV */}
           <div className="space-y-2" data-field="mov">
             <Label htmlFor="mov">
-              MOV (Means of Verification) <span className="text-destructive">*</span>
+              MOV (Means of Verification){' '}
+              {!isStrategic && <span className="text-destructive">*</span>}
               {mode === 'edit' && isAllFieldsLocked && (
                 <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
               )}
@@ -804,6 +906,56 @@ export default function ObjectiveFormModal({
               <p className="text-sm text-destructive">{errors.mov}</p>
             )}
           </div>
+
+          {isStrategic && (
+            <div className="space-y-4 border-t pt-4 w-full">
+              <div className="space-y-2">
+                <Label htmlFor="definition">Definition</Label>
+                <Textarea
+                  id="definition"
+                  value={definition}
+                  onChange={(e) => setDefinition(e.target.value)}
+                  rows={3}
+                  placeholder="Indicator definition"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="measurement-aspect">Measurement aspect</Label>
+                <Textarea
+                  id="measurement-aspect"
+                  value={measurementAspect}
+                  onChange={(e) => setMeasurementAspect(e.target.value)}
+                  rows={3}
+                  placeholder="What this indicator measures"
+                />
+              </div>
+              {canViewStrategicSensitiveFormFields(userRole) && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="meeting-notes">Meeting notes</Label>
+                    <Textarea
+                      id="meeting-notes"
+                      value={meetingNotes}
+                      onChange={(e) => setMeetingNotes(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="me-e">M&amp;E</Label>
+                    <Input id="me-e" value={meE} onChange={(e) => setMeE(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="active-field">Active</Label>
+                    <Input id="active-field" value={active} onChange={(e) => setActive(e.target.value)} />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="notes-field">Notes</Label>
+                    <Textarea id="notes-field" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter>

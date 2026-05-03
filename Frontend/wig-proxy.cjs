@@ -1,3 +1,4 @@
+require('dotenv').config({ path: '.env' });
 require('dotenv').config({ path: '.env.local' });
 const express = require('express');
 const cors = require('cors');
@@ -1260,6 +1261,9 @@ app.post('/api/wig/checkers/calculate', async (req, res) => {
     handleError(res, error, 'Error calculating plan checkers');
   }
 });
+
+const registerStrategicWigRoutes = require('./wig-proxy-strategic-routes.cjs');
+registerStrategicWigRoutes(app, { sql, getPool, setNoCacheHeaders, handleError, jwt });
 
 // Monthly Data Routes
 app.get('/api/wig/monthly-data/:deptObjId', async (req, res) => {

@@ -61,6 +61,57 @@ export interface DepartmentObjective {
   me_folder_link?: string | null;
 }
 
+/** Strategic KPI row (Objectives tab — parallel to DepartmentObjective, no RASCI). */
+export interface StrategicDepartmentObjective {
+  id: number;
+  main_objective_id: number | null;
+  department_id: number;
+  department_name?: string;
+  department_code?: string;
+  kpi: string | null;
+  activity: string | null;
+  type: 'Direct' | 'In direct' | 'M&E' | 'M&E MOV' | '';
+  activity_target: number;
+  target_type?: 'number' | 'percentage';
+  responsible_person: string;
+  mov: string;
+  definition?: string | null;
+  measurement_aspect?: string | null;
+  meeting_notes?: string | null;
+  me_e?: string | null;
+  active?: string | null;
+  notes?: string | null;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+  me_target?: number | null;
+  me_actual?: number | null;
+  me_frequency?: string | null;
+  me_start_date?: string | null;
+  me_end_date?: string | null;
+  me_tool?: string | null;
+  me_responsible?: string | null;
+  me_folder_link?: string | null;
+}
+
+export interface StrategicMonthlyData {
+  id: number;
+  strategic_department_objective_id: number;
+  month: string;
+  target_value: number | null;
+  actual_value: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StrategicMainObjectiveLink {
+  main_objective_id: number;
+  sort_order: number;
+  kpi: string;
+  objective: string;
+  target: string;
+}
+
 export interface MonthlyData {
   id: number;
   department_objective_id: number; // Required - each objective has unique calendar values

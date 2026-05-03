@@ -9,12 +9,13 @@ export function useOperationLock(
   operation: 'add' | 'delete',
   kpi?: string,
   departmentId?: number,
-  enabled: boolean = true
+  enabled: boolean = true,
+  objectiveKind: 'bau' | 'strategic' = 'bau'
 ) {
   const { data, isLoading, error, refetch } = useQuery<{ is_locked: boolean; lock_reason?: string }>({
-    queryKey: ['operationLock', operation, kpi, departmentId],
+    queryKey: ['operationLock', operation, kpi, departmentId, objectiveKind],
     queryFn: async () => {
-      return await checkOperationLock(operation, kpi, departmentId);
+      return await checkOperationLock(operation, kpi, departmentId, objectiveKind);
     },
     enabled: enabled, // Allow checking even without KPI (backend will handle it)
     staleTime: 0, // Always check fresh

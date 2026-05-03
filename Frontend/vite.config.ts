@@ -67,6 +67,14 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:3003',
           changeOrigin: true,
           secure: false,
+          configure(proxy) {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              const auth = req.headers.authorization;
+              if (typeof auth === 'string' && auth.length > 0) {
+                proxyReq.setHeader('Authorization', auth);
+              }
+            });
+          },
         },
       },
     },

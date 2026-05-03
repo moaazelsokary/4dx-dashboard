@@ -83,6 +83,11 @@ async function fillLockedValuesFromCache(pool, lock) {
       return; // No monthly fields locked, nothing to fill
     }
 
+    if (lock.objective_kind === 'strategic') {
+      logger.info('fillLockedValuesFromCache: skipping strategic locks (BAU monthly fill only)');
+      return;
+    }
+
     // Resolve affected department_objective_ids based on lock scope
     const request = pool.request();
     let objectivesQuery = `
@@ -495,14 +500,21 @@ async function logActivity(pool, logData) {
 }
 
 // Helper function to check lock status for a single field
-async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month = null) {
+async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month = null, objectiveKind = 'bau') {
+  const kind = objectiveKind === 'strategic' ? 'strategic' : 'bau';
   try {
     // Get department objective details including type
     const deptObjRequest = pool.request();
     deptObjRequest.input('id', sql.Int, departmentObjectiveId);
-    const deptObjResult = await deptObjRequest.query(`
-      SELECT kpi, department_id, type, responsible_person FROM department_objectives WHERE id = @id
-    `);
+    const deptObjResult =
+      kind === 'strategic'
+        ? await deptObjRequest.query(`
+            SELECT kpi, department_id, type, responsible_person
+            FROM strategic_department_objectives WHERE id = @id
+          `)
+        : await deptObjRequest.query(`
+            SELECT kpi, department_id, type, responsible_person FROM department_objectives WHERE id = @id
+          `);
     
     if (deptObjResult.recordset.length === 0) {
       return { is_locked: false };
@@ -535,10 +547,11 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
     lockRequest.input('kpi', sql.NVarChar, kpi);
     lockRequest.input('department_id', sql.Int, departmentId);
     lockRequest.input('user_id', sql.Int, userId);
+    lockRequest.input('objective_kind', sql.NVarChar, kind);
 
     const locks = await lockRequest.query(`
       SELECT * FROM field_locks 
-      WHERE is_active = 1
+      WHERE is_active = 1 AND objective_kind = @objective_kind
       ORDER BY 
         CASE 
           WHEN scope_type = 'hierarchical' AND objective_scope = 'specific' THEN 1
@@ -877,10 +890,18 @@ async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, m
     // Lock by data source mapping: if target/actual comes from PMS or Odoo, treat as locked (independent per field)
     if (fieldType === 'monthly_target' || fieldType === 'monthly_actual') {
       const mapReq = pool.request();
-      mapReq.input('department_objective_id', sql.Int, departmentObjectiveId);
-      const mapResult = await mapReq.query(`
-        SELECT target_source, actual_source FROM objective_data_source_mapping WHERE department_objective_id = @department_objective_id
-      `);
+      mapReq.input('objective_id', sql.Int, departmentObjectiveId);
+      const mapResult =
+        kind === 'strategic'
+          ? await mapReq.query(`
+              SELECT target_source, actual_source
+              FROM strategic_objective_data_source_mapping
+              WHERE strategic_department_objective_id = @objective_id
+            `)
+          : await mapReq.query(`
+              SELECT target_source, actual_source FROM objective_data_source_mapping
+              WHERE department_objective_id = @objective_id
+            `);
       const mapping = mapResult.recordset[0];
       if (mapping) {
         if (fieldType === 'monthly_target' && (mapping.target_source === 'pms_target' || mapping.target_source === 'derived')) {
@@ -991,11 +1012,12 @@ const handler = rateLimiter('general')(
       
       // GET /mappings/:id is allowed for any authenticated user (so Monthly Data Editor can show source badges)
       const isGetSingleMapping = resource === 'mappings' && method === 'GET' && id;
+      const isGetSingleStrategicMapping = resource === 'strategic-mappings' && method === 'GET' && id;
       // GET /powerbi-dashboards — catalog for Power BI page & user form (any signed-in user)
       const isPowerbiCatalogListGet =
         resource === 'powerbi-dashboards' && method === 'GET' && pathParts.length === 1;
       // All other endpoints require Admin or CEO role
-      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping && !isPowerbiCatalogListGet) {
+      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping && !isGetSingleStrategicMapping && !isPowerbiCatalogListGet) {
         const isAdmin = user.role === 'Admin' || user.role === 'CEO';
         if (!isAdmin) {
           logger.warn(`[Config API] Access denied:`, {
@@ -1488,7 +1510,15 @@ const handler = rateLimiter('general')(
             };
           }
 
-          const lockStatus = await checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month);
+          const objectiveKindParam = (params.objective_kind || 'bau').toLowerCase() === 'strategic' ? 'strategic' : 'bau';
+          const lockStatus = await checkLockStatus(
+            pool,
+            fieldType,
+            departmentObjectiveId,
+            userId,
+            month,
+            objectiveKindParam
+          );
           
           // Get all active locks for debug info
           const allLocksResult = await pool.request().query(`
@@ -1533,6 +1563,7 @@ const handler = rateLimiter('general')(
           const operation = queryParams.operation; // 'add' or 'delete'
           const kpi = queryParams.kpi || null;
           const departmentId = queryParams.department_id ? parseInt(queryParams.department_id) : null;
+          const objectiveKindOp = (queryParams.objective_kind || 'bau').toLowerCase() === 'strategic' ? 'strategic' : 'bau';
           const userId = user.id;
           
           if (!operation || !userId) {
@@ -1558,10 +1589,12 @@ const handler = rateLimiter('general')(
             // Get all active hierarchical locks that lock this operation
             const operationLockField = operation === 'add' ? 'lock_add_objective' : 'lock_delete_objective';
             const lockRequest = pool.request();
+            lockRequest.input('objective_kind_op', sql.NVarChar, objectiveKindOp);
             const locks = await lockRequest.query(`
               SELECT * FROM field_locks 
               WHERE is_active = 1 
                 AND scope_type = 'hierarchical'
+                AND objective_kind = @objective_kind_op
                 AND (${operationLockField} = 1 OR ${operationLockField} = 'true')
             `);
 
@@ -1662,20 +1695,23 @@ const handler = rateLimiter('general')(
           }
 
           const results = await Promise.all(
-            checks.map(check => 
-              checkLockStatus(
-                pool, 
-                check.field_type, 
-                check.department_objective_id, 
-                user.id, 
-                check.month
-              ).then(status => ({
+            checks.map((check) => {
+              const okind = (check.objective_kind || 'bau').toLowerCase() === 'strategic' ? 'strategic' : 'bau';
+              return checkLockStatus(
+                pool,
+                check.field_type,
+                check.department_objective_id,
+                user.id,
+                check.month,
+                okind
+              ).then((status) => ({
                 ...status,
                 field_type: check.field_type,
                 department_objective_id: check.department_objective_id,
-                month: check.month
-              }))
-            )
+                month: check.month,
+                objective_kind: okind,
+              }));
+            })
           );
 
           return {
@@ -1710,8 +1746,11 @@ const handler = rateLimiter('general')(
             department_objective_id,
             exclude_monthly_target,
             exclude_monthly_actual,
-            exclude_annual_target
+            exclude_annual_target,
           } = body;
+
+          const objectiveKindInsert =
+            (body.objective_kind || 'bau').toString().toLowerCase() === 'strategic' ? 'strategic' : 'bau';
 
           if (!scope_type) {
             return {
@@ -1767,6 +1806,7 @@ const handler = rateLimiter('general')(
           request.input('exclude_monthly_actual', sql.Bit, exclude_monthly_actual || false);
           request.input('exclude_annual_target', sql.Bit, exclude_annual_target || false);
           request.input('created_by', sql.Int, user.id);
+          request.input('objective_kind', sql.NVarChar, objectiveKindInsert);
 
           const result = await request.query(`
             INSERT INTO field_locks 
@@ -1774,14 +1814,14 @@ const handler = rateLimiter('general')(
              lock_annual_target, lock_monthly_target, lock_monthly_actual, lock_all_other_fields, 
              lock_add_objective, lock_delete_objective,
              lock_type, kpi, department_id, department_objective_id, 
-             exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
+             exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by, objective_kind)
             OUTPUT INSERTED.*
             VALUES 
             (@scope_type, @user_scope, @user_ids, @kpi_scope, @kpi_ids, @objective_scope, @objective_ids,
              @lock_annual_target, @lock_monthly_target, @lock_monthly_actual, @lock_all_other_fields,
              @lock_add_objective, @lock_delete_objective,
              @lock_type, @kpi, @department_id, @department_objective_id,
-             @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
+             @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by, @objective_kind)
           `);
 
           const newLock = result.recordset[0];
@@ -1839,6 +1879,11 @@ const handler = rateLimiter('general')(
           request.input('exclude_monthly_actual', sql.Bit, body.exclude_monthly_actual !== undefined ? body.exclude_monthly_actual : null);
           request.input('exclude_annual_target', sql.Bit, body.exclude_annual_target !== undefined ? body.exclude_annual_target : null);
           request.input('is_active', sql.Bit, body.is_active !== undefined ? body.is_active : null);
+          const okPut =
+            body.objective_kind !== undefined
+              ? (String(body.objective_kind).toLowerCase() === 'strategic' ? 'strategic' : 'bau')
+              : null;
+          request.input('objective_kind', sql.NVarChar, okPut);
 
           // Build UPDATE query - use COALESCE for optional updates
           const result = await request.query(`
@@ -1865,6 +1910,7 @@ const handler = rateLimiter('general')(
               exclude_monthly_actual = COALESCE(@exclude_monthly_actual, exclude_monthly_actual),
               exclude_annual_target = COALESCE(@exclude_annual_target, exclude_annual_target),
               is_active = COALESCE(@is_active, is_active),
+              objective_kind = COALESCE(@objective_kind, objective_kind),
               updated_at = GETDATE()
             OUTPUT INSERTED.*
             WHERE id = @id
@@ -1978,6 +2024,9 @@ const handler = rateLimiter('general')(
               request.input('exclude_monthly_actual', sql.Bit, lockData.exclude_monthly_actual || false);
               request.input('exclude_annual_target', sql.Bit, lockData.exclude_annual_target || false);
               request.input('created_by', sql.Int, user.id);
+              const bulkOkind =
+                (lockData.objective_kind || 'bau').toString().toLowerCase() === 'strategic' ? 'strategic' : 'bau';
+              request.input('objective_kind', sql.NVarChar, bulkOkind);
 
               const result = await request.query(`
                 INSERT INTO field_locks 
@@ -1985,14 +2034,14 @@ const handler = rateLimiter('general')(
                  lock_annual_target, lock_monthly_target, lock_monthly_actual, lock_all_other_fields,
                  lock_add_objective, lock_delete_objective,
                  lock_type, kpi, department_id, department_objective_id, 
-                 exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by)
+                 exclude_monthly_target, exclude_monthly_actual, exclude_annual_target, created_by, objective_kind)
                 OUTPUT INSERTED.*
                 VALUES 
                 (@scope_type, @user_scope, @user_ids, @kpi_scope, @kpi_ids, @objective_scope, @objective_ids,
                  @lock_annual_target, @lock_monthly_target, @lock_monthly_actual, @lock_all_other_fields,
                  @lock_add_objective, @lock_delete_objective,
                  @lock_type, @kpi, @department_id, @department_objective_id,
-                 @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by)
+                 @exclude_monthly_target, @exclude_monthly_actual, @exclude_annual_target, @created_by, @objective_kind)
               `);
               results.push(result.recordset[0]);
             }
@@ -2236,6 +2285,187 @@ const handler = rateLimiter('general')(
             statusCode: 200,
             headers,
             body: JSON.stringify({ success: true, data: getResult.recordset[0] })
+          };
+        }
+      }
+
+      // ========== STRATEGIC OBJECTIVE DATA SOURCE MAPPING (parallel to mappings) ==========
+      if (resource === 'strategic-mappings') {
+        if (method === 'GET' && !action && !id) {
+          if (user.role !== 'Admin' && user.role !== 'CEO') {
+            return {
+              statusCode: 403,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Access denied. Admin or CEO role required.' }),
+            };
+          }
+          const request = pool.request();
+          const result = await request.query(`
+            SELECT
+              m.strategic_department_objective_id AS strategic_department_objective_id,
+              s.kpi,
+              s.activity,
+              s.department_id,
+              d.name AS department_name,
+              m.pms_project_name,
+              m.pms_metric_name,
+              m.target_source,
+              m.actual_source,
+              m.odoo_project_name,
+              m.derived_project_name,
+              m.created_at,
+              m.updated_at
+            FROM strategic_objective_data_source_mapping m
+            INNER JOIN strategic_department_objectives s ON m.strategic_department_objective_id = s.id
+            LEFT JOIN departments d ON s.department_id = d.id
+            ORDER BY s.department_id, s.kpi, s.activity
+          `);
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset }),
+          };
+        }
+
+        if (method === 'GET' && id) {
+          const request = pool.request();
+          request.input('sid', sql.Int, id);
+          const result = await request.query(`
+            SELECT
+              m.strategic_department_objective_id AS strategic_department_objective_id,
+              s.kpi,
+              s.activity,
+              s.department_id,
+              d.name AS department_name,
+              m.pms_project_name,
+              m.pms_metric_name,
+              m.target_source,
+              m.actual_source,
+              m.odoo_project_name,
+              m.derived_project_name,
+              m.created_at,
+              m.updated_at
+            FROM strategic_objective_data_source_mapping m
+            INNER JOIN strategic_department_objectives s ON m.strategic_department_objective_id = s.id
+            LEFT JOIN departments d ON s.department_id = d.id
+            WHERE m.strategic_department_objective_id = @sid
+          `);
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Strategic mapping not found' }),
+            };
+          }
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset[0] }),
+          };
+        }
+
+        if (method === 'PUT' && id) {
+          if (user.role !== 'Admin' && user.role !== 'CEO') {
+            return {
+              statusCode: 403,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Access denied. Admin or CEO role required.' }),
+            };
+          }
+          const body = JSON.parse(event.body || '{}');
+          const {
+            pms_project_name,
+            pms_metric_name,
+            target_source,
+            actual_source,
+            odoo_project_name,
+            derived_project_name,
+          } = body;
+          const targetSourceValue = target_source === 'pms_target' || target_source === 'derived' ? target_source : null;
+          if (
+            !actual_source ||
+            !['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived'].includes(actual_source)
+          ) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error:
+                  'actual_source is required and must be "manual", "pms_actual", "odoo_services_done", "odoo_services_created", or "derived"',
+              }),
+            };
+          }
+          if (
+            (actual_source === 'odoo_services_done' || actual_source === 'odoo_services_created') &&
+            !odoo_project_name
+          ) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'odoo_project_name is required when Actual From is Odoo ServicesDone or Odoo ServicesCreated',
+              }),
+            };
+          }
+          const needsDerived = targetSourceValue === 'derived' || actual_source === 'derived';
+          if (needsDerived && !derived_project_name) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'derived_project_name is required when Target From or Actual From is Derived',
+              }),
+            };
+          }
+          const needsPms = targetSourceValue === 'pms_target' || actual_source === 'pms_actual';
+          if (needsPms && (!pms_project_name || !pms_metric_name)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error:
+                  'pms_project_name and pms_metric_name are required when Target From is PMS or Actual From is PMS Actual',
+              }),
+            };
+          }
+          const request = pool.request();
+          request.input('strategic_department_objective_id', sql.Int, id);
+          request.input('pms_project_name', sql.NVarChar, pms_project_name || null);
+          request.input('pms_metric_name', sql.NVarChar, pms_metric_name || null);
+          request.input('target_source', sql.NVarChar, targetSourceValue);
+          request.input('actual_source', sql.NVarChar, actual_source);
+          request.input('odoo_project_name', sql.NVarChar, odoo_project_name || null);
+          request.input('derived_project_name', sql.NVarChar, derived_project_name || null);
+          await request.query(`
+            MERGE strategic_objective_data_source_mapping AS target
+            USING (SELECT @strategic_department_objective_id AS strategic_department_objective_id) AS source
+            ON target.strategic_department_objective_id = source.strategic_department_objective_id
+            WHEN MATCHED THEN
+              UPDATE SET
+                pms_project_name = @pms_project_name,
+                pms_metric_name = @pms_metric_name,
+                target_source = @target_source,
+                actual_source = @actual_source,
+                odoo_project_name = @odoo_project_name,
+                derived_project_name = @derived_project_name,
+                updated_at = GETDATE()
+            WHEN NOT MATCHED THEN
+              INSERT (strategic_department_objective_id, pms_project_name, pms_metric_name, target_source, actual_source, odoo_project_name, derived_project_name, created_at, updated_at)
+              VALUES (@strategic_department_objective_id, @pms_project_name, @pms_metric_name, @target_source, @actual_source, @odoo_project_name, @derived_project_name, GETDATE(), GETDATE());
+          `);
+          const getRequest = pool.request();
+          getRequest.input('sid', sql.Int, id);
+          const getResult = await getRequest.query(`
+            SELECT * FROM strategic_objective_data_source_mapping WHERE strategic_department_objective_id = @sid
+          `);
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: getResult.recordset[0] }),
           };
         }
       }

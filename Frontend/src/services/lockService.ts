@@ -51,7 +51,8 @@ export async function batchCheckLocks(
     const lockMap = new Map<string, LockCheckResponse>();
     
     result.results.forEach((checkResult) => {
-      const key = `${checkResult.field_type}-${checkResult.department_objective_id}${checkResult.month ? `-${checkResult.month}` : ''}`;
+      const kind = checkResult.objective_kind || 'bau';
+      const key = `${checkResult.field_type}-${checkResult.department_objective_id}-${kind}${checkResult.month ? `-${checkResult.month}` : ''}`;
       lockMap.set(key, checkResult);
     });
     
@@ -61,7 +62,8 @@ export async function batchCheckLocks(
     // Return empty map with all unlocked on error
     const lockMap = new Map<string, LockCheckResponse>();
     checks.forEach((check) => {
-      const key = `${check.field_type}-${check.department_objective_id}${check.month ? `-${check.month}` : ''}`;
+      const kind = check.objective_kind || 'bau';
+      const key = `${check.field_type}-${check.department_objective_id}-${kind}${check.month ? `-${check.month}` : ''}`;
       lockMap.set(key, { is_locked: false });
     });
     return lockMap;
@@ -74,11 +76,13 @@ export async function batchCheckLocks(
 export function createLockCheckRequest(
   fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
-  month?: string
+  month?: string,
+  objective_kind: 'bau' | 'strategic' = 'bau'
 ): LockCheckRequest {
   return {
     field_type: fieldType,
     department_objective_id: departmentObjectiveId,
     month,
+    objective_kind,
   };
 }

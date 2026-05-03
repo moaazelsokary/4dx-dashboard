@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { getKPIsWithRASCI } from '@/services/wigService';
 import { Loader2, Search, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { MainPlanObjective } from '@/types/wig';
 
 interface KPISelectorProps {
   value?: string | string[]; // Can be single string, array, or delimited string
@@ -14,6 +15,11 @@ interface KPISelectorProps {
   placeholder?: string;
   disabled?: boolean;
   multiple?: boolean; // Enable multi-select
+  /** Strategic KPIs: list comes from main plan; single-select only. */
+  kpiSource?: 'rasci' | 'mainplan';
+  mainPlanObjectives?: MainPlanObjective[];
+  selectedMainPlanObjectiveId?: number | null;
+  onMainPlanObjectiveChange?: (objective: MainPlanObjective | null) => void;
 }
 
 const KPI_DELIMITER = '||'; // Delimiter for storing multiple KPIs
@@ -23,13 +29,26 @@ export default function KPISelector({
   onValueChange, 
   placeholder = 'Select KPI', 
   disabled = false,
-  multiple = true 
+  multiple = true,
+  kpiSource = 'rasci',
+  mainPlanObjectives = [],
+  selectedMainPlanObjectiveId = null,
+  onMainPlanObjectiveChange,
 }: KPISelectorProps) {
-  const [kpis, setKpis] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isMainPlan = kpiSource === 'mainplan';
+  const [rasciKpis, setRasciKpis] = useState<string[]>([]);
+  const [loading, setLoading] = useState(!isMainPlan);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const mainPlanRows = useMemo(() => {
+    return [...(mainPlanObjectives || [])].sort((a, b) => {
+      const p = a.pillar.localeCompare(b.pillar, undefined, { sensitivity: 'base' });
+      if (p !== 0) return p;
+      return a.kpi.localeCompare(b.kpi, undefined, { sensitivity: 'base' });
+    });
+  }, [mainPlanObjectives]);
 
   // Parse value to array of KPIs
   const parseValue = (val: string | string[] | undefined): string[] => {
@@ -48,11 +67,16 @@ export default function KPISelector({
   const selectedKPIs = parseValue(value);
 
   useEffect(() => {
+    if (isMainPlan) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     const fetchKPIs = async () => {
       try {
         setLoading(true);
         const kpiList = await getKPIsWithRASCI();
-        setKpis(kpiList);
+        setRasciKpis(kpiList);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load KPIs');
         console.error('Error fetching KPIs:', err);
@@ -61,18 +85,28 @@ export default function KPISelector({
       }
     };
 
-    fetchKPIs();
-  }, []);
+    void fetchKPIs();
+  }, [isMainPlan]);
 
   // Filter KPIs based on search term
-  const filteredKPIs = kpis.filter(kpi =>
+  const filteredRasciKpis = rasciKpis.filter((kpi) =>
     kpi.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const filteredMainPlanRows = mainPlanRows.filter((m) => {
+    const q = searchTerm.toLowerCase();
+    return (
+      m.kpi.toLowerCase().includes(q) ||
+      m.objective.toLowerCase().includes(q) ||
+      m.pillar.toLowerCase().includes(q) ||
+      m.target.toLowerCase().includes(q)
+    );
+  });
 
   const handleToggleKPI = (kpi: string) => {
     if (multiple) {
       const newSelected = selectedKPIs.includes(kpi)
-        ? selectedKPIs.filter(k => k !== kpi)
+        ? selectedKPIs.filter((k) => k !== kpi)
         : [...selectedKPIs, kpi];
       onValueChange(newSelected);
     } else {
@@ -81,10 +115,27 @@ export default function KPISelector({
     }
   };
 
+  const handleToggleMainPlanRow = (m: MainPlanObjective) => {
+    if (selectedMainPlanObjectiveId === m.id) {
+      onValueChange([]);
+      onMainPlanObjectiveChange?.(null);
+      setOpen(false);
+      return;
+    }
+    onValueChange([m.kpi]);
+    onMainPlanObjectiveChange?.(m);
+    setOpen(false);
+  };
+
   const handleRemoveKPI = (kpi: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isMainPlan) {
+      onValueChange([]);
+      onMainPlanObjectiveChange?.(null);
+      return;
+    }
     if (multiple) {
-      const newSelected = selectedKPIs.filter(k => k !== kpi);
+      const newSelected = selectedKPIs.filter((k) => k !== kpi);
       onValueChange(newSelected);
     } else {
       onValueChange('');
@@ -122,7 +173,10 @@ export default function KPISelector({
           role="combobox"
           aria-expanded={open}
           className="w-full justify-between"
-          disabled={disabled || kpis.length === 0}
+          disabled={
+            disabled ||
+            (isMainPlan ? mainPlanRows.length === 0 : rasciKpis.length === 0)
+          }
           aria-label={selectedKPIs.length === 0 ? placeholder : `Selected ${selectedKPIs.length} KPI${selectedKPIs.length > 1 ? 's' : ''}`}
           title={selectedKPIs.length === 0 ? placeholder : selectedKPIs.join(', ')}
         >
@@ -149,12 +203,44 @@ export default function KPISelector({
           data-dropdown-scroll
         >
           <div className="space-y-1 p-2">
-            {filteredKPIs.length === 0 ? (
+            {isMainPlan ? (
+              filteredMainPlanRows.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No main plan objectives loaded
+                </div>
+              ) : (
+                filteredMainPlanRows.map((m) => {
+                  const isSelected = selectedMainPlanObjectiveId === m.id;
+                  return (
+                    <div
+                      key={m.id}
+                      className={cn(
+                        'flex items-start gap-2 p-2 rounded-md cursor-pointer border border-transparent',
+                        isSelected ? 'bg-primary/10 border-primary/30' : 'hover:bg-accent'
+                      )}
+                      onClick={() => handleToggleMainPlanRow(m)}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => handleToggleMainPlanRow(m)}
+                        className="mt-0.5"
+                      />
+                      <div className="text-sm flex-1 min-w-0">
+                        <div className="font-medium break-words">{m.kpi}</div>
+                        <div className="text-muted-foreground text-xs mt-0.5 break-words">
+                          {m.pillar} · {m.objective}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )
+            ) : filteredRasciKpis.length === 0 ? (
               <div className="text-sm text-muted-foreground text-center py-4">
                 No KPIs found
               </div>
             ) : (
-              filteredKPIs.map((kpi) => {
+              filteredRasciKpis.map((kpi) => {
                 const isSelected = selectedKPIs.includes(kpi);
                 return (
                   <div

@@ -4,6 +4,9 @@ import type {
   RASCIWithExistence,
   Department,
   DepartmentObjective,
+  StrategicDepartmentObjective,
+  StrategicMonthlyData,
+  StrategicMainObjectiveLink,
   MonthlyData,
   PlanChecker,
   HierarchicalPlan,
@@ -16,23 +19,25 @@ import { getUserFriendlyError, type AppError } from '@/utils/errorMessages';
 import { requestQueue } from '@/utils/requestQueue';
 
 // Use local proxy for development, Netlify function for production
-const isLocalhost = window.location.hostname === 'localhost';
-const API_BASE_URL = isLocalhost
-  ? '/api/wig'  // Proxied to wig-proxy (3003) by Vite in dev
+const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+const isLocalWigProxy =
+  hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+const API_BASE_URL = isLocalWigProxy
+  ? '/api/wig' // Proxied to wig-proxy (3003) by Vite in dev
   : '/.netlify/functions/wig-api';
 
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 3;
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  // Include CSRF token and auth header for POST, PUT, DELETE requests
+  // CSRF on mutating methods only. Auth (Bearer) on all methods so GETs can return
+  // role-scoped data (e.g. strategic meeting_notes / me_e / active / notes for Admin/CEO).
   const method = options?.method || 'GET';
-  const needsAuth = ['POST', 'PUT', 'DELETE'].includes(method.toUpperCase());
-  const csrfHeaders = needsAuth ? getCsrfHeader() : {};
-  const authHeaders = needsAuth ? getAuthHeader() : {};
+  const isMutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase());
+  const csrfHeaders = isMutating ? getCsrfHeader() : {};
+  const authHeaders = getAuthHeader();
 
-  // Debug: Log auth headers for POST requests
-  if (needsAuth && process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development' && isMutating) {
     console.log('[WIG Service] Auth headers:', authHeaders);
     console.log('[WIG Service] Has token:', !!authHeaders['Authorization']);
   }
@@ -256,6 +261,79 @@ export async function updateDepartmentObjectivesOrder(updates: Array<{ id: numbe
   return fetchAPI<{ success: boolean }>('/department-objectives/update-order', {
     method: 'POST',
     body: JSON.stringify({ updates }),
+  });
+}
+
+// Strategic department objectives (no RASCI)
+export async function getStrategicDepartmentObjectives(params?: {
+  department_id?: number;
+  department_code?: string;
+}): Promise<StrategicDepartmentObjective[]> {
+  const queryParams = new URLSearchParams();
+  if (params?.department_id) queryParams.append('department_id', params.department_id.toString());
+  if (params?.department_code) queryParams.append('department_code', params.department_code);
+  const query = queryParams.toString();
+  return fetchAPI<StrategicDepartmentObjective[]>(`/strategic-department-objectives${query ? `?${query}` : ''}`);
+}
+
+export async function createStrategicDepartmentObjective(
+  data: Omit<StrategicDepartmentObjective, 'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'>
+): Promise<StrategicDepartmentObjective> {
+  return fetchAPI<StrategicDepartmentObjective>('/strategic-department-objectives', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateStrategicDepartmentObjective(
+  id: number,
+  data: Partial<Omit<StrategicDepartmentObjective, 'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'>>
+): Promise<StrategicDepartmentObjective> {
+  return fetchAPI<StrategicDepartmentObjective>(`/strategic-department-objectives/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteStrategicDepartmentObjective(id: number): Promise<{ success: boolean; deletedRows: number }> {
+  return fetchAPI<{ success: boolean; deletedRows: number }>(`/strategic-department-objectives/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function updateStrategicDepartmentObjectivesOrder(
+  updates: Array<{ id: number; sort_order: number }>
+): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>('/strategic-department-objectives/update-order', {
+    method: 'POST',
+    body: JSON.stringify({ updates }),
+  });
+}
+
+export async function getStrategicMonthlyData(strategicDepartmentObjectiveId: number): Promise<StrategicMonthlyData[]> {
+  return fetchAPI<StrategicMonthlyData[]>(`/strategic-monthly-data/${strategicDepartmentObjectiveId}`);
+}
+
+export async function createOrUpdateStrategicMonthlyData(
+  data: Omit<StrategicMonthlyData, 'id' | 'created_at' | 'updated_at'>
+): Promise<StrategicMonthlyData> {
+  return fetchAPI<StrategicMonthlyData>('/strategic-monthly-data', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getStrategicMainObjectiveLinks(strategicId: number): Promise<StrategicMainObjectiveLink[]> {
+  return fetchAPI<StrategicMainObjectiveLink[]>(`/strategic-department-objectives/${strategicId}/main-objectives`);
+}
+
+export async function putStrategicMainObjectiveLinks(
+  strategicId: number,
+  mainObjectiveIds: number[]
+): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>(`/strategic-department-objectives/${strategicId}/main-objectives`, {
+    method: 'PUT',
+    body: JSON.stringify({ main_objective_ids: mainObjectiveIds }),
   });
 }
 

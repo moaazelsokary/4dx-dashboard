@@ -24,6 +24,12 @@ import {
   updateDepartmentObjective,
   deleteDepartmentObjective,
   updateDepartmentObjectivesOrder,
+  getStrategicDepartmentObjectives,
+  createStrategicDepartmentObjective,
+  updateStrategicDepartmentObjective,
+  deleteStrategicDepartmentObjective,
+  updateStrategicDepartmentObjectivesOrder,
+  putStrategicMainObjectiveLinks,
   getMainObjectives,
   getDepartments,
   getRASCIByDepartment,
@@ -38,7 +44,14 @@ import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import MEKPIsModal from '@/components/wig/MEKPIsModal';
 import MEKPIFormModal from '@/components/wig/MEKPIFormModal';
 import ObjectiveFormModal from '@/components/wig/ObjectiveFormModal';
-import type { DepartmentObjective, MainPlanObjective, Department, RASCIWithExistence, HierarchicalPlan } from '@/types/wig';
+import type {
+  DepartmentObjective,
+  StrategicDepartmentObjective,
+  MainPlanObjective,
+  Department,
+  RASCIWithExistence,
+  HierarchicalPlan,
+} from '@/types/wig';
 import { LogOut, Plus, Edit2, Trash2, Calendar, Loader2, RefreshCw, Filter, X, Check, Search, Folder, ZoomIn, ZoomOut, Layers, Sparkles, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DndContext, closestCenter, DragEndEvent, type DraggableAttributes } from '@dnd-kit/core';
@@ -67,6 +80,12 @@ import { useOperationLock } from '@/hooks/useOperationLock';
 import { Lock as LockIcon } from 'lucide-react';
 import type { User } from '@/services/authService';
 
+/** Meeting notes / M&E / Active / Notes columns — Admin + CEO (API returns data for both). */
+function canViewStrategicSensitiveColumns(role: string | undefined): boolean {
+  const r = (role ?? '').trim().toLowerCase();
+  return r === 'admin' || r === 'ceo';
+}
+
 function apiErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'object' && err !== null && 'response' in err) {
@@ -74,6 +93,39 @@ function apiErrorMessage(err: unknown, fallback: string): string {
     return r.response?.data?.error ?? fallback;
   }
   return fallback;
+}
+
+/** Strategic KPIs use sort_order per department; cluster by department then order like BAU. */
+function compareStrategicObjectives(a: StrategicDepartmentObjective, b: StrategicDepartmentObjective): number {
+  const aKey = (a.department_code || `id:${a.department_id}`).toLowerCase();
+  const bKey = (b.department_code || `id:${b.department_id}`).toLowerCase();
+  if (aKey !== bKey) return aKey.localeCompare(bKey);
+  const aso = a.sort_order ?? a.id;
+  const bso = b.sort_order ?? b.id;
+  if (aso !== bso) return aso - bso;
+  return a.id - b.id;
+}
+
+function replaceStrategicDepartmentBlock(
+  fullList: StrategicDepartmentObjective[],
+  deptId: number,
+  newBlock: StrategicDepartmentObjective[]
+): StrategicDepartmentObjective[] {
+  const out: StrategicDepartmentObjective[] = [];
+  let i = 0;
+  while (i < fullList.length) {
+    const o = fullList[i];
+    if (o.department_id !== deptId) {
+      out.push(o);
+      i++;
+      continue;
+    }
+    out.push(...newBlock);
+    while (i < fullList.length && fullList[i].department_id === deptId) {
+      i++;
+    }
+  }
+  return out;
 }
 
 type DepartmentObjectiveUpdatePayload = Partial<
@@ -90,17 +142,20 @@ type SortableRowRenderProps = {
 function DeleteButtonWithLockCheck({ 
   objective, 
   departmentId, 
-  onDelete 
+  onDelete,
+  objectiveKind = 'bau',
 }: { 
-  objective: DepartmentObjective; 
+  objective: DepartmentObjective | StrategicDepartmentObjective; 
   departmentId: number;
   onDelete: () => void;
+  objectiveKind?: 'bau' | 'strategic';
 }) {
   const { isLocked, lockReason } = useOperationLock(
     'delete',
     objective.kpi,
     departmentId,
-    true
+    true,
+    objectiveKind
   );
 
   return (
@@ -162,6 +217,8 @@ interface MEEKPI {
   responsible?: string;
   folder_link?: string;
 }
+
+const KPI_MODE_STORAGE_KEY = 'department-objectives-kpi-mode';
 
 const KPI_DELIMITER = '||'; // Delimiter for storing multiple KPIs
 const TYPE_DELIMITER = '||'; // Delimiter for storing multiple types (matching KPI order)
@@ -235,6 +292,15 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
 
 export default function DepartmentObjectives() {
   const [user, setUser] = useState<User | null>(null);
+  const [kpiMode, setKpiMode] = useState<'bau' | 'strategic'>(() => {
+    try {
+      const v = localStorage.getItem(KPI_MODE_STORAGE_KEY);
+      return v === 'strategic' ? 'strategic' : 'bau';
+    } catch {
+      return 'bau';
+    }
+  });
+  const [strategicObjectives, setStrategicObjectives] = useState<StrategicDepartmentObjective[]>([]);
   const [objectives, setObjectives] = useState<DepartmentObjective[]>([]);
   const [mainObjectives, setMainObjectives] = useState<MainPlanObjective[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -253,7 +319,11 @@ export default function DepartmentObjectives() {
   const [isAdding, setIsAdding] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
-  const [modalInitialData, setModalInitialData] = useState<Partial<DepartmentObjective> | undefined>(undefined);
+  const [modalInitialData, setModalInitialData] = useState<
+    | (Partial<DepartmentObjective> &
+        Partial<StrategicDepartmentObjective> & { main_objective_ids?: number[] })
+    | undefined
+  >(undefined);
   const [meKPIs, setMeKPIs] = useState<MEEKPI[]>([]);
   const [selectedMEObjective, setSelectedMEObjective] = useState<DepartmentObjective | null>(null);
   const [isMEModalOpen, setIsMEModalOpen] = useState(false);
@@ -300,7 +370,13 @@ export default function DepartmentObjectives() {
     type: 120,
     target: 120,
     responsible: 180,
+    definition: 300,
+    measurement: 300,
     mov: 200,
+    admin_meeting: 300,
+    admin_mee: 140,
+    admin_active: 140,
+    admin_notes: 300,
     actions: 150
   });
 
@@ -368,12 +444,17 @@ export default function DepartmentObjectives() {
     }
     return undefined;
   }, [user, selectedDepartment, departments]);
+
+  const rowSource = useMemo<(DepartmentObjective | StrategicDepartmentObjective)[]>(() => {
+    return kpiMode === 'strategic' ? strategicObjectives : objectives;
+  }, [kpiMode, strategicObjectives, objectives]);
   
   const { isLocked: isAddLocked, lockReason: addLockReason } = useOperationLock(
     'add',
     undefined, // No specific KPI - check if user has any add locks
     currentDepartmentId,
-    !!user && !!currentDepartmentId
+    !!user && !!currentDepartmentId,
+    kpiMode === 'strategic' ? 'strategic' : 'bau'
   );
   
   // Removed ref caching - server data is now authoritative with cache-busting
@@ -443,6 +524,16 @@ export default function DepartmentObjectives() {
       const rasciData = dashboardData.rasci;
       const rasciSummaryData = dashboardData.rasciSummary || [];
       const hierarchical = dashboardData.hierarchicalPlan;
+
+      let strategicSorted: StrategicDepartmentObjective[] = [];
+      try {
+        const stratParams = departmentCode ? { department_code: departmentCode } : undefined;
+        const strat = await getStrategicDepartmentObjectives(stratParams);
+        strategicSorted = [...strat].sort(compareStrategicObjectives);
+      } catch (stratErr) {
+        console.warn('[DepartmentObjectives] Strategic objectives load failed:', stratErr);
+        strategicSorted = [];
+      }
       
       // Sort by sort_order if available, otherwise by id
       // Server already orders by updated_at DESC, so latest edits appear first
@@ -464,6 +555,7 @@ export default function DepartmentObjectives() {
         setRasciMetrics(rasciData);
         setRasciSummary(rasciSummaryData);
         setHierarchicalData(hierarchical);
+        setStrategicObjectives(strategicSorted);
       });
     } catch (err) {
       toast({
@@ -478,8 +570,8 @@ export default function DepartmentObjectives() {
     }
   };
 
-  const startEdit = (obj: DepartmentObjective) => {
-    setModalInitialData(obj);
+  const startEdit = (obj: DepartmentObjective | StrategicDepartmentObjective) => {
+    setModalInitialData({ ...obj });
     setModalMode('edit');
     setIsModalOpen(true);
   };
@@ -543,6 +635,61 @@ export default function DepartmentObjectives() {
           description: `Department "${departmentCode}" not found. Available departments: ${departments.map(d => d.code).join(', ')}`,
           variant: 'destructive',
         });
+        return;
+      }
+
+      type StrategicSavePayload = Partial<DepartmentObjective> &
+        Partial<StrategicDepartmentObjective> & { main_objective_ids?: number[] };
+      const strategicData = data as StrategicSavePayload;
+
+      if (kpiMode === 'strategic') {
+        if (modalMode === 'add') {
+          const created = await createStrategicDepartmentObjective({
+            department_id: department.id,
+            kpi: strategicData.kpi ?? null,
+            activity: strategicData.activity ?? null,
+            type: (strategicData.type as StrategicDepartmentObjective['type']) || 'Direct',
+            activity_target: strategicData.activity_target ?? 0,
+            target_type: strategicData.target_type || 'number',
+            responsible_person: strategicData.responsible_person?.trim() ?? '',
+            mov: strategicData.mov?.trim() ?? '',
+            main_objective_id: strategicData.main_objective_id ?? null,
+            definition: strategicData.definition ?? null,
+            measurement_aspect: strategicData.measurement_aspect ?? null,
+            meeting_notes: strategicData.meeting_notes ?? null,
+            me_e: strategicData.me_e ?? null,
+            active: strategicData.active ?? null,
+            notes: strategicData.notes ?? null,
+          });
+          await putStrategicMainObjectiveLinks(created.id, strategicData.main_objective_ids ?? []);
+          setIsModalOpen(false);
+          setModalInitialData(undefined);
+          await loadData(false);
+          toast({ title: 'Success', description: 'Strategic objective created successfully' });
+          return;
+        }
+        if (!strategicData.id) return;
+        await updateStrategicDepartmentObjective(strategicData.id, {
+          kpi: strategicData.kpi,
+          activity: strategicData.activity,
+          type: strategicData.type,
+          activity_target: strategicData.activity_target,
+          target_type: strategicData.target_type,
+          responsible_person: strategicData.responsible_person,
+          mov: strategicData.mov,
+          main_objective_id: strategicData.main_objective_id,
+          definition: strategicData.definition,
+          measurement_aspect: strategicData.measurement_aspect,
+          meeting_notes: strategicData.meeting_notes,
+          me_e: strategicData.me_e,
+          active: strategicData.active,
+          notes: strategicData.notes,
+        });
+        await putStrategicMainObjectiveLinks(strategicData.id, strategicData.main_objective_ids ?? []);
+        setIsModalOpen(false);
+        setModalInitialData(undefined);
+        await loadData(false);
+        toast({ title: 'Success', description: 'Strategic objective updated successfully' });
         return;
       }
 
@@ -859,6 +1006,42 @@ export default function DepartmentObjectives() {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
+      if (kpiMode === 'strategic') {
+        const oldList = [...strategicObjectives];
+        const activeId = Number(active.id);
+        const overId = Number(over.id);
+        const activeObj = oldList.find((obj) => obj.id === activeId);
+        const overObj = oldList.find((obj) => obj.id === overId);
+        if (!activeObj || !overObj) return;
+        if (activeObj.department_id !== overObj.department_id) {
+          return;
+        }
+        const deptId = activeObj.department_id;
+        const block = oldList.filter((o) => o.department_id === deptId);
+        const oldIndexInBlock = block.findIndex((o) => o.id === activeId);
+        const newIndexInBlock = block.findIndex((o) => o.id === overId);
+        if (oldIndexInBlock === -1 || newIndexInBlock === -1) return;
+        const reorderedBlock = [...block];
+        const [movedItem] = reorderedBlock.splice(oldIndexInBlock, 1);
+        if (oldIndexInBlock < newIndexInBlock) {
+          reorderedBlock.splice(newIndexInBlock - 1, 0, movedItem);
+        } else {
+          reorderedBlock.splice(newIndexInBlock, 0, movedItem);
+        }
+        const reordered = replaceStrategicDepartmentBlock(oldList, deptId, reorderedBlock);
+        setStrategicObjectives(reordered);
+        try {
+          const updates = reorderedBlock.map((obj, index) => ({ id: obj.id, sort_order: index + 1 }));
+          await updateStrategicDepartmentObjectivesOrder({ updates });
+        } catch (err) {
+          setStrategicObjectives(oldList);
+          const errorMessage = err instanceof Error ? err.message : 'Failed to save row order';
+          console.error('Error saving strategic row order:', err);
+          toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
+        }
+        return;
+      }
+
       const oldObjectives = [...objectives];
       const oldIndex = oldObjectives.findIndex(obj => obj.id === Number(active.id));
       const newIndex = oldObjectives.findIndex(obj => obj.id === Number(over.id));
@@ -1040,21 +1223,29 @@ export default function DepartmentObjectives() {
     if (!deletingId) return;
 
     try {
-      const deletedObjective = objectives.find(obj => obj.id === deletingId);
+      const deletedObjective = rowSource.find((obj) => obj.id === deletingId);
       console.log('[DepartmentObjectives] Deleting objective:', deletingId);
       
       // Delete from database FIRST (before optimistic update)
       // This ensures lock checks happen before UI update
-      await deleteDepartmentObjective(deletingId);
+      if (kpiMode === 'strategic') {
+        await deleteStrategicDepartmentObjective(deletingId);
+      } else {
+        await deleteDepartmentObjective(deletingId);
+      }
       
       // Only remove from UI after successful deletion
       const deletedId = deletingId;
       flushSync(() => {
-        setObjectives(prev => {
-          const filtered = prev.filter(obj => obj.id !== deletedId);
-          console.log('[DepartmentObjectives] Removed from state. Previous count:', prev.length, 'New count:', filtered.length);
-          return filtered;
-        });
+        if (kpiMode === 'strategic') {
+          setStrategicObjectives((prev) => prev.filter((obj) => obj.id !== deletedId));
+        } else {
+          setObjectives((prev) => {
+            const filtered = prev.filter((obj) => obj.id !== deletedId);
+            console.log('[DepartmentObjectives] Removed from state. Previous count:', prev.length, 'New count:', filtered.length);
+            return filtered;
+          });
+        }
         setDeletingId(null);
       });
       
@@ -1076,15 +1267,21 @@ export default function DepartmentObjectives() {
       console.error('[DepartmentObjectives] Delete failed:', err);
       
       // Restore the objective if it was optimistically removed
-      const deletedObjective = objectives.find(obj => obj.id === deletingId);
+      const deletedObjective = rowSource.find((obj) => obj.id === deletingId);
       if (deletedObjective) {
-        setObjectives(prev => {
-          const exists = prev.some(obj => obj.id === deletingId);
-          if (!exists) {
-            return [...prev, deletedObjective];
-          }
-          return prev;
-        });
+        if (kpiMode === 'strategic') {
+          setStrategicObjectives((prev) => {
+            const exists = prev.some((obj) => obj.id === deletingId);
+            if (!exists) return [...prev, deletedObjective as StrategicDepartmentObjective];
+            return prev;
+          });
+        } else {
+          setObjectives((prev) => {
+            const exists = prev.some((obj) => obj.id === deletingId);
+            if (!exists) return [...prev, deletedObjective as DepartmentObjective];
+            return prev;
+          });
+        }
       }
       
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete objective';
@@ -1299,35 +1496,35 @@ export default function DepartmentObjectives() {
   // Get unique values for each column (handle multiple KPIs) - memoized for performance
   const uniqueKPIs = useMemo(() => 
     Array.from(new Set(
-      objectives.flatMap(o => parseKPIs(o.kpi))
+      rowSource.flatMap(o => parseKPIs(o.kpi))
     )).sort(),
-    [objectives]
+    [rowSource]
   );
   const uniqueActivities = useMemo(() => 
-    Array.from(new Set(objectives.map(o => o.activity).filter(Boolean))).sort(),
-    [objectives]
+    Array.from(new Set(rowSource.map(o => o.activity).filter(Boolean))).sort(),
+    [rowSource]
   );
   const uniqueTypes = useMemo(() => 
-    Array.from(new Set(objectives.map(o => o.type).filter(Boolean))).sort(),
-    [objectives]
+    Array.from(new Set(rowSource.map(o => o.type).filter(Boolean))).sort(),
+    [rowSource]
   );
   const uniqueTargets = useMemo(() => 
-    Array.from(new Set(objectives.map(o => o.activity_target.toString()).filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b)),
-    [objectives]
+    Array.from(new Set(rowSource.map(o => o.activity_target.toString()).filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b)),
+    [rowSource]
   );
   const uniqueResponsible = useMemo(() => 
-    Array.from(new Set(objectives.map(o => o.responsible_person).filter(Boolean))).sort(),
-    [objectives]
+    Array.from(new Set(rowSource.map(o => o.responsible_person).filter(Boolean))).sort(),
+    [rowSource]
   );
   const uniqueMOVs = useMemo(() => 
-    Array.from(new Set(objectives.map(o => o.mov).filter(Boolean))).sort(),
-    [objectives]
+    Array.from(new Set(rowSource.map(o => o.mov).filter(Boolean))).sort(),
+    [rowSource]
   );
   
   // Get unique main objectives (with labels) - memoized for performance
   const uniqueMainObjectives = useMemo(() => {
     const mainObjectiveMap = new Map<string, string>();
-    objectives.forEach(obj => {
+    rowSource.forEach(obj => {
       if (obj.main_objective_id) {
         const mainObj = mainObjectives.find(o => o.id === obj.main_objective_id);
         if (mainObj) {
@@ -1339,11 +1536,11 @@ export default function DepartmentObjectives() {
       }
     });
     return Array.from(mainObjectiveMap.values()).sort();
-  }, [objectives, mainObjectives]);
+  }, [rowSource, mainObjectives]);
 
   // Filter objectives based on table filter state (list + condition modes)
   const filteredObjectives = useMemo(() => {
-    const filtered = objectives.filter((obj) => {
+    const filtered = rowSource.filter((obj) => {
       const objKPIs = parseKPIs(obj.kpi);
       const kpiList = getListSelected(tableFilterState, 'kpi');
       const kpiCond = getCondition(tableFilterState, 'kpi');
@@ -1418,7 +1615,7 @@ export default function DepartmentObjectives() {
       );
     });
     return filtered;
-  }, [objectives, tableFilterState, mainObjectives]);
+  }, [rowSource, tableFilterState, mainObjectives]);
 
   // NOW we can do conditional returns - AFTER all hooks
   // Skeleton loader component
@@ -1983,10 +2180,62 @@ export default function DepartmentObjectives() {
         <Tabs value={activeTab} className="w-full">
           <TabsContent value="objectives" className="mt-4">
         <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 min-w-0">
-                <CardTitle className="shrink-0">Department Objectives</CardTitle>
+          <CardHeader className="space-y-1 p-4 pb-3 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0">
+                <CardTitle className="shrink-0 text-base font-semibold leading-tight sm:text-lg">
+                  Department Objectives
+                </CardTitle>
+                <TooltipProvider delayDuration={200}>
+                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="KPI mode">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={kpiMode === 'bau' ? 'default' : 'outline'}
+                          className="h-8 px-2.5 text-xs sm:h-9 sm:px-3"
+                          onClick={() => {
+                            setKpiMode('bau');
+                            try {
+                              localStorage.setItem(KPI_MODE_STORAGE_KEY, 'bau');
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          BAU KPIs
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[240px]">
+                        <p>Business as usual — day-to-day operational KPIs.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={kpiMode === 'strategic' ? 'default' : 'outline'}
+                          className="h-8 px-2.5 text-xs sm:h-9 sm:px-3"
+                          onClick={() => {
+                            setKpiMode('strategic');
+                            try {
+                              localStorage.setItem(KPI_MODE_STORAGE_KEY, 'strategic');
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          Strategic KPIs
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[240px]">
+                        <p>Strategic plan KPIs (definitions, measurement, alignment).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
                 {departmentFilterSelect}
               </div>
               <div className="flex items-center gap-2 flex-wrap shrink-0 justify-end">
@@ -2197,6 +2446,30 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('responsible', e)}
                       />
                     </TableHead>
+                    {kpiMode === 'strategic' && (
+                      <>
+                        <TableHead
+                          style={{ width: columnWidths.definition, minWidth: columnWidths.definition, position: 'relative' }}
+                          className="border-r border-border/50"
+                        >
+                          <span>Definition</span>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                            onMouseDown={(e) => handleResizeStart('definition', e)}
+                          />
+                        </TableHead>
+                        <TableHead
+                          style={{ width: columnWidths.measurement, minWidth: columnWidths.measurement, position: 'relative' }}
+                          className="border-r border-border/50"
+                        >
+                          <span>Measurement</span>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                            onMouseDown={(e) => handleResizeStart('measurement', e)}
+                          />
+                        </TableHead>
+                      </>
+                    )}
                     <TableHead style={{ width: columnWidths.mov, minWidth: columnWidths.mov, position: 'relative' }} className="border-r border-border/50">
                       <div className="flex items-center gap-2">
                         <span>MOV</span>
@@ -2219,16 +2492,60 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('mov', e)}
                       />
                     </TableHead>
+                    {kpiMode === 'strategic' && canViewStrategicSensitiveColumns(user?.role) && (
+                      <>
+                        <TableHead
+                          style={{ width: columnWidths.admin_meeting, minWidth: columnWidths.admin_meeting, position: 'relative' }}
+                          className="border-r border-border/50"
+                        >
+                          <span>Meeting notes</span>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                            onMouseDown={(e) => handleResizeStart('admin_meeting', e)}
+                          />
+                        </TableHead>
+                        <TableHead
+                          style={{ width: columnWidths.admin_mee, minWidth: columnWidths.admin_mee, position: 'relative' }}
+                          className="border-r border-border/50"
+                        >
+                          <span>M&amp;E</span>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                            onMouseDown={(e) => handleResizeStart('admin_mee', e)}
+                          />
+                        </TableHead>
+                        <TableHead
+                          style={{ width: columnWidths.admin_active, minWidth: columnWidths.admin_active, position: 'relative' }}
+                          className="border-r border-border/50"
+                        >
+                          <span>Active</span>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                            onMouseDown={(e) => handleResizeStart('admin_active', e)}
+                          />
+                        </TableHead>
+                        <TableHead
+                          style={{ width: columnWidths.admin_notes, minWidth: columnWidths.admin_notes, position: 'relative' }}
+                          className="border-r border-border/50"
+                        >
+                          <span>Notes</span>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                            onMouseDown={(e) => handleResizeStart('admin_notes', e)}
+                          />
+                        </TableHead>
+                      </>
+                    )}
                     <TableHead className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={filteredObjectives.filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:')).map(obj => obj.id.toString())} strategy={verticalListSortingStrategy}>
+                    <SortableContext items={filteredObjectives.filter(obj => kpiMode === 'strategic' || (obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))).map(obj => obj.id.toString())} strategy={verticalListSortingStrategy}>
 
                       {/* Display regular objectives with their M&E KPIs */}
                       {filteredObjectives
-                        .filter(obj => obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))
+                        .filter(obj => kpiMode === 'strategic' || (obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:')))
                         .map((obj, index) => {
                           // Get M&E KPIs for this objective
                           const meKPIsForObjective = filteredObjectives.filter(
@@ -2258,7 +2575,12 @@ export default function DepartmentObjectives() {
                                     <>
                                       <TableCell style={{ width: columnWidths.index, minWidth: columnWidths.index }} className="text-center bg-primary/10 border-r border-border/50">
                                         <div className="w-full h-full flex items-center justify-center">
-                                          <span className="text-sm font-semibold text-primary">{index + 1}</span>
+                                          <span className="text-sm font-semibold text-primary">
+                                            {kpiMode === 'strategic' &&
+                                            (obj as StrategicDepartmentObjective).sort_order != null
+                                              ? (obj as StrategicDepartmentObjective).sort_order
+                                              : index + 1}
+                                          </span>
                                         </div>
                                       </TableCell>
                                       <TableCell className="font-medium border-r border-border/50" style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }}>
@@ -2299,12 +2621,56 @@ export default function DepartmentObjectives() {
                                       <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }} className="border-r border-border/50">
                                         <BidirectionalText>{obj.responsible_person}</BidirectionalText>
                                       </TableCell>
+                                      {kpiMode === 'strategic' && (
+                                        <>
+                                          <TableCell
+                                            style={{ width: columnWidths.definition, minWidth: columnWidths.definition }}
+                                            className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
+                                          >
+                                            {(obj as StrategicDepartmentObjective).definition || '—'}
+                                          </TableCell>
+                                          <TableCell
+                                            style={{ width: columnWidths.measurement, minWidth: columnWidths.measurement }}
+                                            className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
+                                          >
+                                            {(obj as StrategicDepartmentObjective).measurement_aspect || '—'}
+                                          </TableCell>
+                                        </>
+                                      )}
                                       <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }} className="border-r border-border/50">
                                         <BidirectionalText>{obj.mov}</BidirectionalText>
                                       </TableCell>
+                                      {kpiMode === 'strategic' && canViewStrategicSensitiveColumns(user?.role) && (
+                                        <>
+                                          <TableCell
+                                            style={{ width: columnWidths.admin_meeting, minWidth: columnWidths.admin_meeting }}
+                                            className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
+                                          >
+                                            {(obj as StrategicDepartmentObjective).meeting_notes || '—'}
+                                          </TableCell>
+                                          <TableCell
+                                            style={{ width: columnWidths.admin_mee, minWidth: columnWidths.admin_mee }}
+                                            className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
+                                          >
+                                            {(obj as StrategicDepartmentObjective).me_e || '—'}
+                                          </TableCell>
+                                          <TableCell
+                                            style={{ width: columnWidths.admin_active, minWidth: columnWidths.admin_active }}
+                                            className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
+                                          >
+                                            {(obj as StrategicDepartmentObjective).active || '—'}
+                                          </TableCell>
+                                          <TableCell
+                                            style={{ width: columnWidths.admin_notes, minWidth: columnWidths.admin_notes }}
+                                            className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
+                                          >
+                                            {(obj as StrategicDepartmentObjective).notes || '—'}
+                                          </TableCell>
+                                        </>
+                                      )}
                                       <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
                             <div className="flex justify-end gap-2">
-                              {meKPIsForObjective.length > 0 && (
+                              {kpiMode !== 'strategic' && meKPIsForObjective.length > 0 && (
                                 <Button
                                   type="button"
                                   size="sm"
@@ -2327,7 +2693,7 @@ export default function DepartmentObjectives() {
                                   M&E
                                 </Button>
                               )}
-                              {canModifyMEKPIs && (
+                              {kpiMode !== 'strategic' && canModifyMEKPIs && (
                                 <Button 
                                   type="button" 
                                   size="sm" 
@@ -2352,6 +2718,7 @@ export default function DepartmentObjectives() {
                               <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
                                 <MonthlyDataEditor 
                                   departmentObjectiveId={obj.id}
+                                  objectiveKind={kpiMode === 'strategic' ? 'strategic' : 'bau'}
                                   trigger={
                                     <Button 
                                       type="button" 
@@ -2388,6 +2755,7 @@ export default function DepartmentObjectives() {
                                 objective={obj}
                                 departmentId={obj.department_id}
                                 onDelete={() => setDeletingId(obj.id)}
+                                objectiveKind={kpiMode === 'strategic' ? 'strategic' : 'bau'}
                               />
                                 </div>
                               </TableCell>
@@ -2834,6 +3202,9 @@ export default function DepartmentObjectives() {
           initialData={modalInitialData}
           onSave={handleModalSave}
           existingResponsiblePersons={uniqueResponsible}
+          objectiveKind={kpiMode}
+          mainPlanObjectives={mainObjectives}
+          userRole={user?.role}
         />
 
         {/* M&E KPI Form Modal */}

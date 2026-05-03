@@ -12,17 +12,18 @@ export function useLockStatus(
   fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number | null,
   month?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  objectiveKind: 'bau' | 'strategic' = 'bau'
 ) {
   const { data, isLoading, error, refetch } = useQuery<LockCheckResponse>({
-    queryKey: ['lockStatus', fieldType, departmentObjectiveId, month],
+    queryKey: ['lockStatus', fieldType, departmentObjectiveId, month, objectiveKind],
     queryFn: async () => {
       if (!departmentObjectiveId) {
         console.log(`[Lock Check] Skipped - no objective ID for ${fieldType}`);
         return { is_locked: false };
       }
       console.log(`[Lock Check] Checking ${fieldType} for objective ${departmentObjectiveId}${month ? ` month ${month}` : ''}`);
-      const result = await checkLockStatus(fieldType, departmentObjectiveId, month);
+      const result = await checkLockStatus(fieldType, departmentObjectiveId, month, objectiveKind);
       console.log(`[Lock Check] Result for ${fieldType}:`, result);
       return result;
     },
@@ -78,7 +79,8 @@ export function useBatchLockStatus(
     const map = new Map<string, LockCheckResponse>();
     if (data?.results) {
       data.results.forEach((result) => {
-        const key = `${result.field_type}-${result.department_objective_id}${result.month ? `-${result.month}` : ''}`;
+        const kind = result.objective_kind || 'bau';
+        const key = `${result.field_type}-${result.department_objective_id}-${kind}${result.month ? `-${result.month}` : ''}`;
         map.set(key, result);
       });
     }
@@ -90,9 +92,10 @@ export function useBatchLockStatus(
     (
       fieldType: 'target' | 'monthly_target' | 'monthly_actual',
       departmentObjectiveId: number,
-      month?: string
+      month?: string,
+      objectiveKind: 'bau' | 'strategic' = 'bau'
     ): LockCheckResponse => {
-      const key = `${fieldType}-${departmentObjectiveId}${month ? `-${month}` : ''}`;
+      const key = `${fieldType}-${departmentObjectiveId}-${objectiveKind}${month ? `-${month}` : ''}`;
       return lockMap.get(key) || { is_locked: false };
     },
     [lockMap]
