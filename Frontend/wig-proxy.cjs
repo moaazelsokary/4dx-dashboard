@@ -1265,21 +1265,16 @@ app.post('/api/wig/checkers/calculate', async (req, res) => {
 const registerStrategicWigRoutes = require('./wig-proxy-strategic-routes.cjs');
 registerStrategicWigRoutes(app, { sql, getPool, setNoCacheHeaders, handleError, jwt });
 
+const { getDepartmentMonthlyDataWithLiveMapping } = require('./netlify/functions/utils/monthly-fill-from-cache.cjs');
+
 // Monthly Data Routes
 app.get('/api/wig/monthly-data/:deptObjId', async (req, res) => {
   try {
     setNoCacheHeaders(res);
     const pool = await getPool();
-    const request = pool.request();
-    request.input('dept_obj_id', sql.Int, parseInt(req.params.deptObjId));
-
-    const result = await request.query(`
-      SELECT * FROM department_monthly_data 
-      WHERE department_objective_id = @dept_obj_id 
-      ORDER BY updated_at DESC, month
-    `);
-
-    res.json(result.recordset);
+    const deptObjId = parseInt(req.params.deptObjId, 10);
+    const rows = await getDepartmentMonthlyDataWithLiveMapping(pool, deptObjId);
+    res.json(rows);
   } catch (error) {
     handleError(res, error, 'Error getting monthly data');
   }

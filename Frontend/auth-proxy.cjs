@@ -7,6 +7,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { handleAccountsCrud } = require('./netlify/functions/utils/user-accounts-crud.cjs');
 const { handlePowerbiDashboardsCrud } = require('./netlify/functions/utils/powerbi-dashboards-crud.cjs');
+const {
+  loadMetricsBundleFromPool,
+  fillDepartmentObjectiveMonthlyFromCache,
+} = require('./netlify/functions/utils/monthly-fill-from-cache.cjs');
 
 const app = express();
 const PORT = 3000;
@@ -336,52 +340,6 @@ async function handleAuthSession(req, res) {
 app.get('/api/auth/session', handleAuthSession);
 app.get('/.netlify/functions/auth-session', handleAuthSession);
 
-// Compute derived metric rows from pms/odoo data and definition
-function computeDerivedRows(pms, odoo, derivedDef) {
-  const def = Array.isArray(derivedDef.definition) ? derivedDef.definition : (JSON.parse(derivedDef.definition || '[]') || []);
-  const hasPms = def.some(d => d.source === 'pms');
-  const hasOdoo = def.some(d => d.source === 'odoo');
-  const source = hasPms && hasOdoo ? 'odoo & pms' : hasOdoo ? 'odoo' : 'pms';
-  const months = new Set();
-  for (const d of def) {
-    if (d.source === 'pms') {
-      (pms || []).filter(r => r.ProjectName === d.project && r.MetricName === (d.metric || '')).forEach(r => months.add(r.MonthYear));
-    } else if (d.source === 'odoo') {
-      (odoo || []).filter(r => r.Project === d.project).forEach(r => months.add(r.Month));
-    }
-  }
-  const rows = [];
-  for (const month of [...months].sort()) {
-    let target = null, actual = null, servicesCreated = null, servicesDone = null;
-    if (hasPms) {
-      for (const d of def) {
-        if (d.source !== 'pms') continue;
-        const m = (pms || []).find(r => r.ProjectName === d.project && r.MetricName === (d.metric || '') && r.MonthYear === month);
-        if (m) {
-          target = (target ?? 0) + (m.Target ?? 0);
-          actual = (actual ?? 0) + (m.Actual ?? 0);
-        }
-      }
-    }
-    if (hasOdoo) {
-      for (const d of def) {
-        if (d.source !== 'odoo') continue;
-        const m = (odoo || []).find(r => r.Project === d.project && r.Month === month);
-        if (m) {
-          servicesCreated = (servicesCreated ?? 0) + (m.ServicesCreated ?? 0);
-          servicesDone = (servicesDone ?? 0) + (m.ServicesDone ?? 0);
-        }
-      }
-    }
-    rows.push({
-      source, project: derivedDef.project_name, metric: null, month: month,
-      target: hasPms ? target : null, actual: hasPms ? actual : null,
-      servicesCreated: hasOdoo ? servicesCreated : null, servicesDone: hasOdoo ? servicesDone : null
-    });
-  }
-  return rows;
-}
-
 // Verify JWT and return user for Admin/CEO routes
 function getUserFromRequest(req) {
   const auth = req.headers?.authorization || req.headers?.Authorization;
@@ -407,30 +365,7 @@ app.get('/.netlify/functions/metrics-api', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   try {
     const p = await getDbPool();
-    const [pmsResult, odooResult, lastResult, derivedResult] = await Promise.all([
-      p.request().query(`
-        SELECT project_name AS ProjectName, metric_name AS MetricName, month AS MonthYear,
-               target_value AS Target, actual_value AS Actual, updated_at AS UpdatedAt
-        FROM dbo.pms_odoo_cache WHERE source = 'pms'
-        ORDER BY project_name, metric_name, month
-      `),
-      p.request().query(`
-        SELECT project_name AS Project, month AS Month, services_created AS ServicesCreated,
-               services_done AS ServicesDone, updated_at AS UpdatedAt
-        FROM dbo.pms_odoo_cache WHERE source = 'odoo'
-        ORDER BY month DESC, project_name
-      `),
-      p.request().query(`SELECT MAX(updated_at) AS last_updated FROM dbo.pms_odoo_cache`),
-      p.request().query(`SELECT id, project_name, source, definition FROM dbo.derived_metrics`).catch(() => ({ recordset: [] }))
-    ]);
-    const lastUpdated = lastResult.recordset[0]?.last_updated || null;
-    const pms = pmsResult.recordset || [];
-    const odoo = odooResult.recordset || [];
-    const derivedDefs = (derivedResult.recordset != null ? derivedResult.recordset : []) || [];
-    let derived = [];
-    for (const d of derivedDefs) {
-      derived = derived.concat(computeDerivedRows(pms, odoo, d));
-    }
+    const { pms, odoo, derived, derivedDefs, lastUpdated } = await loadMetricsBundleFromPool(p);
     res.json({
       success: true,
       data: {
@@ -607,6 +542,14 @@ async function syncPmsOdoo() {
   }).filter(Boolean))];
   console.log('[Auth Proxy] Sync: pms rows:', pmsData.length, 'odoo rows:', odooData.length, 'odoo projects:', odooProjects.join(', '));
   await writePmsOdooToCache(pmsData, odooData);
+  try {
+    const { fillAllMappedDepartmentObjectivesFromCache } = require('./netlify/functions/utils/fill-monthly-from-metrics-cache.cjs');
+    const pool = await getDbPool();
+    await fillAllMappedDepartmentObjectivesFromCache(pool);
+    console.log('[Auth Proxy] Post-sync: refilled department_monthly_data for all objectives with a mapping');
+  } catch (fillErr) {
+    console.warn('[Auth Proxy] Post-sync refill department_monthly_data failed:', fillErr.message);
+  }
   return { pmsRows: pmsData.length, odooRows: odooData.length };
 }
 app.post('/.netlify/functions/metrics-api/refresh', async (req, res) => {
@@ -933,6 +876,11 @@ app.put('/.netlify/functions/config-api/mappings/:id', requireConfigAuth, async 
         `);
         row = { ...r.recordset[0], derived_project_name: null };
       } else throw selErr;
+    }
+    try {
+      await fillDepartmentObjectiveMonthlyFromCache(p, id);
+    } catch (fillErr) {
+      console.error('[Auth Proxy] fillDepartmentObjectiveMonthlyFromCache:', fillErr.message);
     }
     res.json({ success: true, data: row });
   } catch (err) {

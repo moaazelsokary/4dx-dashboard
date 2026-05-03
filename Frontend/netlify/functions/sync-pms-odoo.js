@@ -399,6 +399,14 @@ async function syncPmsOdoo() {
   }
 
   const result = await writeToCache(pmsData, odooData);
+  try {
+    const { getPool } = require('./db.cjs');
+    const { fillAllMappedDepartmentObjectivesFromCache } = require('./utils/fill-monthly-from-metrics-cache.cjs');
+    const pool = await getPool();
+    await fillAllMappedDepartmentObjectivesFromCache(pool);
+  } catch (fillErr) {
+    logger.warn('Post-sync refill department_monthly_data failed', { message: fillErr?.message });
+  }
   logger.info('PMS/Odoo sync completed', result);
   return result;
 }
@@ -437,5 +445,8 @@ exports.handler = async (event, context) => {
   }
 };
 
-// Export sync function for use in metrics-api refresh endpoint
+// Export sync function for use in metrics-api refresh endpoint & live metric bundles
 module.exports.syncPmsOdoo = syncPmsOdoo;
+module.exports.fetchPmsData = fetchPmsData;
+module.exports.fetchOdooData = fetchOdooData;
+module.exports.writeToCache = writeToCache;

@@ -1,7 +1,7 @@
 /**
  * Metrics API - Fast read API for PMS/Odoo combined data
  * GET: Reads from cache table (fast, 50-200ms)
- * POST /refresh: Triggers immediate sync (background)
+ * POST /refresh: Runs full PMS/Odoo sync and refills mapped department_monthly_data rows
  */
 
 const { getPool, sql } = require('./db.cjs');
@@ -9,125 +9,12 @@ const { syncPmsOdoo } = require('./sync-pms-odoo');
 const logger = require('./utils/logger');
 const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
+const { loadMetricsBundleFromPool } = require('./utils/metrics-bundle.cjs');
 
-// Compute derived metric rows from pms/odoo data and definition
-function computeDerivedRows(pms, odoo, derivedDef) {
-  const def = Array.isArray(derivedDef.definition) ? derivedDef.definition : (JSON.parse(derivedDef.definition || '[]') || []);
-  const hasPms = def.some(d => d.source === 'pms');
-  const hasOdoo = def.some(d => d.source === 'odoo');
-  const source = hasPms && hasOdoo ? 'odoo & pms' : hasOdoo ? 'odoo' : 'pms';
-  const months = new Set();
-  for (const d of def) {
-    if (d.source === 'pms') {
-      (pms || []).filter(r => r.ProjectName === d.project && r.MetricName === (d.metric || '')).forEach(r => months.add(r.MonthYear));
-    } else if (d.source === 'odoo') {
-      (odoo || []).filter(r => r.Project === d.project).forEach(r => months.add(r.Month));
-    }
-  }
-  const rows = [];
-  for (const month of [...months].sort()) {
-    let target = null, actual = null, servicesCreated = null, servicesDone = null;
-    if (hasPms) {
-      for (const d of def) {
-        if (d.source !== 'pms') continue;
-        const m = (pms || []).find(r => r.ProjectName === d.project && r.MetricName === (d.metric || '') && r.MonthYear === month);
-        if (m) {
-          target = (target ?? 0) + (m.Target ?? 0);
-          actual = (actual ?? 0) + (m.Actual ?? 0);
-        }
-      }
-    }
-    if (hasOdoo) {
-      for (const d of def) {
-        if (d.source !== 'odoo') continue;
-        const m = (odoo || []).find(r => r.Project === d.project && r.Month === month);
-        if (m) {
-          servicesCreated = (servicesCreated ?? 0) + (m.ServicesCreated ?? 0);
-          servicesDone = (servicesDone ?? 0) + (m.ServicesDone ?? 0);
-        }
-      }
-    }
-    rows.push({
-      source, project: derivedDef.project_name, metric: null, month: month,
-      target: hasPms ? target : null, actual: hasPms ? actual : null,
-      servicesCreated: hasOdoo ? servicesCreated : null, servicesDone: hasOdoo ? servicesDone : null
-    });
-  }
-  return rows;
-}
-
-// GET: Read from cache table
+// GET: Read from cache table (+ derived), same shape as before
 async function getMetricsFromCache() {
   const pool = await getPool();
-  const request = pool.request();
-
-  // Get PMS data
-  const pmsResult = await request.query(`
-    SELECT 
-      project_name AS ProjectName,
-      metric_name AS MetricName,
-      month AS MonthYear,
-      target_value AS Target,
-      actual_value AS Actual,
-      updated_at AS UpdatedAt
-    FROM dbo.pms_odoo_cache
-    WHERE source = 'pms'
-    ORDER BY project_name, metric_name, month
-  `);
-
-  // Get Odoo data
-  const odooResult = await request.query(`
-    SELECT 
-      project_name AS Project,
-      month AS Month,
-      services_created AS ServicesCreated,
-      services_done AS ServicesDone,
-      updated_at AS UpdatedAt
-    FROM dbo.pms_odoo_cache
-    WHERE source = 'odoo'
-    ORDER BY month DESC, project_name
-  `);
-
-  // Get last updated timestamp
-  const lastUpdatedResult = await request.query(`
-    SELECT MAX(updated_at) AS last_updated
-    FROM dbo.pms_odoo_cache
-  `);
-
-  const lastUpdated = lastUpdatedResult.recordset[0]?.last_updated || null;
-  const pms = pmsResult.recordset || [];
-  const odoo = odooResult.recordset || [];
-
-  // Get derived metrics definitions and compute rows
-  let derived = [];
-  let derivedDefinitions = [];
-  try {
-    const derivedResult = await request.query(`
-      SELECT id, project_name, source, definition FROM dbo.derived_metrics
-    `);
-    const derivedDefs = derivedResult.recordset || [];
-    for (const d of derivedDefs) {
-      derived = derived.concat(computeDerivedRows(pms, odoo, d));
-    }
-    derivedDefinitions = derivedDefs.map(d => ({
-      id: d.id,
-      projectName: d.project_name,
-      source: d.source,
-      definition: typeof d.definition === 'string' ? JSON.parse(d.definition || '[]') : d.definition
-    }));
-  } catch (e) {
-    if (!e.message || !e.message.includes('Invalid object name') || !e.message.includes('derived_metrics')) {
-      logger.warn('Could not load derived_metrics', e.message);
-    }
-  }
-
-  return {
-    pms,
-    odoo,
-    derived,
-    derivedDefinitions,
-    lastUpdated
-  };
+  return loadMetricsBundleFromPool(pool);
 }
 
 // Handler with auth middleware
@@ -219,18 +106,13 @@ const handler = rateLimiter('general')(
         }
 
         try {
-          // Run sync in background (don't wait for completion)
-          syncPmsOdoo().catch(err => {
-            logger.error('Background sync failed', err);
-          });
-          
-          // Return immediately
+          await syncPmsOdoo();
           return {
             statusCode: 200,
             headers,
             body: JSON.stringify({
               success: true,
-              message: 'Refresh started in background'
+              message: 'Refresh completed (cache + mapped monthly rows updated)'
             })
           };
         } catch (error) {

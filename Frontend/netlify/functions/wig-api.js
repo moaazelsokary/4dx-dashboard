@@ -3,6 +3,7 @@ const sql = require('mssql');
 const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
+const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
 
 let pool = null;
 
@@ -2230,18 +2231,8 @@ async function calculatePlanCheckers(pool) {
 
 // Monthly Data Functions
 async function getMonthlyData(pool, departmentObjectiveId) {
-  // Query by department_objective_id to get calendar for this specific objective
-  // Each department objective should have its own calendar
-  const request = pool.request();
-  request.input('department_objective_id', sql.Int, departmentObjectiveId);
-
-  const result = await request.query(`
-    SELECT * FROM department_monthly_data 
-    WHERE department_objective_id = @department_objective_id
-    ORDER BY updated_at DESC, month
-  `);
-
-  return result.recordset;
+  // Overlay live PMS/Odoo/derived values from cache when objective_data_source_mapping says so (no refill required).
+  return getDepartmentMonthlyDataWithLiveMapping(pool, departmentObjectiveId);
 }
 
 // Helper function to log activity (shared with config-api.js pattern)

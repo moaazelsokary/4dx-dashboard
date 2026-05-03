@@ -5,6 +5,13 @@ const { handleAccountsCrud } = require('./utils/user-accounts-crud.cjs');
 const { handlePowerbiDashboardsCrud } = require('./utils/powerbi-dashboards-crud.cjs');
 const authMiddleware = require('./utils/auth-middleware');
 const logger = require('./utils/logger');
+const {
+  norm,
+  normMonth,
+  collectMonthsForMapping,
+  loadMetricsBundleFromPool,
+  fillDepartmentObjectiveMonthlyFromCache,
+} = require('./utils/monthly-fill-from-cache.cjs');
 
 let pool = null;
 
@@ -172,33 +179,17 @@ async function fillLockedValuesFromCache(pool, lock) {
       mappings[m.department_objective_id] = m;
     });
 
-    // Fetch metrics from cache (via metrics-api)
-    const metricsApiUrl = process.env.NETLIFY_URL 
-      ? `${process.env.NETLIFY_URL}/.netlify/functions/metrics-api`
-      : 'http://localhost:8888/.netlify/functions/metrics-api';
-    
-    const metricsResponse = await fetch(metricsApiUrl);
-    if (!metricsResponse.ok) {
-      logger.warn('Failed to fetch metrics from cache, skipping value fill');
+    let pms;
+    let odoo;
+    let derived = [];
+    try {
+      const bundle = await loadMetricsBundleFromPool(pool);
+      pms = bundle.pms;
+      odoo = bundle.odoo;
+      derived = bundle.derived || [];
+    } catch (loadErr) {
+      logger.warn('Failed to load metrics cache from DB, skipping locked value fill', { message: loadErr.message });
       return;
-    }
-    
-    const metricsData = await metricsResponse.json();
-    if (!metricsData.success || !metricsData.data) {
-      logger.warn('Metrics API returned no data, skipping value fill');
-      return;
-    }
-
-    const { pms, odoo, derived = [] } = metricsData.data;
-
-    // Months to fill (2026-01 to 2027-06)
-    const months = [];
-    for (let year = 2026; year <= 2027; year++) {
-      const startMonth = year === 2026 ? 1 : 1;
-      const endMonth = year === 2027 ? 6 : 12;
-      for (let month = startMonth; month <= endMonth; month++) {
-        months.push(`${year}-${String(month).padStart(2, '0')}`);
-      }
     }
 
     // For each objective with mapping, compute and write values
@@ -206,28 +197,33 @@ async function fillLockedValuesFromCache(pool, lock) {
       const mapping = mappings[objectiveId];
       if (!mapping) continue; // Skip objectives without mapping
 
-      for (const month of months) {
-        // Get objective info for logging
-        const objInfoRequest = pool.request();
-        objInfoRequest.input('objective_id', sql.Int, objectiveId);
-        const objInfoResult = await objInfoRequest.query(`
-          SELECT kpi, department_id FROM department_objectives WHERE id = @objective_id
-        `);
-        const objInfo = objInfoResult.recordset[0];
-        if (!objInfo) continue;
+      const objInfoRequest = pool.request();
+      objInfoRequest.input('objective_id', sql.Int, objectiveId);
+      const objInfoResult = await objInfoRequest.query(`
+        SELECT kpi, department_id FROM department_objectives WHERE id = @objective_id
+      `);
+      const objInfo = objInfoResult.recordset[0];
+      if (!objInfo) continue;
 
+      const monthsForObj = collectMonthsForMapping(mapping, pms, odoo, derived);
+
+      for (const month of monthsForObj) {
         // Compute target_value if monthly_target is locked and target_source is PMS or derived
         if (lock.lock_monthly_target) {
           let targetValue = null;
           if (mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
             const pmsRow = pms.find(r =>
-              r.ProjectName === mapping.pms_project_name &&
-              r.MetricName === mapping.pms_metric_name &&
-              r.MonthYear === month
+              norm(r.ProjectName) === norm(mapping.pms_project_name) &&
+              norm(r.MetricName) === norm(mapping.pms_metric_name) &&
+              normMonth(r.MonthYear) === month
             );
             targetValue = pmsRow?.Target;
           } else if (mapping.target_source === 'derived' && mapping.derived_project_name && derived && derived.length) {
-            const derivedRow = derived.find(r => String(r.project).trim() === String(mapping.derived_project_name).trim() && (r.month || r.Month) === month);
+            const derivedRow = derived.find(
+              r =>
+                norm(r.project) === norm(mapping.derived_project_name) &&
+                normMonth(r.month ?? r.Month) === month
+            );
             targetValue = derivedRow?.target != null ? derivedRow.target : (derivedRow?.Target != null ? derivedRow.Target : null);
           }
           if (targetValue !== null && targetValue !== undefined) {
@@ -235,7 +231,7 @@ async function fillLockedValuesFromCache(pool, lock) {
             try {
               const writeRequest = pool.request();
               writeRequest.input('department_objective_id', sql.Int, objectiveId);
-              writeRequest.input('month', sql.Date, `${month}-01`);
+              writeRequest.input('month', sql.Date, new Date(`${month}-01T12:00:00.000Z`));
               writeRequest.input('target_value', sql.Decimal(18, 2), targetValue);
               writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
               writeRequest.input('department_id', sql.Int, objInfo.department_id);
@@ -262,19 +258,27 @@ async function fillLockedValuesFromCache(pool, lock) {
           let actualValue = null;
           if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
             const pmsRow = pms.find(r =>
-              r.ProjectName === mapping.pms_project_name &&
-              r.MetricName === mapping.pms_metric_name &&
-              r.MonthYear === month
+              norm(r.ProjectName) === norm(mapping.pms_project_name) &&
+              norm(r.MetricName) === norm(mapping.pms_metric_name) &&
+              normMonth(r.MonthYear) === month
             );
             actualValue = pmsRow?.Actual;
           } else if (mapping.actual_source === 'odoo_services_done' && mapping.odoo_project_name) {
-            const odooRow = odoo.find(r => r.Project === mapping.odoo_project_name && r.Month === month);
+            const odooRow = odoo.find(
+              r => norm(r.Project ?? r.project) === norm(mapping.odoo_project_name) && normMonth(r.Month ?? r.MonthYear ?? r.month) === month
+            );
             actualValue = odooRow?.ServicesDone;
           } else if (mapping.actual_source === 'odoo_services_created' && mapping.odoo_project_name) {
-            const odooRow = odoo.find(r => r.Project === mapping.odoo_project_name && r.Month === month);
+            const odooRow = odoo.find(
+              r => norm(r.Project ?? r.project) === norm(mapping.odoo_project_name) && normMonth(r.Month ?? r.MonthYear ?? r.month) === month
+            );
             actualValue = odooRow?.ServicesCreated;
           } else if (mapping.actual_source === 'derived' && mapping.derived_project_name && derived && derived.length) {
-            const derivedRow = derived.find(r => String(r.project).trim() === String(mapping.derived_project_name).trim() && (r.month || r.Month) === month);
+            const derivedRow = derived.find(
+              r =>
+                norm(r.project) === norm(mapping.derived_project_name) &&
+                normMonth(r.month ?? r.Month) === month
+            );
             if (derivedRow) {
               const a = derivedRow.actual ?? derivedRow.Actual ?? 0;
               const sd = derivedRow.servicesDone ?? derivedRow.ServicesDone ?? 0;
@@ -285,7 +289,7 @@ async function fillLockedValuesFromCache(pool, lock) {
           try {
             const writeRequest = pool.request();
             writeRequest.input('department_objective_id', sql.Int, objectiveId);
-            writeRequest.input('month', sql.Date, `${month}-01`);
+            writeRequest.input('month', sql.Date, new Date(`${month}-01T12:00:00.000Z`));
             writeRequest.input('actual_value', sql.Decimal(18, 2), actualValue);
             writeRequest.input('kpi', sql.NVarChar, objInfo.kpi);
             writeRequest.input('department_id', sql.Int, objInfo.department_id);
@@ -313,157 +317,11 @@ async function fillLockedValuesFromCache(pool, lock) {
   }
 }
 
-// Normalize string for comparison (trim; optional lower for case-insensitive)
-function norm(s) {
-  if (s == null) return '';
-  return String(s).trim();
-}
-function normMonth(m) {
-  const s = norm(m);
-  if (/^\d{4}-\d{2}$/.test(s)) return s;
-  if (s instanceof Date || (typeof s === 'string' && s.length >= 7)) {
-    try {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    } catch (_) {}
-  }
-  return s;
-}
-
 // Fill monthly target/actual from cache for a single objective (after mapping create/update).
-// Does not require a lock rule; fills based on mapping only.
+// Reads pms_odoo_cache directly (same DB); avoids HTTP to metrics-api (broken on localhost without Netlify :8888).
 async function fillValuesFromCacheForObjective(pool, objectiveId) {
   try {
-    const mappingRequest = pool.request();
-    mappingRequest.input('objective_id', sql.Int, objectiveId);
-    const mappingResult = await mappingRequest.query(`
-      SELECT * FROM objective_data_source_mapping WHERE department_objective_id = @objective_id
-    `);
-    const mapping = mappingResult.recordset[0];
-    if (!mapping) {
-      logger.info(`fillValuesFromCacheForObjective: no mapping for objective ${objectiveId}`);
-      return;
-    }
-
-    const objInfoRequest = pool.request();
-    objInfoRequest.input('objective_id', sql.Int, objectiveId);
-    const objInfoResult = await objInfoRequest.query(`
-      SELECT kpi, department_id FROM department_objectives WHERE id = @objective_id
-    `);
-    const objInfo = objInfoResult.recordset[0];
-    if (!objInfo) return;
-
-    const metricsApiUrl = process.env.NETLIFY_URL
-      ? `${process.env.NETLIFY_URL}/.netlify/functions/metrics-api`
-      : (process.env.URL || 'http://localhost:8888');
-    const base = metricsApiUrl.replace(/\/$/, '');
-    const url = base.includes('localhost') ? `${base}/.netlify/functions/metrics-api` : `${base}/.netlify/functions/metrics-api`;
-    const metricsResponse = await fetch(url);
-    if (!metricsResponse.ok) {
-      logger.warn(`fillValuesFromCacheForObjective: metrics API returned ${metricsResponse.status} for ${url}`);
-      return;
-    }
-    const metricsData = await metricsResponse.json();
-    if (!metricsData.success || !metricsData.data) {
-      logger.warn('fillValuesFromCacheForObjective: metrics API returned no data', { success: metricsData?.success });
-      return;
-    }
-    const { pms = [], odoo = [], derived = [] } = metricsData.data;
-    logger.info(`fillValuesFromCacheForObjective: objective ${objectiveId} actual_source=${mapping.actual_source} pms rows=${pms.length} odoo rows=${odoo.length} derived rows=${derived.length}`);
-
-    const months = [];
-    for (let year = 2026; year <= 2027; year++) {
-      const endMonth = year === 2027 ? 6 : 12;
-      for (let month = 1; month <= endMonth; month++) {
-        months.push(`${year}-${String(month).padStart(2, '0')}`);
-      }
-    }
-
-    const mapProj = (r) => norm(r);
-    const mapMonth = (r) => normMonth(r?.MonthYear ?? r?.Month ?? r?.month);
-
-    for (const monthStr of months) {
-      const monthDate = new Date(monthStr + '-01');
-
-      // Target from PMS or derived if mapping says so
-      let targetValue = null;
-      if (mapping.target_source === 'pms_target' && mapping.pms_project_name && mapping.pms_metric_name) {
-        const pmsRow = pms.find(r =>
-          mapProj(r.ProjectName) === mapProj(mapping.pms_project_name) &&
-          mapProj(r.MetricName) === mapProj(mapping.pms_metric_name) &&
-          mapMonth(r) === monthStr
-        );
-        targetValue = pmsRow?.Target;
-      } else if (mapping.target_source === 'derived' && mapping.derived_project_name && derived.length) {
-        const derivedRow = derived.find(r => mapProj(r.project) === mapProj(mapping.derived_project_name) && (r.month || r.Month) === monthStr);
-        targetValue = derivedRow?.target != null ? derivedRow.target : (derivedRow?.Target != null ? derivedRow.Target : null);
-      }
-      if (targetValue != null) {
-        try {
-          const wr = pool.request();
-          wr.input('department_objective_id', sql.Int, objectiveId);
-          wr.input('month', sql.Date, monthDate);
-          wr.input('target_value', sql.Decimal(18, 2), targetValue);
-          wr.input('kpi', sql.NVarChar, objInfo.kpi);
-          wr.input('department_id', sql.Int, objInfo.department_id);
-          await wr.query(`
-            MERGE department_monthly_data AS target
-            USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
-            ON target.department_objective_id = source.department_objective_id AND target.month = source.month
-            WHEN MATCHED THEN UPDATE SET target_value = @target_value, kpi = @kpi, department_id = @department_id
-            WHEN NOT MATCHED THEN INSERT (department_objective_id, month, target_value, kpi, department_id)
-            VALUES (@department_objective_id, @month, @target_value, @kpi, @department_id);
-          `);
-        } catch (e) {
-          logger.error(`fillValuesFromCacheForObjective target ${objectiveId} ${monthStr}`, e);
-        }
-      }
-
-      // Actual from PMS, Odoo, or derived: write value or null for every month (so switching source clears months with no data)
-      let actualValue = null;
-      if (mapping.actual_source === 'pms_actual' && mapping.pms_project_name && mapping.pms_metric_name) {
-        const pmsRow = pms.find(r =>
-          mapProj(r.ProjectName) === mapProj(mapping.pms_project_name) &&
-          mapProj(r.MetricName) === mapProj(mapping.pms_metric_name) &&
-          mapMonth(r) === monthStr
-        );
-        actualValue = pmsRow?.Actual;
-      } else if (mapping.actual_source === 'odoo_services_done' && mapping.odoo_project_name) {
-        const odooRow = odoo.find(r => mapProj(r.Project) === mapProj(mapping.odoo_project_name) && mapMonth(r) === monthStr);
-        actualValue = odooRow?.ServicesDone;
-      } else if (mapping.actual_source === 'odoo_services_created' && mapping.odoo_project_name) {
-        const odooRow = odoo.find(r => mapProj(r.Project) === mapProj(mapping.odoo_project_name) && mapMonth(r) === monthStr);
-        actualValue = odooRow?.ServicesCreated;
-      } else if (mapping.actual_source === 'derived' && mapping.derived_project_name && derived.length) {
-        const derivedRow = derived.find(r => mapProj(r.project) === mapProj(mapping.derived_project_name) && (r.month || r.Month) === monthStr);
-        if (derivedRow) {
-          const a = derivedRow.actual ?? derivedRow.Actual ?? 0;
-          const sd = derivedRow.servicesDone ?? derivedRow.ServicesDone ?? 0;
-          actualValue = (Number(a) || 0) + (Number(sd) || 0);
-        }
-      }
-
-      if (mapping.actual_source === 'pms_actual' || mapping.actual_source === 'odoo_services_done' || mapping.actual_source === 'odoo_services_created' || mapping.actual_source === 'derived') {
-        try {
-          const wr = pool.request();
-          wr.input('department_objective_id', sql.Int, objectiveId);
-          wr.input('month', sql.Date, monthDate);
-          wr.input('actual_value', actualValue != null ? sql.Decimal(18, 2) : sql.Decimal(18, 2), actualValue);
-          wr.input('kpi', sql.NVarChar, objInfo.kpi);
-          wr.input('department_id', sql.Int, objInfo.department_id);
-          await wr.query(`
-            MERGE department_monthly_data AS target
-            USING (SELECT @department_objective_id AS department_objective_id, @month AS month) AS source
-            ON target.department_objective_id = source.department_objective_id AND target.month = source.month
-            WHEN MATCHED THEN UPDATE SET actual_value = @actual_value, kpi = @kpi, department_id = @department_id
-            WHEN NOT MATCHED THEN INSERT (department_objective_id, month, actual_value, kpi, department_id)
-            VALUES (@department_objective_id, @month, @actual_value, @kpi, @department_id);
-          `);
-        } catch (e) {
-          logger.error(`fillValuesFromCacheForObjective actual ${objectiveId} ${monthStr}`, e);
-        }
-      }
-    }
+    await fillDepartmentObjectiveMonthlyFromCache(pool, objectiveId);
     logger.info(`fillValuesFromCacheForObjective completed for objective ${objectiveId}`);
   } catch (error) {
     logger.error('fillValuesFromCacheForObjective failed', { objectiveId, error: error.message });
