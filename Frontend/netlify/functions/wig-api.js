@@ -3,6 +3,7 @@ const sql = require('mssql');
 const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
+const strategicTopicKpiRows = require('./wig-api-strategic-topic-kpi-rows.cjs');
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
 const { computeKPIBreakdown } = require('./utils/kpi-breakdown.cjs');
 
@@ -405,6 +406,43 @@ const handler = rateLimiter('general')(
       result = await strategicHandlers.deleteStrategicDepartmentObjective(pool, sid, event.user);
     } else if (path === '/strategic-department-objectives/update-order' && method === 'POST') {
       result = await strategicHandlers.updateStrategicDepartmentObjectivesOrder(pool, body);
+    }
+    // Strategic topic KPI rows (Volunteers / Refugees / …)
+    else if (path === '/strategic-topic-kpi-rows' && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      const r = event.user.role || event.user.Role || '';
+      if (!['CEO', 'Admin', 'department'].includes(r)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      const topic = queryParams.strategic_topic;
+      if (!topic) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'strategic_topic query parameter is required' }),
+        };
+      }
+      result = await strategicTopicKpiRows.getStrategicTopicKpiRows(pool, topic);
+    } else if (path === '/strategic-topic-kpi-rows/update-order' && method === 'POST') {
+      result = await strategicTopicKpiRows.updateStrategicTopicKpiRowsOrder(pool, body, event.user);
+    } else if (path === '/strategic-topic-kpi-rows' && method === 'POST') {
+      result = await strategicTopicKpiRows.createStrategicTopicKpiRow(pool, body, event.user);
+    } else if (/^\/strategic-topic-kpi-rows\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await strategicTopicKpiRows.updateStrategicTopicKpiRow(pool, id, body, event.user);
+    } else if (/^\/strategic-topic-kpi-rows\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await strategicTopicKpiRows.deleteStrategicTopicKpiRow(pool, id, event.user);
     }
     // RASCI Metrics
     else if (path === '/rasci' && method === 'GET') {

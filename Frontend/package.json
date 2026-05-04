@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:check": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=75 --coverage.thresholds.statements=80",
     "init-db": "node scripts/init-database.cjs",
+    "migrate-strategic-topic-kpi": "node scripts/run-strategic-topic-kpi-schema.cjs",
     "create-users": "node scripts/create-users.cjs",
     "test-auth": "node scripts/test-auth.cjs",
     "import-wig": "node scripts/import-wig-data.cjs",

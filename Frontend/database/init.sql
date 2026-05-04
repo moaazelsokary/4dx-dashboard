@@ -218,3 +218,30 @@ BEGIN
     ');
 END;
 
+-- Strategic topic KPI rows (Strategic Topics pages: table / Gantt / dashboard)
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[strategic_topic_kpi_rows]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[strategic_topic_kpi_rows] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [strategic_topic] NVARCHAR(50) NOT NULL
+            CHECK ([strategic_topic] IN (N'volunteers', N'refugees', N'returnees', N'relief', N'awareness')),
+        [main_objective_id] INT NULL,
+        [objective_text] NVARCHAR(500) NULL,
+        [activity] NVARCHAR(1000) NOT NULL,
+        [expected_duration] NVARCHAR(200) NULL,
+        [start_date] DATE NULL,
+        [end_date] DATE NULL,
+        [associated_departments] NVARCHAR(MAX) NOT NULL,
+        [associated_strategic_topics] NVARCHAR(MAX) NOT NULL,
+        [status] NVARCHAR(50) NOT NULL
+            CHECK ([status] IN (N'Completed', N'In Progress', N'On Hold')),
+        [notes] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        [updated_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY ([main_objective_id]) REFERENCES [dbo].[main_plan_objectives]([id]) ON DELETE SET NULL
+    );
+    CREATE INDEX [IX_strategic_topic_kpi_rows_topic] ON [dbo].[strategic_topic_kpi_rows]([strategic_topic]);
+    CREATE INDEX [IX_strategic_topic_kpi_rows_main_objective] ON [dbo].[strategic_topic_kpi_rows]([main_objective_id]);
+    CREATE INDEX [IX_strategic_topic_kpi_rows_dates] ON [dbo].[strategic_topic_kpi_rows]([start_date], [end_date]);
+END;
+

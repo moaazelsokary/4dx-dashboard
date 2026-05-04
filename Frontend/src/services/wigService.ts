@@ -12,6 +12,8 @@ import type {
   HierarchicalPlan,
   KPIBreakdownResponse,
   KPIBreakdownSource,
+  StrategicTopicCode,
+  StrategicTopicKpiRow,
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
@@ -383,6 +385,47 @@ export async function getKPIBreakdown(
 // Departments
 export async function getDepartments(): Promise<Department[]> {
   return fetchAPI<Department[]>('/departments');
+}
+
+// Strategic topic KPI rows (per-topic table / Gantt / dashboard)
+export async function getStrategicTopicKpiRows(strategicTopic: StrategicTopicCode): Promise<StrategicTopicKpiRow[]> {
+  const qs = new URLSearchParams({ strategic_topic: strategicTopic });
+  return fetchAPI<StrategicTopicKpiRow[]>(`/strategic-topic-kpi-rows?${qs.toString()}`);
+}
+
+export async function createStrategicTopicKpiRow(
+  data: Omit<StrategicTopicKpiRow, 'id' | 'created_at' | 'updated_at' | 'main_kpi' | 'main_objective' | 'main_pillar'>
+): Promise<StrategicTopicKpiRow> {
+  return fetchAPI<StrategicTopicKpiRow>('/strategic-topic-kpi-rows', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateStrategicTopicKpiRow(
+  id: number,
+  data: Partial<Omit<StrategicTopicKpiRow, 'id' | 'created_at' | 'updated_at' | 'main_kpi' | 'main_objective' | 'main_pillar'>>
+): Promise<StrategicTopicKpiRow> {
+  return fetchAPI<StrategicTopicKpiRow>(`/strategic-topic-kpi-rows/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteStrategicTopicKpiRow(id: number): Promise<{ success: boolean; deletedRows: number }> {
+  return fetchAPI<{ success: boolean; deletedRows: number }>(`/strategic-topic-kpi-rows/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function updateStrategicTopicKpiRowsOrder(payload: {
+  strategic_topic: StrategicTopicCode;
+  updates: Array<{ id: number; sort_order: number }>;
+}): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>('/strategic-topic-kpi-rows/update-order', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // RASCI summary per department (when All Departments is selected)

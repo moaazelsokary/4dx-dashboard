@@ -1,5 +1,5 @@
 import StrategicTopicTemplate from './StrategicTopicTemplate';
 
 export default function ReliefPage() {
-  return <StrategicTopicTemplate title="Relief" />;
+  return <StrategicTopicTemplate title="Relief" strategicTopicCode="relief" />;
 }

@@ -176,6 +176,41 @@ export interface DepartmentBreakdown {
 
 export type KPIBreakdownSource = 'bau' | 'strategic' | 'both';
 
+/** Strategic Topics pages (Volunteers, Refugees, …) */
+export type StrategicTopicCode = 'volunteers' | 'refugees' | 'returnees' | 'relief' | 'awareness';
+
+export type StrategicTopicKpiStatus = 'Completed' | 'In Progress' | 'On Hold';
+
+export interface StrategicTopicKpiRow {
+  id: number;
+  strategic_topic: StrategicTopicCode;
+  main_objective_id: number | null;
+  objective_text: string | null;
+  activity: string;
+  expected_duration: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  /** Department codes, `||`-delimited */
+  associated_departments: string;
+  /** Topic codes (five strategic topics), `||`-delimited */
+  associated_strategic_topics: string;
+  status: StrategicTopicKpiStatus;
+  notes: string | null;
+  /** Table / Gantt order (1 = top); NULL sorts after explicit values, then by id */
+  sort_order?: number | null;
+  created_at?: string;
+  updated_at?: string;
+  /** Joined from main_plan_objectives */
+  main_kpi?: string | null;
+  main_objective?: string | null;
+  main_pillar?: string | null;
+}
+
+export type StrategicTopicKpiRowInput = Omit<
+  StrategicTopicKpiRow,
+  'id' | 'created_at' | 'updated_at' | 'main_kpi' | 'main_objective' | 'main_pillar'
+>;
+
 export interface KPIBreakdownResponse {
   kpi: string;
   annual_target: number;

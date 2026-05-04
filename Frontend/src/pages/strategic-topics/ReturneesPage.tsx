@@ -1,5 +1,5 @@
 import StrategicTopicTemplate from './StrategicTopicTemplate';
 
 export default function ReturneesPage() {
-  return <StrategicTopicTemplate title="Returnees" />;
+  return <StrategicTopicTemplate title="Returnees" strategicTopicCode="returnees" />;
 }
