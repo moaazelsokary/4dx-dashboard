@@ -11,6 +11,7 @@ import type {
   PlanChecker,
   HierarchicalPlan,
   KPIBreakdownResponse,
+  KPIBreakdownSource,
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
@@ -368,9 +369,15 @@ export async function getKPIsWithRASCI(): Promise<string[]> {
   return fetchAPI<string[]>('/kpis-with-rasci');
 }
 
-// KPI Breakdown
-export async function getKPIBreakdown(kpi: string): Promise<KPIBreakdownResponse> {
-  return fetchAPI<KPIBreakdownResponse>(`/kpi-breakdown/${encodeURIComponent(kpi)}`);
+// KPI Breakdown (optional breakdown_source: BAU dept objectives, Strategic dept objectives, or both summed)
+export async function getKPIBreakdown(
+  kpi: string,
+  breakdownSource: KPIBreakdownSource = 'bau'
+): Promise<KPIBreakdownResponse> {
+  const qs = new URLSearchParams({ breakdown_source: breakdownSource });
+  return fetchAPI<KPIBreakdownResponse>(
+    `/kpi-breakdown/${encodeURIComponent(kpi)}?${qs.toString()}`
+  );
 }
 
 // Departments

@@ -207,15 +207,15 @@ export function ColumnFilter({
         <Button
           variant="ghost"
           size="sm"
-          className={`h-auto px-1.5 py-1 ${hasFilter ? 'text-primary' : ''}`}
+          className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-2 sm:min-h-0 sm:min-w-0 sm:h-auto sm:px-1.5 sm:py-1 ${hasFilter ? 'text-primary' : ''}`}
           aria-label={`Filter ${columnLabel}`}
           title={`Filter ${columnLabel}`}
         >
-          <Filter className="h-3 w-3" />
+          <Filter className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[min(100vw-3rem,22rem)] md:!w-[540px] md:!max-w-[540px] max-h-[min(320px,70vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
+        className="w-[min(100vw-2rem,22rem)] max-w-[calc(100vw-2rem)] md:!w-[540px] md:!max-w-[540px] max-h-[min(320px,70vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
         align="start"
         side="bottom"
         sideOffset={2}

@@ -2,10 +2,23 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { getKPIBreakdown } from '@/services/wigService';
-import type { KPIBreakdownResponse } from '@/types/wig';
+import type { KPIBreakdownResponse, KPIBreakdownSource } from '@/types/wig';
 import { Loader2 } from 'lucide-react';
+
+const BREAKDOWN_SOURCE_STORAGE_KEY = 'main-plan-kpi-breakdown-source';
+
+function loadStoredBreakdownSource(): KPIBreakdownSource {
+  try {
+    const v = localStorage.getItem(BREAKDOWN_SOURCE_STORAGE_KEY);
+    if (v === 'bau' || v === 'strategic' || v === 'both') return v;
+  } catch {
+    /* ignore */
+  }
+  return 'bau';
+}
 
 interface DepartmentBreakdownProps {
   kpi: string;
@@ -18,12 +31,14 @@ export default function DepartmentBreakdown({ kpi, annualTarget }: DepartmentBre
   const [data, setData] = useState<KPIBreakdownResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [breakdownSource, setBreakdownSource] = useState<KPIBreakdownSource>(loadStoredBreakdownSource);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const breakdown = await getKPIBreakdown(kpi);
+        setError(null);
+        const breakdown = await getKPIBreakdown(kpi, breakdownSource);
         setData(breakdown);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load breakdown');
@@ -33,8 +48,8 @@ export default function DepartmentBreakdown({ kpi, annualTarget }: DepartmentBre
       }
     };
 
-    fetchData();
-  }, [kpi]);
+    void fetchData();
+  }, [kpi, breakdownSource]);
 
   if (loading) {
     return (
@@ -71,11 +86,41 @@ export default function DepartmentBreakdown({ kpi, annualTarget }: DepartmentBre
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <CardTitle className="text-lg">Department Breakdown: {kpi}</CardTitle>
-          <div className="text-sm text-muted-foreground">
-            Annual Target: {annualTarget.toLocaleString()} | Total Sum: {totalSum.toLocaleString()}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <span className="text-sm text-muted-foreground">
+              Annual Target: {annualTarget.toLocaleString()} | Total Sum: {totalSum.toLocaleString()}
+            </span>
+            <ToggleGroup
+              type="single"
+              value={breakdownSource}
+              onValueChange={(v) => {
+                if (v !== 'bau' && v !== 'strategic' && v !== 'both') return;
+                setBreakdownSource(v);
+                try {
+                  localStorage.setItem(BREAKDOWN_SOURCE_STORAGE_KEY, v);
+                } catch {
+                  /* ignore */
+                }
+              }}
+              className="max-w-full justify-start gap-1 overflow-x-auto pb-1"
+              aria-label="Breakdown data source"
+            >
+              <ToggleGroupItem value="bau" className="min-h-11 shrink-0 px-3 text-xs md:min-h-9 md:text-sm">
+                BAU only
+              </ToggleGroupItem>
+              <ToggleGroupItem value="strategic" className="min-h-11 shrink-0 px-3 text-xs md:min-h-9 md:text-sm">
+                Strategic only
+              </ToggleGroupItem>
+              <ToggleGroupItem value="both" className="min-h-11 shrink-0 px-3 text-xs md:min-h-9 md:text-sm">
+                Both (sum)
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
+          <p className="text-xs text-muted-foreground leading-snug md:max-w-3xl">
+            BAU uses department operational objectives (Direct). Strategic uses strategic department objectives linked to this main-plan KPI (or KPI text match). Both adds the two totals per department — use when they measure different slices; avoid Both if the same work is duplicated in both lists.
+          </p>
         </CardHeader>
         <CardContent>
           <Table>

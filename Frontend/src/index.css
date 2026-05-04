@@ -218,3 +218,23 @@
     font-size: 11px;
   }
 }
+
+/* View Transitions API — objective form dialog (progressive enhancement; Chromium / Safari 18+) */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (view-transition-name: none) {
+    .vt-wig-objective-form {
+      view-transition-name: wig-objective-form;
+    }
+
+    /* Let the VT capture drive motion; Radix zoom/slide would stack awkwardly */
+    .vt-wig-objective-form[data-state='open'],
+    .vt-wig-objective-form[data-state='closed'] {
+      animation: none !important;
+    }
+
+    ::view-transition-group(wig-objective-form) {
+      animation-duration: 0.32s;
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+  }
+}

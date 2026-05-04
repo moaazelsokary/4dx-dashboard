@@ -174,10 +174,14 @@ export interface DepartmentBreakdown {
   percentage: number; // Percentage of annual_target (based on total sum)
 }
 
+export type KPIBreakdownSource = 'bau' | 'strategic' | 'both';
+
 export interface KPIBreakdownResponse {
   kpi: string;
   annual_target: number;
   main_objective_id?: number | null; // ID of the main objective this KPI belongs to
+  /** Which objectives fed the sums (query breakdown_source). */
+  breakdown_source?: KPIBreakdownSource;
   breakdown: DepartmentBreakdown[];
 }
 

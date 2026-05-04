@@ -4,6 +4,7 @@ const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
+const { computeKPIBreakdown } = require('./utils/kpi-breakdown.cjs');
 
 let pool = null;
 
@@ -437,8 +438,10 @@ const handler = rateLimiter('general')(
     }
     // KPI Breakdown
     else if (path.startsWith('/kpi-breakdown/') && method === 'GET') {
-      const kpi = decodeURIComponent(path.split('/kpi-breakdown/')[1]);
-      result = await getKPIBreakdown(pool, kpi);
+      const kpiPath = path.split('/kpi-breakdown/')[1];
+      const kpi = decodeURIComponent(kpiPath.split('?')[0]);
+      const breakdownSource = queryParams.breakdown_source || queryParams.breakdownSource || 'bau';
+      result = await getKPIBreakdown(pool, kpi, breakdownSource);
     }
     // Auto-link all department objectives
     else if (path === '/department-objectives/auto-link' && method === 'POST') {
@@ -1853,168 +1856,8 @@ async function getKPIsWithRASCI(pool) {
   }
 }
 
-async function getKPIBreakdown(pool, kpi) {
-  const request = pool.request();
-  request.input('kpi', sql.NVarChar, kpi);
-
-  // Get main objective info (ID and annual target) for this KPI
-  const mainRequest = pool.request();
-  mainRequest.input('kpi', sql.NVarChar, kpi);
-  const mainResult = await mainRequest.query(`
-    SELECT TOP 1 id, annual_target 
-    FROM main_plan_objectives 
-    WHERE kpi = @kpi
-  `);
-
-  const mainObjective = mainResult.recordset[0];
-  const mainObjectiveId = mainObjective?.id || null;
-  const annualTarget = mainObjective?.annual_target || 0;
-
-  // Normalize the strategic plan KPI by removing numeric prefix and trimming
-  // This is what we'll compare against
-  const normalizedMainKPI = normalizeKPI(kpi).trim().toLowerCase();
-
-  // Get ALL Direct department objectives and match them in JavaScript
-  // This gives us full control over the matching logic and ensures accuracy
-  const allDeptObjsRequest = pool.request();
-  const allDeptObjsResult = await allDeptObjsRequest.query(`
-    SELECT 
-      d.id as department_id,
-      d.name as department,
-      d.code as department_code,
-      do.kpi,
-      do.activity_target
-    FROM department_objectives do
-    INNER JOIN departments d ON do.department_id = d.id
-    WHERE do.type = 'Direct'
-    ORDER BY d.name, do.kpi
-  `);
-
-  // Helper function to extract meaningful words from KPI (removes common words)
-  function extractKeywords(kpiText) {
-    if (!kpiText) return [];
-    // Remove common Arabic words and keep meaningful terms
-    const commonWords = ['عدد', 'نسبة', 'معدل', 'مستوى', 'حجم', 'من', 'مع', 'في', 'على', 'إلى', 'و', 'أو', 'ال', 'هذا', 'تلك', 'التي', 'الذي'];
-    const words = kpiText.toLowerCase()
-      .replace(/[^\u0600-\u06FF\s]/g, ' ') // Keep only Arabic and spaces
-      .split(/\s+/)
-      .filter(w => w.length > 2 && !commonWords.includes(w));
-    return words;
-  }
-
-  // Extract keywords from main KPI
-  const mainKeywords = extractKeywords(normalizedMainKPI);
-  const mainKeywordsSet = new Set(mainKeywords);
-  
-  // Group matching objectives by department
-  const departmentMap = new Map();
-  
-  for (const row of allDeptObjsResult.recordset) {
-    const deptKPIOriginal = row.kpi.trim();
-    const deptKPINormalized = normalizeKPI(row.kpi).trim();
-    const deptKPIOriginalLower = deptKPIOriginal.toLowerCase();
-    const deptKPINormalizedLower = deptKPINormalized.toLowerCase();
-    
-    // Try multiple matching strategies - handles both directions:
-    // 1. Main has prefix, dept doesn't: "1.3.1 عدد..." matches "عدد..."
-    // 2. Main doesn't have prefix, dept has: "عدد..." matches "1.3.1 عدد..."
-    // 3. Both have prefixes: "1.3.1 عدد..." matches "1.3.1 عدد..." (exact)
-    // 4. Neither has prefix: "عدد..." matches "عدد..." (exact)
-    let isMatch = false;
-    
-    // Strategy 1: Exact normalized match (handles prefix differences in both directions)
-    // This is the primary strategy - removes prefixes from both and compares
-    // Works for: "1.3.1 عدد..." vs "عدد..." AND "عدد..." vs "1.3.1 عدد..."
-    if (deptKPINormalizedLower === normalizedMainKPI) {
-      isMatch = true;
-    }
-    // Strategy 2: Exact match (original vs original) - both have same format
-    else if (deptKPIOriginalLower === kpi.trim().toLowerCase()) {
-      isMatch = true;
-    }
-    // Strategy 3: Cross-match - normalized main vs original dept (main has prefix, dept doesn't)
-    // Example: "1.3.1 عدد..." (normalized to "عدد...") matches "عدد..."
-    else if (deptKPIOriginalLower === normalizedMainKPI) {
-      isMatch = true;
-    }
-    // Strategy 4: Reverse cross-match - original main vs normalized dept (dept has prefix, main doesn't)
-    // Example: "عدد..." matches "1.3.1 عدد..." (normalized to "عدد...")
-    else if (deptKPINormalizedLower === kpi.trim().toLowerCase()) {
-      isMatch = true;
-    }
-    // Strategy 5: Keyword-based matching (if significant overlap)
-    // Use normalized versions for keyword extraction to ignore prefixes
-    else if (mainKeywords.length > 0) {
-      const deptKeywords = extractKeywords(deptKPINormalizedLower);
-      const deptKeywordsSet = new Set(deptKeywords);
-      
-      // Count matching keywords
-      const matchingKeywords = mainKeywords.filter(kw => deptKeywordsSet.has(kw));
-      const matchRatio = matchingKeywords.length / Math.max(mainKeywords.length, deptKeywords.length);
-      
-      // Match if at least 60% of keywords match and at least 3 keywords match
-      if (matchRatio >= 0.6 && matchingKeywords.length >= 3) {
-        isMatch = true;
-      }
-      // Also match if all main keywords are found in department KPI (even if department has more)
-      else if (matchingKeywords.length === mainKeywords.length && mainKeywords.length >= 2) {
-        isMatch = true;
-      }
-    }
-    // Strategy 6: Substring match for longer KPIs (if normalized main KPI is contained in dept KPI or vice versa)
-    else if (normalizedMainKPI.length > 20 && deptKPINormalizedLower.length > 20) {
-      if (deptKPINormalizedLower.includes(normalizedMainKPI) || 
-          normalizedMainKPI.includes(deptKPINormalizedLower)) {
-        // Ensure significant overlap (at least 70% of shorter string)
-        const shorter = Math.min(normalizedMainKPI.length, deptKPINormalizedLower.length);
-        const longer = Math.max(normalizedMainKPI.length, deptKPINormalizedLower.length);
-        if (shorter / longer >= 0.7) {
-          isMatch = true;
-        }
-      }
-    }
-    
-    if (isMatch) {
-      const deptKey = row.department_id;
-      if (!departmentMap.has(deptKey)) {
-        departmentMap.set(deptKey, {
-          department_id: row.department_id,
-          department: row.department,
-          department_code: row.department_code,
-          sum: 0,
-          count: 0
-        });
-      }
-      
-      const dept = departmentMap.get(deptKey);
-      dept.sum += parseFloat(row.activity_target) || 0;
-      dept.count += 1;
-    }
-  }
-
-  // Convert map to array format
-  const breakdown = Array.from(departmentMap.values()).map((dept) => {
-    return {
-      department: dept.department,
-      departmentId: dept.department_id,
-      departmentCode: dept.department_code,
-      sum: dept.sum,
-      directSum: dept.sum,
-      indirectSum: 0,
-      directCount: dept.count,
-      indirectCount: 0,
-      percentage: annualTarget > 0 ? (dept.sum / annualTarget) * 100 : 0,
-    };
-  });
-
-  // Breakdown is already created above in the JavaScript matching logic
-
-  return {
-    kpi,
-    annual_target: annualTarget,
-    main_objective_id: mainObjectiveId,
-    breakdown,
-  };
+async function getKPIBreakdown(pool, kpi, breakdownSource = 'bau') {
+  return computeKPIBreakdown(pool, sql, kpi, breakdownSource);
 }
 
 // Departments without objectives (excluded from filter and RASCI summary)

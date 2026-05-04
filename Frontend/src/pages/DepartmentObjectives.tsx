@@ -86,6 +86,12 @@ function canViewStrategicSensitiveColumns(role: string | undefined): boolean {
   return r === 'admin' || r === 'ceo';
 }
 
+/** Normalize strategic text cells for list filters (matches table "—" empty display). */
+function strategicTextListValue(val: string | null | undefined): string {
+  const t = (val ?? '').trim();
+  return t.length > 0 ? t : '—';
+}
+
 function apiErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'object' && err !== null && 'response' in err) {
@@ -132,9 +138,14 @@ type DepartmentObjectiveUpdatePayload = Partial<
   Omit<DepartmentObjective, 'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'>
 >;
 
+/** Add-row form: KPI is multi-select in UI (`string[]`) until saved as joined `string`. */
+type DepartmentObjectiveNewForm = Partial<Omit<DepartmentObjective, 'kpi'>> & {
+  kpi: string | string[];
+};
+
 type SortableRowRenderProps = {
   attributes: DraggableAttributes;
-  listeners: ReturnType<typeof useSortable>['listeners'];
+  listeners: ReturnType<typeof useSortable>['listeners'] | undefined;
   isDragging: boolean;
 };
 
@@ -285,7 +296,11 @@ function SortableRow({ id, children, isEditing }: SortableRowProps) {
       {...(listeners ? { ...listeners, onPointerDown: handlePointerDown } : {})}
       className="cursor-grab active:cursor-grabbing hover:bg-primary/5 transition-colors"
     >
-      {children({ attributes: {}, listeners: {}, isDragging })}
+      {children({
+        attributes,
+        listeners: listeners ? { ...listeners, onPointerDown: handlePointerDown } : undefined,
+        isDragging,
+      })}
     </TableRow>
   );
 }
@@ -331,7 +346,7 @@ export default function DepartmentObjectives() {
   const [currentMEKPIObjectiveId, setCurrentMEKPIObjectiveId] = useState<number | null>(null);
   const [editingMEKPI, setEditingMEKPI] = useState<DepartmentObjective | null>(null);
   const [editData, setEditData] = useState<Partial<DepartmentObjective>>({});
-  const [newData, setNewData] = useState<Partial<DepartmentObjective & { kpi: string | string[] }>>({
+  const [newData, setNewData] = useState<DepartmentObjectiveNewForm>({
     kpi: [],
     activity: '',
     type: 'Direct',
@@ -377,8 +392,14 @@ export default function DepartmentObjectives() {
     admin_mee: 140,
     admin_active: 140,
     admin_notes: 300,
-    actions: 150
+    /** BAU default; strategic table uses narrower fixed width (no M&E buttons). */
+    actions: 230,
   });
+
+  const actionsColumnDisplayWidth = useMemo(
+    () => (kpiMode === 'strategic' ? 180 : columnWidths.actions),
+    [kpiMode, columnWidths.actions]
+  );
 
   // Column resizing state
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
@@ -1032,7 +1053,7 @@ export default function DepartmentObjectives() {
         setStrategicObjectives(reordered);
         try {
           const updates = reorderedBlock.map((obj, index) => ({ id: obj.id, sort_order: index + 1 }));
-          await updateStrategicDepartmentObjectivesOrder({ updates });
+          await updateStrategicDepartmentObjectivesOrder(updates);
         } catch (err) {
           setStrategicObjectives(oldList);
           const errorMessage = err instanceof Error ? err.message : 'Failed to save row order';
@@ -1319,6 +1340,7 @@ export default function DepartmentObjectives() {
       return;
     }
 
+    let optimisticTempId: number | undefined;
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
@@ -1375,13 +1397,20 @@ export default function DepartmentObjectives() {
       }
 
       // Optimistically add to UI immediately
-      const tempId = Date.now();
+      optimisticTempId = Date.now();
+      const tempId = optimisticTempId;
+      const resolvedNewType: DepartmentObjective['type'] = (() => {
+        const t = newData.type as string | undefined;
+        if (!t || t === 'blank') return '';
+        if (t === 'Direct' || t === 'In direct' || t === 'M&E' || t === 'M&E MOV') return t;
+        return '';
+      })();
       const optimisticObjective: DepartmentObjective = {
         id: tempId,
         department_id: department.id,
         kpi: joinKPIs(kpiArray),
         activity: newData.activity!,
-        type: newData.type === 'blank' ? '' : newData.type!,
+        type: resolvedNewType,
         activity_target: parseFloat(newData.activity_target!.toString()),
         target_type: 'number',
         responsible_person: newData.responsible_person!,
@@ -1429,7 +1458,7 @@ export default function DepartmentObjectives() {
         department_id: department.id,
         kpi: joinKPIs(kpiArray),
         activity: newData.activity!,
-        type: newData.type === 'blank' ? '' : newData.type!,
+        type: resolvedNewType,
         activity_target: parseFloat(newData.activity_target!.toString()),
         responsible_person: newData.responsible_person!,
         mov: newData.mov!,
@@ -1467,7 +1496,9 @@ export default function DepartmentObjectives() {
       // Force a re-render - filteredObjectives will update automatically via useMemo
     } catch (err) {
       // Remove optimistic update on error
-      setObjectives(prev => prev.filter(obj => obj.id !== tempId));
+      if (optimisticTempId !== undefined) {
+        setObjectives(prev => prev.filter(obj => obj.id !== optimisticTempId));
+      }
       
       const errorMessage = err instanceof Error ? err.message : 'Failed to create objective';
       toast({
@@ -1520,6 +1551,67 @@ export default function DepartmentObjectives() {
     Array.from(new Set(rowSource.map(o => o.mov).filter(Boolean))).sort(),
     [rowSource]
   );
+
+  const uniqueStrategicSortOrder = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(
+        rowSource.map((o) => {
+          const so = (o as StrategicDepartmentObjective).sort_order;
+          return so != null ? String(so) : '—';
+        })
+      )
+    ).sort((a, b) => {
+      const na = parseInt(a, 10);
+      const nb = parseInt(b, 10);
+      if (!Number.isNaN(na) && !Number.isNaN(nb) && a !== '—' && b !== '—') return na - nb;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+  }, [rowSource, kpiMode]);
+
+  const uniqueStrategicDefinitions = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(rowSource.map((o) => strategicTextListValue((o as StrategicDepartmentObjective).definition)))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [rowSource, kpiMode]);
+
+  const uniqueStrategicMeasurements = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(
+        rowSource.map((o) => strategicTextListValue((o as StrategicDepartmentObjective).measurement_aspect))
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [rowSource, kpiMode]);
+
+  const uniqueStrategicMeetingNotes = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(rowSource.map((o) => strategicTextListValue((o as StrategicDepartmentObjective).meeting_notes)))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [rowSource, kpiMode]);
+
+  const uniqueStrategicMee = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(rowSource.map((o) => strategicTextListValue((o as StrategicDepartmentObjective).me_e)))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [rowSource, kpiMode]);
+
+  const uniqueStrategicActive = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(rowSource.map((o) => strategicTextListValue((o as StrategicDepartmentObjective).active)))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [rowSource, kpiMode]);
+
+  const uniqueStrategicNotesCol = useMemo(() => {
+    if (kpiMode !== 'strategic') return [];
+    return Array.from(
+      new Set(rowSource.map((o) => strategicTextListValue((o as StrategicDepartmentObjective).notes)))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [rowSource, kpiMode]);
   
   // Get unique main objectives (with labels) - memoized for performance
   const uniqueMainObjectives = useMemo(() => {
@@ -1595,6 +1687,98 @@ export default function DepartmentObjectives() {
             : matchesTextCondition(obj.mov, movCond.operator, movCond.value)
           : movList.length === 0 || movList.includes(obj.mov ?? '');
 
+      const sObj = obj as StrategicDepartmentObjective;
+      const canSeeStrategicAdminCols = canViewStrategicSensitiveColumns(user?.role);
+
+      const orderList = getListSelected(tableFilterState, 'strategic_order');
+      const orderCond = getCondition(tableFilterState, 'strategic_order');
+      const orderDisplay =
+        kpiMode === 'strategic' ? (sObj.sort_order != null ? String(sObj.sort_order) : '—') : '';
+      const matchesStrategicOrder =
+        kpiMode !== 'strategic'
+          ? true
+          : orderCond?.mode === 'condition'
+            ? orderCond.operator === 'is_empty'
+              ? sObj.sort_order == null
+              : matchesTextCondition(
+                  sObj.sort_order != null ? String(sObj.sort_order) : '',
+                  orderCond.operator,
+                  orderCond.value
+                )
+            : orderList.length === 0 || orderList.includes(orderDisplay);
+
+      const defList = getListSelected(tableFilterState, 'definition');
+      const defCond = getCondition(tableFilterState, 'definition');
+      const defDisplay = strategicTextListValue(sObj.definition);
+      const matchesDefinition =
+        kpiMode !== 'strategic'
+          ? true
+          : defCond?.mode === 'condition'
+            ? defCond.operator === 'is_empty'
+              ? !(sObj.definition ?? '').trim()
+              : matchesTextCondition(sObj.definition ?? '', defCond.operator, defCond.value)
+            : defList.length === 0 || defList.includes(defDisplay);
+
+      const measList = getListSelected(tableFilterState, 'measurement');
+      const measCond = getCondition(tableFilterState, 'measurement');
+      const measDisplay = strategicTextListValue(sObj.measurement_aspect);
+      const matchesMeasurement =
+        kpiMode !== 'strategic'
+          ? true
+          : measCond?.mode === 'condition'
+            ? measCond.operator === 'is_empty'
+              ? !(sObj.measurement_aspect ?? '').trim()
+              : matchesTextCondition(sObj.measurement_aspect ?? '', measCond.operator, measCond.value)
+            : measList.length === 0 || measList.includes(measDisplay);
+
+      const meetingList = getListSelected(tableFilterState, 'admin_meeting');
+      const meetingCond = getCondition(tableFilterState, 'admin_meeting');
+      const meetingDisplay = strategicTextListValue(sObj.meeting_notes);
+      const matchesAdminMeeting =
+        kpiMode !== 'strategic' || !canSeeStrategicAdminCols
+          ? true
+          : meetingCond?.mode === 'condition'
+            ? meetingCond.operator === 'is_empty'
+              ? !(sObj.meeting_notes ?? '').trim()
+              : matchesTextCondition(sObj.meeting_notes ?? '', meetingCond.operator, meetingCond.value)
+            : meetingList.length === 0 || meetingList.includes(meetingDisplay);
+
+      const meeList = getListSelected(tableFilterState, 'admin_mee');
+      const meeCond = getCondition(tableFilterState, 'admin_mee');
+      const meeDisplay = strategicTextListValue(sObj.me_e);
+      const matchesAdminMee =
+        kpiMode !== 'strategic' || !canSeeStrategicAdminCols
+          ? true
+          : meeCond?.mode === 'condition'
+            ? meeCond.operator === 'is_empty'
+              ? !(sObj.me_e ?? '').trim()
+              : matchesTextCondition(sObj.me_e ?? '', meeCond.operator, meeCond.value)
+            : meeList.length === 0 || meeList.includes(meeDisplay);
+
+      const activeList = getListSelected(tableFilterState, 'admin_active');
+      const activeCond = getCondition(tableFilterState, 'admin_active');
+      const activeDisplay = strategicTextListValue(sObj.active);
+      const matchesAdminActive =
+        kpiMode !== 'strategic' || !canSeeStrategicAdminCols
+          ? true
+          : activeCond?.mode === 'condition'
+            ? activeCond.operator === 'is_empty'
+              ? !(sObj.active ?? '').trim()
+              : matchesTextCondition(sObj.active ?? '', activeCond.operator, activeCond.value)
+            : activeList.length === 0 || activeList.includes(activeDisplay);
+
+      const notesList = getListSelected(tableFilterState, 'admin_notes');
+      const notesCond = getCondition(tableFilterState, 'admin_notes');
+      const notesDisplay = strategicTextListValue(sObj.notes);
+      const matchesAdminNotes =
+        kpiMode !== 'strategic' || !canSeeStrategicAdminCols
+          ? true
+          : notesCond?.mode === 'condition'
+            ? notesCond.operator === 'is_empty'
+              ? !(sObj.notes ?? '').trim()
+              : matchesTextCondition(sObj.notes ?? '', notesCond.operator, notesCond.value)
+            : notesList.length === 0 || notesList.includes(notesDisplay);
+
       let mainObjLabel = 'Not linked';
       if (obj.main_objective_id) {
         const mainObj = mainObjectives.find((o) => o.id === obj.main_objective_id);
@@ -1611,11 +1795,18 @@ export default function DepartmentObjectives() {
         matchesTarget &&
         matchesResponsible &&
         matchesMOV &&
+        matchesStrategicOrder &&
+        matchesDefinition &&
+        matchesMeasurement &&
+        matchesAdminMeeting &&
+        matchesAdminMee &&
+        matchesAdminActive &&
+        matchesAdminNotes &&
         matchesMainObjective
       );
     });
     return filtered;
-  }, [rowSource, tableFilterState, mainObjectives]);
+  }, [rowSource, tableFilterState, mainObjectives, kpiMode, user?.role]);
 
   // NOW we can do conditional returns - AFTER all hooks
   // Skeleton loader component
@@ -1859,7 +2050,11 @@ export default function DepartmentObjectives() {
       }
       
       // Store M&E KPI as a department objective with parent reference in activity
-      const meDataToSave = {
+      type CreateDeptObjectivePayload = Omit<
+        DepartmentObjective,
+        'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'
+      >;
+      const meDataToSave: CreateDeptObjectivePayload = {
         department_id: department.id,
         kpi: meKpiData.me_kpi,
         activity: `[M&E-PARENT:${currentMEKPIObjectiveId}] ${meKpiData.me_kpi}`, // Mark as M&E with parent reference
@@ -2133,7 +2328,11 @@ export default function DepartmentObjectives() {
         setSelectedDepartment(value === 'all' ? null : value);
       }}
     >
-      <SelectTrigger id="department-filter" className="w-full min-w-[200px] sm:w-[250px]" aria-label="Department">
+      <SelectTrigger
+        id="department-filter"
+        className="h-11 w-full min-w-0 max-w-full text-xs sm:h-8 sm:max-w-[200px] sm:w-[200px]"
+        aria-label="Department"
+      >
         <SelectValue placeholder="Select department" />
       </SelectTrigger>
       <SelectContent>
@@ -2180,21 +2379,21 @@ export default function DepartmentObjectives() {
         <Tabs value={activeTab} className="w-full">
           <TabsContent value="objectives" className="mt-4">
         <Card>
-          <CardHeader className="space-y-1 p-4 pb-3 sm:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0">
-                <CardTitle className="shrink-0 text-base font-semibold leading-tight sm:text-lg">
+          <CardHeader className="space-y-0.5 p-3 pb-2 sm:p-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                <CardTitle className="shrink-0 text-sm font-semibold leading-tight sm:text-base">
                   Department Objectives
                 </CardTitle>
                 <TooltipProvider delayDuration={200}>
-                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="KPI mode">
+                  <div className="flex flex-wrap items-center gap-1" role="group" aria-label="KPI mode">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
                           size="sm"
                           variant={kpiMode === 'bau' ? 'default' : 'outline'}
-                          className="h-8 px-2.5 text-xs sm:h-9 sm:px-3"
+                          className="h-11 px-2.5 text-xs sm:h-8 sm:px-2 sm:text-[11px]"
                           onClick={() => {
                             setKpiMode('bau');
                             try {
@@ -2217,7 +2416,7 @@ export default function DepartmentObjectives() {
                           type="button"
                           size="sm"
                           variant={kpiMode === 'strategic' ? 'default' : 'outline'}
-                          className="h-8 px-2.5 text-xs sm:h-9 sm:px-3"
+                          className="h-11 px-2.5 text-xs sm:h-8 sm:px-2 sm:text-[11px]"
                           onClick={() => {
                             setKpiMode('strategic');
                             try {
@@ -2239,8 +2438,8 @@ export default function DepartmentObjectives() {
                 {departmentFilterSelect}
               </div>
               <div className="flex items-center gap-2 flex-wrap shrink-0 justify-end">
-                {/* Zoom Controls */}
-                <div className="flex items-center gap-2 border rounded-md px-2 py-1">
+                {/* Zoom Controls — compact strip; touch-friendly on small screens */}
+                <div className="flex h-11 max-w-fit shrink-0 items-center gap-0.5 rounded-md border px-1 sm:h-8 sm:gap-1 sm:px-1.5">
                   <Button
                     type="button"
                     size="sm"
@@ -2248,10 +2447,11 @@ export default function DepartmentObjectives() {
                     onClick={handleZoomOut}
                     disabled={tableZoom <= 0.5}
                     title="Zoom Out"
+                    className="h-11 w-11 shrink-0 p-0 sm:h-8 sm:w-8"
                   >
                     <ZoomOut className="h-4 w-4" />
                   </Button>
-                  <span className="text-sm font-medium min-w-[60px] text-center">
+                  <span className="flex h-11 w-9 shrink-0 items-center justify-center text-center text-xs font-medium tabular-nums leading-none sm:h-8 sm:w-10 sm:text-sm">
                     {Math.round(tableZoom * 100)}%
                   </span>
                   <Button
@@ -2261,6 +2461,7 @@ export default function DepartmentObjectives() {
                     onClick={handleZoomIn}
                     disabled={tableZoom >= 1.5}
                     title="Zoom In"
+                    className="h-11 w-11 shrink-0 p-0 sm:h-8 sm:w-8"
                   >
                     <ZoomIn className="h-4 w-4" />
                   </Button>
@@ -2270,7 +2471,7 @@ export default function DepartmentObjectives() {
                     variant="ghost"
                     onClick={handleZoomReset}
                     title="Reset Zoom"
-                    className="text-xs"
+                    className="h-11 min-w-0 shrink-0 px-2 text-[11px] sm:h-8 sm:px-1.5 sm:text-xs"
                   >
                     Reset
                   </Button>
@@ -2279,7 +2480,9 @@ export default function DepartmentObjectives() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span>
-                        <Button 
+                        <Button
+                          type="button"
+                          size="sm"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2294,10 +2497,10 @@ export default function DepartmentObjectives() {
                             handleOpenAddModal();
                           }}
                           disabled={isAddLocked}
-                          className={isAddLocked ? 'opacity-50 cursor-not-allowed' : ''}
+                          className={`h-11 shrink-0 gap-1.5 px-3 text-xs sm:h-8 sm:px-2.5 ${isAddLocked ? 'cursor-not-allowed opacity-50' : ''}`}
                         >
-                          {isAddLocked && <LockIcon className="mr-2 h-4 w-4" />}
-                          <Plus className="mr-2 h-4 w-4" />
+                          {isAddLocked && <LockIcon className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />}
+                          <Plus className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
                           Add Objective
                         </Button>
                       </span>
@@ -2328,8 +2531,25 @@ export default function DepartmentObjectives() {
                 <TableHeader>
                   <TableRow>
                     <TableHead style={{ width: columnWidths.index, minWidth: columnWidths.index, position: 'relative' }} className="bg-primary/10 border-r border-border/50">
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center gap-1">
                         <span className="font-semibold text-primary">N</span>
+                        {kpiMode === 'strategic' && (
+                          <ColumnFilter
+                            columnKey="strategic_order"
+                            columnLabel="N"
+                            filterId="strategic_order"
+                            columnType="text"
+                            uniqueValues={uniqueStrategicSortOrder}
+                            selectedValues={getListSelected(tableFilterState, 'strategic_order')}
+                            onListChange={(selected) =>
+                              updateColumnFilter('strategic_order', { mode: 'list', selectedValues: selected })
+                            }
+                            condition={getCondition(tableFilterState, 'strategic_order')}
+                            onConditionChange={(c) => updateColumnFilter('strategic_order', c)}
+                            openFilterId={openFilter}
+                            onOpenFilterChange={setOpenFilter}
+                          />
+                        )}
                       </div>
                       <div
                         className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
@@ -2452,7 +2672,24 @@ export default function DepartmentObjectives() {
                           style={{ width: columnWidths.definition, minWidth: columnWidths.definition, position: 'relative' }}
                           className="border-r border-border/50"
                         >
-                          <span>Definition</span>
+                          <div className="flex items-center gap-2">
+                            <span>Definition</span>
+                            <ColumnFilter
+                              columnKey="definition"
+                              columnLabel="Definition"
+                              filterId="definition"
+                              columnType="text"
+                              uniqueValues={uniqueStrategicDefinitions}
+                              selectedValues={getListSelected(tableFilterState, 'definition')}
+                              onListChange={(selected) =>
+                                updateColumnFilter('definition', { mode: 'list', selectedValues: selected })
+                              }
+                              condition={getCondition(tableFilterState, 'definition')}
+                              onConditionChange={(c) => updateColumnFilter('definition', c)}
+                              openFilterId={openFilter}
+                              onOpenFilterChange={setOpenFilter}
+                            />
+                          </div>
                           <div
                             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
                             onMouseDown={(e) => handleResizeStart('definition', e)}
@@ -2462,7 +2699,24 @@ export default function DepartmentObjectives() {
                           style={{ width: columnWidths.measurement, minWidth: columnWidths.measurement, position: 'relative' }}
                           className="border-r border-border/50"
                         >
-                          <span>Measurement</span>
+                          <div className="flex items-center gap-2">
+                            <span>Measurement</span>
+                            <ColumnFilter
+                              columnKey="measurement"
+                              columnLabel="Measurement"
+                              filterId="measurement"
+                              columnType="text"
+                              uniqueValues={uniqueStrategicMeasurements}
+                              selectedValues={getListSelected(tableFilterState, 'measurement')}
+                              onListChange={(selected) =>
+                                updateColumnFilter('measurement', { mode: 'list', selectedValues: selected })
+                              }
+                              condition={getCondition(tableFilterState, 'measurement')}
+                              onConditionChange={(c) => updateColumnFilter('measurement', c)}
+                              openFilterId={openFilter}
+                              onOpenFilterChange={setOpenFilter}
+                            />
+                          </div>
                           <div
                             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
                             onMouseDown={(e) => handleResizeStart('measurement', e)}
@@ -2498,7 +2752,24 @@ export default function DepartmentObjectives() {
                           style={{ width: columnWidths.admin_meeting, minWidth: columnWidths.admin_meeting, position: 'relative' }}
                           className="border-r border-border/50"
                         >
-                          <span>Meeting notes</span>
+                          <div className="flex items-center gap-2">
+                            <span>Meeting notes</span>
+                            <ColumnFilter
+                              columnKey="admin_meeting"
+                              columnLabel="Meeting notes"
+                              filterId="admin_meeting"
+                              columnType="text"
+                              uniqueValues={uniqueStrategicMeetingNotes}
+                              selectedValues={getListSelected(tableFilterState, 'admin_meeting')}
+                              onListChange={(selected) =>
+                                updateColumnFilter('admin_meeting', { mode: 'list', selectedValues: selected })
+                              }
+                              condition={getCondition(tableFilterState, 'admin_meeting')}
+                              onConditionChange={(c) => updateColumnFilter('admin_meeting', c)}
+                              openFilterId={openFilter}
+                              onOpenFilterChange={setOpenFilter}
+                            />
+                          </div>
                           <div
                             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
                             onMouseDown={(e) => handleResizeStart('admin_meeting', e)}
@@ -2508,7 +2779,24 @@ export default function DepartmentObjectives() {
                           style={{ width: columnWidths.admin_mee, minWidth: columnWidths.admin_mee, position: 'relative' }}
                           className="border-r border-border/50"
                         >
-                          <span>M&amp;E</span>
+                          <div className="flex items-center gap-2">
+                            <span>M&amp;E</span>
+                            <ColumnFilter
+                              columnKey="admin_mee"
+                              columnLabel="M&E"
+                              filterId="admin_mee"
+                              columnType="text"
+                              uniqueValues={uniqueStrategicMee}
+                              selectedValues={getListSelected(tableFilterState, 'admin_mee')}
+                              onListChange={(selected) =>
+                                updateColumnFilter('admin_mee', { mode: 'list', selectedValues: selected })
+                              }
+                              condition={getCondition(tableFilterState, 'admin_mee')}
+                              onConditionChange={(c) => updateColumnFilter('admin_mee', c)}
+                              openFilterId={openFilter}
+                              onOpenFilterChange={setOpenFilter}
+                            />
+                          </div>
                           <div
                             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
                             onMouseDown={(e) => handleResizeStart('admin_mee', e)}
@@ -2518,7 +2806,24 @@ export default function DepartmentObjectives() {
                           style={{ width: columnWidths.admin_active, minWidth: columnWidths.admin_active, position: 'relative' }}
                           className="border-r border-border/50"
                         >
-                          <span>Active</span>
+                          <div className="flex items-center gap-2">
+                            <span>Active</span>
+                            <ColumnFilter
+                              columnKey="admin_active"
+                              columnLabel="Active"
+                              filterId="admin_active"
+                              columnType="text"
+                              uniqueValues={uniqueStrategicActive}
+                              selectedValues={getListSelected(tableFilterState, 'admin_active')}
+                              onListChange={(selected) =>
+                                updateColumnFilter('admin_active', { mode: 'list', selectedValues: selected })
+                              }
+                              condition={getCondition(tableFilterState, 'admin_active')}
+                              onConditionChange={(c) => updateColumnFilter('admin_active', c)}
+                              openFilterId={openFilter}
+                              onOpenFilterChange={setOpenFilter}
+                            />
+                          </div>
                           <div
                             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
                             onMouseDown={(e) => handleResizeStart('admin_active', e)}
@@ -2528,7 +2833,24 @@ export default function DepartmentObjectives() {
                           style={{ width: columnWidths.admin_notes, minWidth: columnWidths.admin_notes, position: 'relative' }}
                           className="border-r border-border/50"
                         >
-                          <span>Notes</span>
+                          <div className="flex items-center gap-2">
+                            <span>Notes</span>
+                            <ColumnFilter
+                              columnKey="admin_notes"
+                              columnLabel="Notes"
+                              filterId="admin_notes"
+                              columnType="text"
+                              uniqueValues={uniqueStrategicNotesCol}
+                              selectedValues={getListSelected(tableFilterState, 'admin_notes')}
+                              onListChange={(selected) =>
+                                updateColumnFilter('admin_notes', { mode: 'list', selectedValues: selected })
+                              }
+                              condition={getCondition(tableFilterState, 'admin_notes')}
+                              onConditionChange={(c) => updateColumnFilter('admin_notes', c)}
+                              openFilterId={openFilter}
+                              onOpenFilterChange={setOpenFilter}
+                            />
+                          </div>
                           <div
                             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
                             onMouseDown={(e) => handleResizeStart('admin_notes', e)}
@@ -2536,7 +2858,12 @@ export default function DepartmentObjectives() {
                         </TableHead>
                       </>
                     )}
-                    <TableHead className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>Actions</TableHead>
+                    <TableHead
+                      className="text-right"
+                      style={{ width: actionsColumnDisplayWidth, minWidth: actionsColumnDisplayWidth }}
+                    >
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2668,8 +2995,14 @@ export default function DepartmentObjectives() {
                                           </TableCell>
                                         </>
                                       )}
-                                      <TableCell className="text-right" style={{ width: columnWidths.actions, minWidth: columnWidths.actions }}>
-                            <div className="flex justify-end gap-2">
+                                      <TableCell
+                                        className="text-right align-middle"
+                                        style={{
+                                          width: actionsColumnDisplayWidth,
+                                          minWidth: actionsColumnDisplayWidth,
+                                        }}
+                                      >
+                            <div className="flex flex-nowrap justify-end gap-2">
                               {kpiMode !== 'strategic' && meKPIsForObjective.length > 0 && (
                                 <Button
                                   type="button"
