@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { fetchAuthSession, getCurrentUser, mergeSessionIntoStoredUser } from '@/services/authService';
 import type { User } from '@/services/authService';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,14 +47,43 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, m, d] = await Promise.all([
+      const [stRes, moRes, depRes] = await Promise.allSettled([
         getStrategicTopicKpiRows(strategicTopicCode),
         getMainObjectives(),
         getDepartments(),
       ]);
-      setRows(r);
-      setMainPlanObjectives(m);
-      setDepartments(d);
+      const parts: string[] = [];
+      if (stRes.status === 'fulfilled') {
+        const r = stRes.value;
+        setRows(Array.isArray(r) ? r : []);
+        if (!Array.isArray(r)) parts.push('Strategic topic KPI rows: unexpected response');
+      } else {
+        setRows([]);
+        parts.push(
+          `Strategic topic KPI rows: ${stRes.reason instanceof Error ? stRes.reason.message : String(stRes.reason)}`
+        );
+      }
+      if (moRes.status === 'fulfilled') {
+        setMainPlanObjectives(moRes.value);
+      } else {
+        setMainPlanObjectives([]);
+        parts.push(
+          `Main plan objectives: ${moRes.reason instanceof Error ? moRes.reason.message : String(moRes.reason)}`
+        );
+      }
+      if (depRes.status === 'fulfilled') {
+        setDepartments(depRes.value);
+      } else {
+        setDepartments([]);
+        parts.push(`Departments: ${depRes.reason instanceof Error ? depRes.reason.message : String(depRes.reason)}`);
+      }
+      if (parts.length > 0) {
+        toast({
+          title: 'Failed to load some data',
+          description: parts.join(' · '),
+          variant: 'destructive',
+        });
+      }
     } catch (e) {
       toast({
         title: 'Failed to load data',
@@ -67,12 +97,26 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
   }, [strategicTopicCode]);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
+    const u = getCurrentUser();
+    if (!u) {
       navigate('/');
       return;
     }
-    setUser(JSON.parse(userData) as User);
+    setUser(u);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await fetchAuthSession();
+        if (cancelled || !session) return;
+        const next = mergeSessionIntoStoredUser(session);
+        if (!cancelled && next) setUser(next);
+      } catch {
+        /* ignore — offline or session endpoint unavailable */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -178,6 +222,7 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
           ) : (
             <StrategicTopicKpiTable
               rows={rows}
+              mergeRows={setRows}
               strategicTopicCode={strategicTopicCode}
               mainPlanObjectives={mainPlanObjectives}
               departments={departments}

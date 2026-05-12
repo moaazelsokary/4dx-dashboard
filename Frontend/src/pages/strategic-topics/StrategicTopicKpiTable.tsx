@@ -1,4 +1,13 @@
-import { useMemo, useState, useEffect, useCallback, type ReactNode } from 'react';
+import {
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -47,6 +56,7 @@ import {
   canEditStrategicTopicRow,
   canDeleteStrategicTopicRow,
   canCreateStrategicTopicRow,
+  pickDefaultDeptCodesForNewRow,
 } from './strategicTopicKpiUtils';
 import {
   createStrategicTopicKpiRow,
@@ -54,12 +64,24 @@ import {
   updateStrategicTopicKpiRow,
   updateStrategicTopicKpiRowsOrder,
 } from '@/services/wigService';
+import type { StTopicGridColumn } from '@/lib/strategicTopicKpiGrid/types';
+import { ST_TOPIC_GRID_COLUMNS } from '@/lib/strategicTopicKpiGrid/columns';
+import { strategicTopicKpiSheetNavRef } from '@/lib/strategicTopicKpiGrid/navRef';
+import { resetStTopicSheet, stTopicSheetBeginEdit } from '@/lib/strategicTopicKpiGrid/store';
+import { strategicTopicKpiInlineAppendRef } from '@/lib/strategicTopicKpiGrid/inlineAppendRef';
+import { parseStTopicInlineCommit, getStTopicEditorSeed } from '@/lib/strategicTopicKpiGrid/commitParsing';
+import { useStrategicTopicKpiSpreadsheetController } from '@/hooks/useStrategicTopicKpiSpreadsheetController';
+import { StrategicTopicKpiSpreadsheetProvider } from '@/components/wig/StrategicTopicKpiSpreadsheetContext';
+import { StrategicTopicKpiFormulaBar } from '@/components/wig/SpreadsheetFormulaBar';
+import { StrategicTopicKpiSheetCell } from '@/components/wig/StrategicTopicKpiSheetCell';
 import { toast } from '@/hooks/use-toast';
 import { Pencil, Plus, Trash2, Loader2, Filter, Search, ZoomIn, ZoomOut, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Props = {
   rows: StrategicTopicKpiRow[];
+  /** Required for optimistic inline cell edits */
+  mergeRows: Dispatch<SetStateAction<StrategicTopicKpiRow[]>>;
   strategicTopicCode: StrategicTopicCode;
   mainPlanObjectives: MainPlanObjective[];
   departments: Department[];
@@ -108,6 +130,47 @@ function sortRowsForDisplay(rows: StrategicTopicKpiRow[]): StrategicTopicKpiRow[
   );
 }
 
+const STRATEGIC_TOPIC_KPI_TABLE_COL_COUNT = 12;
+
+function StrategicTopicInlineRowInsertStrip({
+  colSpan,
+  disabled,
+  pending,
+  onAppend,
+}: {
+  colSpan: number;
+  disabled: boolean;
+  pending: boolean;
+  onAppend: () => void;
+}) {
+  return (
+    <TableRow className="border-0 bg-transparent hover:bg-primary/[0.07] transition-colors">
+      <TableCell colSpan={colSpan} className="p-0 h-7 border-t border-border/25">
+        <button
+          type="button"
+          disabled={disabled || pending}
+          onClick={onAppend}
+          className={cn(
+            'group/strip w-full h-full flex min-h-[1.75rem] items-stretch text-primary/40 hover:text-primary transition-colors',
+            !disabled && !pending && 'cursor-pointer',
+            (disabled || pending) && 'opacity-35 cursor-not-allowed'
+          )}
+          aria-label="Add row"
+        >
+          <span className="flex w-16 min-w-16 shrink-0 items-center justify-center bg-primary/[0.08] group-hover/strip:bg-primary/15 border-r border-border/30">
+            {pending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            )}
+          </span>
+          <span className="min-w-0 flex-1" aria-hidden />
+        </button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 function StrategicTopicSortableRow({
   row,
   disabled,
@@ -147,12 +210,31 @@ function StrategicTopicSortableRow({
   );
 }
 
+/** @dnd-kit injects divs (a11y); they must not sit inside `<tbody>`. Wrap the whole `<table>` instead. */
+function ConditionalStrategicTopicDndRoot({
+  enabled,
+  onDragEnd,
+  children,
+}: {
+  enabled: boolean;
+  onDragEnd: (event: DragEndEvent) => void;
+  children: React.ReactNode;
+}) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {children}
+    </DndContext>
+  );
+}
+
 function kpiFilterValueForRow(row: StrategicTopicKpiRow): string {
   return stripKpiNumberPrefix((row.main_kpi || '—').trim() || '—');
 }
 
 export default function StrategicTopicKpiTable({
   rows,
+  mergeRows,
   strategicTopicCode,
   mainPlanObjectives,
   departments,
@@ -162,6 +244,8 @@ export default function StrategicTopicKpiTable({
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StrategicTopicKpiRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [appendPending, setAppendPending] = useState(false);
+  const appendLockRef = useRef(false);
   const [orderSaving, setOrderSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -225,16 +309,6 @@ export default function StrategicTopicKpiTable({
     setNotes('');
   };
 
-  const openCreate = () => {
-    resetForm();
-    const mine = user?.departments?.map((c) => String(c).toLowerCase()) || [];
-    if (user?.role === 'department' && mine.length > 0) {
-      setSelectedDeptCodes([mine[0]]);
-    }
-    setSelectedTopicCodes([strategicTopicCode]);
-    setOpen(true);
-  };
-
   const openEdit = (row: StrategicTopicKpiRow) => {
     setEditing(row);
     setMainPlanObjectiveId(row.main_objective_id ?? null);
@@ -288,6 +362,7 @@ export default function StrategicTopicKpiTable({
   };
 
   const handleSave = async () => {
+    if (!editing) return;
     if (!activity.trim()) {
       toast({ title: 'Activity required', variant: 'destructive' });
       return;
@@ -315,15 +390,8 @@ export default function StrategicTopicKpiTable({
         status,
         notes: notes.trim() || null,
       };
-      if (editing) {
-        await updateStrategicTopicKpiRow(editing.id, payload);
-        toast({ title: 'Saved' });
-      } else {
-        await createStrategicTopicKpiRow(
-          payload as Omit<StrategicTopicKpiRow, 'id' | 'created_at' | 'updated_at' | 'main_kpi' | 'main_objective' | 'main_pillar'>
-        );
-        toast({ title: 'Created' });
-      }
+      await updateStrategicTopicKpiRow(editing.id, payload);
+      toast({ title: 'Saved' });
       setOpen(false);
       resetForm();
       onRefresh();
@@ -337,6 +405,75 @@ export default function StrategicTopicKpiTable({
       setSaving(false);
     }
   };
+
+  const handleAppendRow = useCallback(async () => {
+    if (!canCreateStrategicTopicRow(user, strategicTopicCode) || appendLockRef.current) return;
+    const deptCodes = pickDefaultDeptCodesForNewRow(user, departments);
+    if (deptCodes.length === 0) {
+      toast({
+        title: 'Cannot add row',
+        description:
+          user?.role === 'department'
+            ? 'Your user is not linked to a department in this list.'
+            : 'No departments loaded.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const placeholderActivity = '(blank)';
+    const payload = {
+      strategic_topic: strategicTopicCode,
+      main_objective_id: null as number | null,
+      objective_text: null as string | null,
+      activity: placeholderActivity,
+      expected_duration: null as string | null,
+      start_date: null as string | null,
+      end_date: null as string | null,
+      associated_departments: toPipeList(deptCodes),
+      associated_strategic_topics: toPipeList([strategicTopicCode]),
+      status: 'On Hold' as const,
+      notes: null as string | null,
+    };
+
+    appendLockRef.current = true;
+    setAppendPending(true);
+    try {
+      const created = await createStrategicTopicKpiRow(
+        payload as Omit<
+          StrategicTopicKpiRow,
+          'id' | 'created_at' | 'updated_at' | 'main_kpi' | 'main_objective' | 'main_pillar'
+        >
+      );
+      mergeRows((prev) => {
+        if (prev.some((r) => r.id === created.id)) {
+          return sortRowsForDisplay(prev.map((r) => (r.id === created.id ? created : r)));
+        }
+        return sortRowsForDisplay([...prev, created]);
+      });
+      requestAnimationFrame(() => {
+        const col = ST_TOPIC_GRID_COLUMNS[0];
+        const seed = getStTopicEditorSeed(col, created);
+        stTopicSheetBeginEdit({ rowId: created.id, column: col }, seed);
+      });
+    } catch (e) {
+      toast({
+        title: 'Could not add row',
+        description: e instanceof Error ? e.message : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      appendLockRef.current = false;
+      setAppendPending(false);
+    }
+  }, [user, departments, strategicTopicCode, mergeRows]);
+
+  useEffect(() => {
+    strategicTopicKpiInlineAppendRef.appendRowAndBeginEdit = handleAppendRow;
+    return () => {
+      strategicTopicKpiInlineAppendRef.appendRowAndBeginEdit = null;
+    };
+  }, [handleAppendRow]);
 
   const handleDelete = async (row: StrategicTopicKpiRow) => {
     if (!canDeleteStrategicTopicRow(user)) return;
@@ -489,6 +626,59 @@ export default function StrategicTopicKpiTable({
     });
   }, [orderedRows, searchQuery, tableFilterState, displayDepts, displayTopics]);
 
+  const sheetVisibleRowIds = useMemo(() => filteredRows.map((r) => r.id), [filteredRows]);
+
+  strategicTopicKpiSheetNavRef.visibleRowIds = sheetVisibleRowIds;
+  strategicTopicKpiSheetNavRef.columnOrder = ST_TOPIC_GRID_COLUMNS;
+
+  const handleTopicInlineCommit = useCallback(
+    async (rowId: number, column: StTopicGridColumn, raw: string): Promise<boolean> => {
+      const row = rows.find((r) => r.id === rowId);
+      if (!row || !canEditStrategicTopicRow(user, row, strategicTopicCode)) return false;
+
+      const parsed = parseStTopicInlineCommit(column, raw);
+      if (parsed.ok === false) {
+        toast({
+          title: 'Cannot save',
+          description: parsed.error,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const snapshot = { ...row };
+      mergeRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, ...parsed.patch } : r)));
+
+      try {
+        const updated = await updateStrategicTopicKpiRow(rowId, {
+          strategic_topic: strategicTopicCode,
+          ...parsed.patch,
+        });
+        mergeRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, ...updated } : r)));
+        return true;
+      } catch (err) {
+        mergeRows((prev) => prev.map((r) => (r.id === rowId ? snapshot : r)));
+        toast({
+          title: 'Save failed',
+          description: err instanceof Error ? err.message : 'Update failed',
+          variant: 'destructive',
+        });
+        return false;
+      }
+    },
+    [rows, user, mergeRows, strategicTopicCode]
+  );
+
+  useStrategicTopicKpiSpreadsheetController({
+    enabled: rows.length > 0,
+    getRow: (id) => rows.find((r) => r.id === id),
+    commitInline: handleTopicInlineCommit,
+  });
+
+  useEffect(() => {
+    resetStTopicSheet();
+  }, [strategicTopicCode]);
+
   const hasActiveFilters =
     searchQuery.trim() !== '' ||
     Object.keys(tableFilterState).some((k) => {
@@ -503,7 +693,8 @@ export default function StrategicTopicKpiTable({
     });
 
   const reorderAllowed =
-    canCreateStrategicTopicRow(user) && !hasActiveFilters && searchQuery.trim() === '';
+    canCreateStrategicTopicRow(user, strategicTopicCode) && !hasActiveFilters && searchQuery.trim() === '';
+  const useStrategicTopicDndShell = reorderAllowed && filteredRows.length > 0;
 
   const handleTopicDragEnd = async (event: DragEndEvent) => {
     if (!reorderAllowed || orderSaving) return;
@@ -529,6 +720,16 @@ export default function StrategicTopicKpiTable({
       setOrderSaving(false);
     }
   };
+
+  const inlineRowInsertEl =
+    canCreateStrategicTopicRow(user, strategicTopicCode) ? (
+      <StrategicTopicInlineRowInsertStrip
+        colSpan={STRATEGIC_TOPIC_KPI_TABLE_COL_COUNT}
+        disabled={appendPending || departments.length === 0}
+        pending={appendPending}
+        onAppend={() => void handleAppendRow()}
+      />
+    ) : null;
 
   return (
     <>
@@ -593,17 +794,6 @@ export default function StrategicTopicKpiTable({
                   Clear filters
                 </Button>
               )}
-              {canCreateStrategicTopicRow(user) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={openCreate}
-                  className="h-11 shrink-0 gap-1.5 px-3 text-xs sm:h-8 sm:px-2.5"
-                >
-                  <Plus className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-                  Add row
-                </Button>
-              )}
             </div>
           </div>
           {rows.length > 0 && (
@@ -632,6 +822,9 @@ export default function StrategicTopicKpiTable({
               minHeight: tableZoom < 1 ? `${100 / tableZoom}%` : 'auto',
             }}
           >
+            <StrategicTopicKpiSpreadsheetProvider commitInline={handleTopicInlineCommit}>
+            <StrategicTopicKpiFormulaBar />
+            <ConditionalStrategicTopicDndRoot enabled={useStrategicTopicDndShell} onDragEnd={handleTopicDragEnd}>
             <Table className="border-collapse w-full min-w-[1240px] table-auto">
               <TableHeader>
                 <TableRow>
@@ -851,25 +1044,37 @@ export default function StrategicTopicKpiTable({
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={12} className="text-center text-muted-foreground py-12">
-                      No rows yet. Add a row to get started.
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow>
+                      <TableCell
+                        colSpan={STRATEGIC_TOPIC_KPI_TABLE_COL_COUNT}
+                        className="text-center text-muted-foreground py-12"
+                      >
+                        No rows yet. Click the + row below to add one.
+                      </TableCell>
+                    </TableRow>
+                    {inlineRowInsertEl}
+                  </>
                 ) : filteredRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={12} className="text-center text-muted-foreground py-12">
-                      No rows match your filters or search. Try clearing filters.
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow>
+                      <TableCell
+                        colSpan={STRATEGIC_TOPIC_KPI_TABLE_COL_COUNT}
+                        className="text-center text-muted-foreground py-12"
+                      >
+                        No rows match your filters or search. Try clearing filters.
+                      </TableCell>
+                    </TableRow>
+                    {inlineRowInsertEl}
+                  </>
                 ) : reorderAllowed ? (
-                  <DndContext collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
+                  <>
                     <SortableContext
                       items={filteredRows.map((r) => r.id.toString())}
                       strategy={verticalListSortingStrategy}
                     >
                       {filteredRows.map((row, rowIndex) => {
-                        const canEdit = canEditStrategicTopicRow(user, row);
+                        const canEdit = canEditStrategicTopicRow(user, row, strategicTopicCode);
                         const canDel = canDeleteStrategicTopicRow(user);
                         const displayOrder =
                           row.sort_order != null && Number.isFinite(row.sort_order)
@@ -896,28 +1101,64 @@ export default function StrategicTopicKpiTable({
                                 </Badge>
                               </div>
                             </TableCell>
-                            <TableCell className="align-top text-sm border-r border-border/50 min-w-0">
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="objective"
+                              editorSeed={getStTopicEditorSeed('objective', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm border-r border-border/50 min-w-0"
+                            >
                               <BidirectionalText>{objectiveCellText(row)}</BidirectionalText>
-                            </TableCell>
-                            <TableCell className="align-top text-sm font-medium border-r border-border/50 min-w-0">
+                            </StrategicTopicKpiSheetCell>
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="activity"
+                              editorSeed={getStTopicEditorSeed('activity', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm font-medium border-r border-border/50 min-w-0"
+                            >
                               <BidirectionalText>{row.activity}</BidirectionalText>
-                            </TableCell>
-                            <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground border-r border-border/50">
+                            </StrategicTopicKpiSheetCell>
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="duration"
+                              editorSeed={getStTopicEditorSeed('duration', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm whitespace-nowrap text-muted-foreground border-r border-border/50"
+                            >
                               {row.expected_duration || '—'}
-                            </TableCell>
-                            <TableCell className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50">
+                            </StrategicTopicKpiSheetCell>
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="start"
+                              editorSeed={getStTopicEditorSeed('start', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50"
+                            >
                               {formatDateShort(row.start_date)}
-                            </TableCell>
-                            <TableCell className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50">
+                            </StrategicTopicKpiSheetCell>
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="end"
+                              editorSeed={getStTopicEditorSeed('end', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50"
+                            >
                               {formatDateShort(row.end_date)}
-                            </TableCell>
+                            </StrategicTopicKpiSheetCell>
                             <TableCell className="align-top text-xs border-r border-border/50 min-w-0">
                               <BidirectionalText>{displayDepts(row.associated_departments)}</BidirectionalText>
                             </TableCell>
                             <TableCell className="align-top text-xs border-r border-border/50 min-w-0">
                               <BidirectionalText>{displayTopics(row.associated_strategic_topics)}</BidirectionalText>
                             </TableCell>
-                            <TableCell className="align-top text-sm whitespace-nowrap border-r border-border/50">
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="status"
+                              editorSeed={getStTopicEditorSeed('status', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm whitespace-nowrap border-r border-border/50"
+                            >
                               <Badge
                                 variant="outline"
                                 className={cn(
@@ -930,10 +1171,16 @@ export default function StrategicTopicKpiTable({
                               >
                                 {row.status}
                               </Badge>
-                            </TableCell>
-                            <TableCell className="align-top text-xs border-r border-border/50 min-w-0 break-words">
+                            </StrategicTopicKpiSheetCell>
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
+                              column="notes"
+                              editorSeed={getStTopicEditorSeed('notes', row)}
+                              disabled={!canEdit}
+                              className="align-top text-xs border-r border-border/50 min-w-0 break-words"
+                            >
                               <BidirectionalText>{row.notes || '—'}</BidirectionalText>
-                            </TableCell>
+                            </StrategicTopicKpiSheetCell>
                             <TableCell className="align-top text-right space-x-1 whitespace-nowrap" data-no-drag>
                               {canEdit && (
                                 <Button
@@ -973,11 +1220,12 @@ export default function StrategicTopicKpiTable({
                         );
                       })}
                     </SortableContext>
-                  </DndContext>
+                    {inlineRowInsertEl}
+                  </>
                 ) : (
                   <>
                     {filteredRows.map((row, rowIndex) => {
-                      const canEdit = canEditStrategicTopicRow(user, row);
+                      const canEdit = canEditStrategicTopicRow(user, row, strategicTopicCode);
                       const canDel = canDeleteStrategicTopicRow(user);
                       const displayOrder =
                         row.sort_order != null && Number.isFinite(row.sort_order)
@@ -1003,28 +1251,64 @@ export default function StrategicTopicKpiTable({
                               </Badge>
                             </div>
                           </TableCell>
-                          <TableCell className="align-top text-sm border-r border-border/50 min-w-0">
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="objective"
+                            editorSeed={getStTopicEditorSeed('objective', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm border-r border-border/50 min-w-0"
+                          >
                             <BidirectionalText>{objectiveCellText(row)}</BidirectionalText>
-                          </TableCell>
-                          <TableCell className="align-top text-sm font-medium border-r border-border/50 min-w-0">
+                          </StrategicTopicKpiSheetCell>
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="activity"
+                            editorSeed={getStTopicEditorSeed('activity', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm font-medium border-r border-border/50 min-w-0"
+                          >
                             <BidirectionalText>{row.activity}</BidirectionalText>
-                          </TableCell>
-                          <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground border-r border-border/50">
+                          </StrategicTopicKpiSheetCell>
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="duration"
+                            editorSeed={getStTopicEditorSeed('duration', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm whitespace-nowrap text-muted-foreground border-r border-border/50"
+                          >
                             {row.expected_duration || '—'}
-                          </TableCell>
-                          <TableCell className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50">
+                          </StrategicTopicKpiSheetCell>
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="start"
+                            editorSeed={getStTopicEditorSeed('start', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50"
+                          >
                             {formatDateShort(row.start_date)}
-                          </TableCell>
-                          <TableCell className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50">
+                          </StrategicTopicKpiSheetCell>
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="end"
+                            editorSeed={getStTopicEditorSeed('end', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50"
+                          >
                             {formatDateShort(row.end_date)}
-                          </TableCell>
+                          </StrategicTopicKpiSheetCell>
                           <TableCell className="align-top text-xs border-r border-border/50 min-w-0">
                             <BidirectionalText>{displayDepts(row.associated_departments)}</BidirectionalText>
                           </TableCell>
                           <TableCell className="align-top text-xs border-r border-border/50 min-w-0">
                             <BidirectionalText>{displayTopics(row.associated_strategic_topics)}</BidirectionalText>
                           </TableCell>
-                          <TableCell className="align-top text-sm whitespace-nowrap border-r border-border/50">
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="status"
+                            editorSeed={getStTopicEditorSeed('status', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm whitespace-nowrap border-r border-border/50"
+                          >
                             <Badge
                               variant="outline"
                               className={cn(
@@ -1037,10 +1321,16 @@ export default function StrategicTopicKpiTable({
                             >
                               {row.status}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="align-top text-xs border-r border-border/50 min-w-0 break-words">
+                          </StrategicTopicKpiSheetCell>
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
+                            column="notes"
+                            editorSeed={getStTopicEditorSeed('notes', row)}
+                            disabled={!canEdit}
+                            className="align-top text-xs border-r border-border/50 min-w-0 break-words"
+                          >
                             <BidirectionalText>{row.notes || '—'}</BidirectionalText>
-                          </TableCell>
+                          </StrategicTopicKpiSheetCell>
                           <TableCell className="align-top text-right space-x-1 whitespace-nowrap">
                             {canEdit && (
                               <Button
@@ -1078,10 +1368,13 @@ export default function StrategicTopicKpiTable({
                         </TableRow>
                       );
                     })}
+                    {inlineRowInsertEl}
                   </>
                 )}
               </TableBody>
             </Table>
+            </ConditionalStrategicTopicDndRoot>
+            </StrategicTopicKpiSpreadsheetProvider>
           </div>
         </CardContent>
       </Card>
@@ -1089,7 +1382,7 @@ export default function StrategicTopicKpiTable({
       <Dialog open={open} onOpenChange={(v) => { if (!v) { setOpen(false); resetForm(); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Edit row' : 'Add row'}</DialogTitle>
+            <DialogTitle>Edit row</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">

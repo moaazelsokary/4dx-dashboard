@@ -15,6 +15,8 @@ import { toast } from '@/hooks/use-toast';
 import { Plus, Edit2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AccountUser } from '@/types/config';
+import type { StrategicTopicCode } from '@/types/wig';
+import { STRATEGIC_TOPIC_LABELS } from '@/pages/strategic-topics/strategicTopicKpiUtils';
 import {
   getDashboardFromCatalog,
   getAccessibleDashboards,
@@ -65,6 +67,16 @@ function formatDepartmentCell(row: AccountUser): string {
   return d.map((c) => String(c)).join(', ');
 }
 
+function formatDeptOrTopicCell(row: AccountUser): string {
+  if (String(row.role || '').toLowerCase() === 'topic') {
+    const t = row.editable_strategic_topic;
+    if (t == null || String(t).trim() === '') return '—';
+    const c = String(t).trim().toLowerCase();
+    return STRATEGIC_TOPIC_LABELS[c as StrategicTopicCode] ?? c;
+  }
+  return formatDepartmentCell(row);
+}
+
 export default function UserList() {
   const [editing, setEditing] = useState<AccountUser | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -96,6 +108,13 @@ export default function UserList() {
     return getPowerbiRoutingCatalog();
   }, [pbiRows]);
 
+  /** Always pass the latest row from React Query so `editable_strategic_topic` is not stale after save/refetch. */
+  const accountForForm = useMemo(() => {
+    if (!editing) return null;
+    const fresh = accounts.find((a) => a.id === editing.id);
+    return fresh ?? editing;
+  }, [editing, accounts]);
+
   const createMut = useMutation({
     mutationFn: createAccount,
     onSuccess: (newUser) => {
@@ -105,7 +124,7 @@ export default function UserList() {
         next.sort((a, b) => a.username.localeCompare(b.username));
         return next;
       });
-      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      // Do not invalidate ['accounts'] here: an immediate refetch can race the DB and overwrite the PUT/POST body.
       void queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: 'User created' });
     },
@@ -122,7 +141,6 @@ export default function UserList() {
         const list = old ?? [];
         return list.map((u) => (u.id === updated.id ? updated : u));
       });
-      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
       void queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: 'User updated' });
     },
@@ -204,7 +222,7 @@ export default function UserList() {
                 <TableRow>
                   <TableHead>Username</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead className="min-w-[100px]">Department</TableHead>
+                  <TableHead className="min-w-[100px]">Dept / editable topic</TableHead>
                   <TableHead className="hidden lg:table-cell">Default route</TableHead>
                   <TableHead className="hidden lg:table-cell max-w-[180px]">Pages</TableHead>
                   <TableHead className="md:hidden min-w-[120px]">Power BI</TableHead>
@@ -228,8 +246,8 @@ export default function UserList() {
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.username}</TableCell>
                     <TableCell>{row.role}</TableCell>
-                    <TableCell className="max-w-[120px] truncate text-sm" title={formatDepartmentCell(row)}>
-                      {formatDepartmentCell(row)}
+                    <TableCell className="max-w-[120px] truncate text-sm" title={formatDeptOrTopicCell(row)}>
+                      {formatDeptOrTopicCell(row)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground text-xs">
                       {row.default_route || '—'}
@@ -276,17 +294,18 @@ export default function UserList() {
 
       <UserForm
         open={formOpen}
-        onOpenChange={setFormOpen}
-        account={editing}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setEditing(null);
+        }}
+        account={accountForForm}
         createAccount={async (p) => {
           await createMut.mutateAsync(p);
         }}
         updateAccount={async (id, p) => {
           await updateMut.mutateAsync({ id, payload: p });
         }}
-        onSuccess={() => {
-          setEditing(null);
-        }}
+        onSuccess={() => {}}
       />
     </>
   );

@@ -66,11 +66,17 @@ export const getAllDashboardNames = () => {
   return getPowerbiRoutingCatalog().map((dashboard) => dashboard.name);
 };
 
+const TOPIC_ROLE_DEFAULT_POWERBI_ID = 'volunteers';
+
 export const canAccessDashboard = (
   dashboard: DashboardConfig,
   userRole: string,
   userDepartments: string[]
 ): boolean => {
+  /** Topic users inherit only the Volunteers Power BI app unless an admin sets explicit dashboard ids on the user. */
+  if (String(userRole || '').trim().toLowerCase() === 'topic') {
+    return dashboard.id === TOPIC_ROLE_DEFAULT_POWERBI_ID;
+  }
   if (userRole === 'CEO') {
     return true;
   }

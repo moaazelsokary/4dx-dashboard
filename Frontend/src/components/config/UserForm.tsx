@@ -27,9 +27,12 @@ import { mergePowerbiCatalogRows, getPowerbiRoutingCatalog } from '@/config/powe
 import { getPowerbiDashboards, POWERBI_DASHBOARDS_QUERY_KEY } from '@/services/configService';
 import type { AccountUser, AccountPayload } from '@/types/config';
 import { getDepartments } from '@/services/wigService';
-import type { Department } from '@/types/wig';
+import type { Department, StrategicTopicCode } from '@/types/wig';
+import { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS } from '@/pages/strategic-topics/strategicTopicKpiUtils';
 
-const ROLE_OPTIONS = ['CEO', 'Admin', 'department', 'project', 'Viewer'] as const;
+const ROLE_OPTIONS = ['CEO', 'Admin', 'department', 'topic', 'project', 'Viewer'] as const;
+
+const TOPIC_SELECT_NONE = '__none__';
 
 const DEPT_SELECT_NONE = '__none__';
 const DEPT_SELECT_ALL = 'all';
@@ -69,6 +72,8 @@ export default function UserForm({
   const [selectedRoutes, setSelectedRoutes] = useState<string[]>([]);
   const [pbiInherit, setPbiInherit] = useState(true);
   const [selectedPbi, setSelectedPbi] = useState<string[]>([]);
+  /** Role `topic`: pillar this user may edit (required when role is topic). */
+  const [editableTopicCode, setEditableTopicCode] = useState<string>(TOPIC_SELECT_NONE);
   const [submitting, setSubmitting] = useState(false);
 
   const { data: departments = [], isLoading: departmentsLoading } = useQuery({
@@ -114,6 +119,15 @@ export default function UserForm({
       const pbi = account.powerbi_dashboard_ids;
       setPbiInherit(pbi === null || pbi === undefined);
       setSelectedPbi(pbi && Array.isArray(pbi) ? [...pbi] : []);
+      if (String(account.role || '').toLowerCase() === 'topic') {
+        const et = account.editable_strategic_topic;
+        const code = et ? String(et).trim().toLowerCase() : '';
+        setEditableTopicCode(
+          STRATEGIC_TOPIC_CODES.includes(code as StrategicTopicCode) ? code : TOPIC_SELECT_NONE
+        );
+      } else {
+        setEditableTopicCode(TOPIC_SELECT_NONE);
+      }
     } else {
       setUsername('');
       setPassword('');
@@ -125,10 +139,25 @@ export default function UserForm({
       setSelectedRoutes([]);
       setPbiInherit(true);
       setSelectedPbi([]);
+      setEditableTopicCode(TOPIC_SELECT_NONE);
     }
-  }, [open, account, departments]);
+    // Re-sync when server-backed fields change. Omit `departments` (query) from deps — it would reset the form mid-edit.
+  }, [
+    open,
+    account?.id,
+    account?.updated_at,
+    account?.username,
+    account?.role,
+    account?.editable_strategic_topic,
+    account?.is_active,
+    account?.default_route,
+    account?.allowed_routes,
+    account?.powerbi_dashboard_ids,
+    account?.departments,
+  ]);
 
   function departmentsPayload(): string[] {
+    if (String(role).toLowerCase() === 'topic') return [];
     if (departmentValue === DEPT_SELECT_NONE) return [];
     if (departmentValue === DEPT_SELECT_ALL) return ['all'];
     return [departmentValue];
@@ -161,6 +190,15 @@ export default function UserForm({
         setSubmitting(false);
         return;
       }
+      if (String(role).toLowerCase() === 'topic' && editableTopicCode === TOPIC_SELECT_NONE) {
+        toast({
+          title: 'Strategic topic required',
+          description: 'Choose which strategic topic this user may edit.',
+          variant: 'destructive',
+        });
+        setSubmitting(false);
+        return;
+      }
       const departments = departmentsPayload();
       const payload: AccountPayload = {
         username: username.trim(),
@@ -170,6 +208,10 @@ export default function UserForm({
         default_route: defaultRoute ? defaultRoute : null,
         allowed_routes: routesInherit ? null : [...selectedRoutes],
         powerbi_dashboard_ids: pbiInherit ? null : [...selectedPbi],
+        editable_strategic_topic:
+          String(role).toLowerCase() === 'topic' && editableTopicCode !== TOPIC_SELECT_NONE
+            ? editableTopicCode
+            : null,
       };
 
       if (isEdit && account) {
@@ -243,7 +285,17 @@ export default function UserForm({
               </div>
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={role} onValueChange={setRole}>
+                <Select
+                  value={role}
+                  onValueChange={(v) => {
+                    setRole(v);
+                    if (v === 'topic') {
+                      setDepartmentValue(DEPT_SELECT_NONE);
+                    } else {
+                      setEditableTopicCode(TOPIC_SELECT_NONE);
+                    }
+                  }}
+                >
                   <SelectTrigger className="min-h-11">
                     <SelectValue />
                   </SelectTrigger>
@@ -256,41 +308,67 @@ export default function UserForm({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Department</Label>
-                {departmentsLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground min-h-11">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    Loading departments…
-                  </div>
-                ) : (
-                  <Select value={departmentValue} onValueChange={setDepartmentValue}>
+              {String(role).toLowerCase() === 'topic' ? (
+                <div className="space-y-2">
+                  <Label>Editable strategic topic</Label>
+                  <Select
+                    key={`topic-pick-${account?.id ?? 'new'}-${editableTopicCode}`}
+                    value={editableTopicCode}
+                    onValueChange={setEditableTopicCode}
+                  >
                     <SelectTrigger className="min-h-11 w-full">
-                      <SelectValue placeholder="Select department" />
+                      <SelectValue placeholder="Select topic" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={DEPT_SELECT_NONE}>None</SelectItem>
-                      <SelectItem value={DEPT_SELECT_ALL}>All departments</SelectItem>
-                      {orphanDept && (
-                        <SelectItem value={departmentValue}>
-                          Current: {departmentValue}
+                      <SelectItem value={TOPIC_SELECT_NONE}>Select topic…</SelectItem>
+                      {STRATEGIC_TOPIC_CODES.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {STRATEGIC_TOPIC_LABELS[code]}
                         </SelectItem>
-                      )}
-                      {departments.map((d: Department) => {
-                        const v = normDeptCode(d.code);
-                        return (
-                          <SelectItem key={d.id} value={v}>
-                            {d.name} ({d.code})
-                          </SelectItem>
-                        );
-                      })}
+                      ))}
                     </SelectContent>
                   </Select>
-                )}
-                <p className="text-[10px] text-muted-foreground">
-                  One department per user (stored as a single code). Use “All departments” for org-wide access where needed.
-                </p>
-              </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    This user can view Main Plan and all strategic topic pages; they can edit KPI rows only on the topic you choose here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  {departmentsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground min-h-11">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Loading departments…
+                    </div>
+                  ) : (
+                    <Select value={departmentValue} onValueChange={setDepartmentValue}>
+                      <SelectTrigger className="min-h-11 w-full">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={DEPT_SELECT_NONE}>None</SelectItem>
+                        <SelectItem value={DEPT_SELECT_ALL}>All departments</SelectItem>
+                        {orphanDept && (
+                          <SelectItem value={departmentValue}>
+                            Current: {departmentValue}
+                          </SelectItem>
+                        )}
+                        {departments.map((d: Department) => {
+                          const v = normDeptCode(d.code);
+                          return (
+                            <SelectItem key={d.id} value={v}>
+                              {d.name} ({d.code})
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    One department per user (stored as a single code). Use “All departments” for org-wide access where needed.
+                  </p>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
                 <Label htmlFor="acc-active" className="cursor-pointer">
                   Active

@@ -93,11 +93,12 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
   const isCEO = user.role === 'CEO';
   const isAdmin = user.role === 'Admin';
   const isDepartment = user.role === 'department';
+  const isTopic = user.role === 'topic';
   const isOperations = isDepartment && user.departments?.includes('operations');
   const canAccessAdmin = isCEO || isAdmin;
 
   const canAccessWIGPlan = isCEO || isDepartment;
-  const canAccessMainPlan = isCEO || isDepartment;
+  const canAccessMainPlan = isCEO || isDepartment || isTopic;
   const canAccessDepartmentObjectives = isCEO || isAdmin || isDepartment;
   const canAccessSummary = isCEO || isOperations;
 

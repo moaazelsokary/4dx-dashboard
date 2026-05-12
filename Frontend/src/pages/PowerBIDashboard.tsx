@@ -131,10 +131,15 @@ const PowerBIDashboard: React.FC = () => {
     }, 1000);
   }, [dashboards, selectedDashboard]);
 
-  // Set default selected dashboard when dashboards are loaded
+  // Set default selected dashboard when dashboards are loaded (topic role: prefer Volunteers)
   useEffect(() => {
     if (dashboards.length > 0 && !selectedDashboard) {
-      setSelectedDashboard(dashboards[0].id);
+      const isTopic = String(user?.role || '').trim().toLowerCase() === 'topic';
+      const preferred =
+        isTopic && dashboards.some((d) => d.id === 'volunteers')
+          ? 'volunteers'
+          : dashboards[0].id;
+      setSelectedDashboard(preferred);
     } else if (dashboards.length === 0 && user) {
       // User has no accessible dashboards
       setError('You do not have access to any Power BI dashboards');

@@ -236,6 +236,7 @@ BEGIN
         [status] NVARCHAR(50) NOT NULL
             CHECK ([status] IN (N'Completed', N'In Progress', N'On Hold')),
         [notes] NVARCHAR(MAX) NULL,
+        [sort_order] INT NULL,
         [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
         [updated_at] DATETIME NOT NULL DEFAULT GETDATE(),
         FOREIGN KEY ([main_objective_id]) REFERENCES [dbo].[main_plan_objectives]([id]) ON DELETE SET NULL

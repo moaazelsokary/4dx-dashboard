@@ -79,6 +79,15 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useOperationLock } from '@/hooks/useOperationLock';
 import { Lock as LockIcon } from 'lucide-react';
 import type { User } from '@/services/authService';
+import type { DeptGridColumn } from '@/lib/departmentObjectivesGrid/types';
+import { getDeptObjectiveGridColumns } from '@/lib/departmentObjectivesGrid/columns';
+import { departmentObjectivesSheetNavRef } from '@/lib/departmentObjectivesGrid/navRef';
+import { resetDeptObjectiveSheet } from '@/lib/departmentObjectivesGrid/store';
+import { getInlineEditorSeed, parseInlineCommit } from '@/lib/departmentObjectivesGrid/commitParsing';
+import { useDeptObjectivesSpreadsheetController } from '@/hooks/useDeptObjectivesSpreadsheetController';
+import { DeptObjectiveSpreadsheetProvider } from '@/components/wig/DeptObjectiveSpreadsheetContext';
+import { DeptObjectiveFormulaBar } from '@/components/wig/SpreadsheetFormulaBar';
+import { DeptObjectiveSheetCell } from '@/components/wig/DeptObjectiveSheetCell';
 
 /** Meeting notes / M&E / Active / Notes columns — Admin + CEO (API returns data for both). */
 function canViewStrategicSensitiveColumns(role: string | undefined): boolean {
@@ -1808,6 +1817,130 @@ export default function DepartmentObjectives() {
     return filtered;
   }, [rowSource, tableFilterState, mainObjectives, kpiMode, user?.role]);
 
+  const sheetVisibleRowIds = useMemo(
+    () =>
+      filteredObjectives
+        .filter(
+          (obj) =>
+            kpiMode === 'strategic' ||
+            (obj.type !== 'M&E' &&
+              obj.type !== 'M&E MOV' &&
+              !obj.activity?.startsWith('[M&E]') &&
+              !obj.activity?.startsWith('[M&E-PARENT:'))
+        )
+        .map((o) => o.id),
+    [filteredObjectives, kpiMode]
+  );
+
+  const sheetColumnOrder = useMemo(
+    () => getDeptObjectiveGridColumns(kpiMode, canViewStrategicSensitiveColumns(user?.role)),
+    [kpiMode, user?.role]
+  );
+
+  departmentObjectivesSheetNavRef.visibleRowIds = sheetVisibleRowIds;
+  departmentObjectivesSheetNavRef.columnOrder = sheetColumnOrder;
+
+  const handleInlineCommit = useCallback(
+    async (rowId: number, column: DeptGridColumn, raw: string): Promise<boolean> => {
+      const row =
+        kpiMode === 'strategic'
+          ? strategicObjectives.find((o) => o.id === rowId)
+          : objectives.find((o) => o.id === rowId);
+      if (!row) return false;
+
+      const parsed = parseInlineCommit(column, raw, row, kpiMode);
+      if (parsed.ok === false) {
+        toast({
+          title: 'Cannot save',
+          description: parsed.error,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const mergedOptimistic =
+        kpiMode === 'strategic'
+          ? ({
+              ...(row as StrategicDepartmentObjective),
+              ...parsed.patch,
+            } as StrategicDepartmentObjective)
+          : ({
+              ...(row as DepartmentObjective),
+              ...parsed.patch,
+            } as DepartmentObjective);
+
+      if (kpiMode === 'strategic') {
+        setStrategicObjectives((prev) =>
+          prev.map((o) => (o.id === rowId ? mergedOptimistic : o))
+        );
+      } else {
+        setObjectives((prev) =>
+          prev.map((o) => (o.id === rowId ? (mergedOptimistic as DepartmentObjective) : o))
+        );
+      }
+
+      try {
+        if (kpiMode === 'strategic') {
+          const updated = await updateStrategicDepartmentObjective(
+            rowId,
+            parsed.patch as Partial<
+              Omit<
+                StrategicDepartmentObjective,
+                'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'
+              >
+            >
+          );
+          setStrategicObjectives((prev) =>
+            prev.map((o) => (o.id === rowId ? { ...o, ...updated } : o))
+          );
+        } else {
+          const updated = await updateDepartmentObjective(
+            rowId,
+            parsed.patch as Partial<
+              Omit<
+                DepartmentObjective,
+                'id' | 'created_at' | 'updated_at' | 'department_name' | 'department_code'
+              >
+            >
+          );
+          setObjectives((prev) => prev.map((o) => (o.id === rowId ? { ...o, ...updated } : o)));
+        }
+        return true;
+      } catch (err) {
+        if (kpiMode === 'strategic') {
+          setStrategicObjectives((prev) =>
+            prev.map((o) => (o.id === rowId ? (row as StrategicDepartmentObjective) : o))
+          );
+        } else {
+          setObjectives((prev) =>
+            prev.map((o) => (o.id === rowId ? (row as DepartmentObjective) : o))
+          );
+        }
+        toast({
+          title: 'Save failed',
+          description: apiErrorMessage(err, 'Update failed'),
+          variant: 'destructive',
+        });
+        return false;
+      }
+    },
+    [kpiMode, objectives, strategicObjectives]
+  );
+
+  useDeptObjectivesSpreadsheetController({
+    enabled: !loading && activeTab === 'objectives',
+    kpiMode,
+    getRow: (id) =>
+      kpiMode === 'strategic'
+        ? strategicObjectives.find((o) => o.id === id)
+        : objectives.find((o) => o.id === id),
+    commitInline: handleInlineCommit,
+  });
+
+  useEffect(() => {
+    resetDeptObjectiveSheet();
+  }, [kpiMode]);
+
   // NOW we can do conditional returns - AFTER all hooks
   // Skeleton loader component
   const DepartmentObjectivesSkeleton = () => (
@@ -2527,6 +2660,8 @@ export default function DepartmentObjectives() {
                 minHeight: tableZoom < 1 ? `${100 / tableZoom}%` : 'auto'
               }}
             >
+              <DeptObjectiveSpreadsheetProvider commitInline={handleInlineCommit}>
+              <DeptObjectiveFormulaBar />
               <Table style={{ tableLayout: 'fixed', width: '100%' }} className="border-collapse">
                 <TableHeader>
                   <TableRow>
@@ -2919,9 +3054,15 @@ export default function DepartmentObjectives() {
                                           ))}
                                         </div>
                                       </TableCell>
-                                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="border-r border-border/50">
+                                      <DeptObjectiveSheetCell
+                                        rowId={obj.id}
+                                        column="activity"
+                                        editorSeed={getInlineEditorSeed('activity', obj)}
+                                        style={{ width: columnWidths.activity, minWidth: columnWidths.activity }}
+                                        className="border-r border-border/50"
+                                      >
                                         <BidirectionalText>{obj.activity}</BidirectionalText>
-                                      </TableCell>
+                                      </DeptObjectiveSheetCell>
                                       <TableCell style={{ width: columnWidths.type, minWidth: columnWidths.type }} className="border-r border-border/50">
                                         {showTooltip ? (
                                           <TooltipProvider>
@@ -2942,57 +3083,93 @@ export default function DepartmentObjectives() {
                                           </Badge>
                                         )}
                                       </TableCell>
-                                      <TableCell className="text-right border-r border-border/50" style={{ width: columnWidths.target, minWidth: columnWidths.target }}>
+                                      <DeptObjectiveSheetCell
+                                        rowId={obj.id}
+                                        column="target"
+                                        editorSeed={getInlineEditorSeed('target', obj)}
+                                        className="text-right border-r border-border/50"
+                                        style={{ width: columnWidths.target, minWidth: columnWidths.target }}
+                                      >
                                         {targetDisplay}
-                                      </TableCell>
-                                      <TableCell style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }} className="border-r border-border/50">
+                                      </DeptObjectiveSheetCell>
+                                      <DeptObjectiveSheetCell
+                                        rowId={obj.id}
+                                        column="responsible"
+                                        editorSeed={getInlineEditorSeed('responsible', obj)}
+                                        style={{ width: columnWidths.responsible, minWidth: columnWidths.responsible }}
+                                        className="border-r border-border/50"
+                                      >
                                         <BidirectionalText>{obj.responsible_person}</BidirectionalText>
-                                      </TableCell>
+                                      </DeptObjectiveSheetCell>
                                       {kpiMode === 'strategic' && (
                                         <>
-                                          <TableCell
+                                          <DeptObjectiveSheetCell
+                                            rowId={obj.id}
+                                            column="definition"
+                                            editorSeed={getInlineEditorSeed('definition', obj)}
                                             style={{ width: columnWidths.definition, minWidth: columnWidths.definition }}
                                             className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
                                           >
                                             {(obj as StrategicDepartmentObjective).definition || '—'}
-                                          </TableCell>
-                                          <TableCell
+                                          </DeptObjectiveSheetCell>
+                                          <DeptObjectiveSheetCell
+                                            rowId={obj.id}
+                                            column="measurement"
+                                            editorSeed={getInlineEditorSeed('measurement', obj)}
                                             style={{ width: columnWidths.measurement, minWidth: columnWidths.measurement }}
                                             className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
                                           >
                                             {(obj as StrategicDepartmentObjective).measurement_aspect || '—'}
-                                          </TableCell>
+                                          </DeptObjectiveSheetCell>
                                         </>
                                       )}
-                                      <TableCell style={{ width: columnWidths.mov, minWidth: columnWidths.mov }} className="border-r border-border/50">
+                                      <DeptObjectiveSheetCell
+                                        rowId={obj.id}
+                                        column="mov"
+                                        editorSeed={getInlineEditorSeed('mov', obj)}
+                                        style={{ width: columnWidths.mov, minWidth: columnWidths.mov }}
+                                        className="border-r border-border/50"
+                                      >
                                         <BidirectionalText>{obj.mov}</BidirectionalText>
-                                      </TableCell>
+                                      </DeptObjectiveSheetCell>
                                       {kpiMode === 'strategic' && canViewStrategicSensitiveColumns(user?.role) && (
                                         <>
-                                          <TableCell
+                                          <DeptObjectiveSheetCell
+                                            rowId={obj.id}
+                                            column="admin_meeting"
+                                            editorSeed={getInlineEditorSeed('admin_meeting', obj)}
                                             style={{ width: columnWidths.admin_meeting, minWidth: columnWidths.admin_meeting }}
                                             className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
                                           >
                                             {(obj as StrategicDepartmentObjective).meeting_notes || '—'}
-                                          </TableCell>
-                                          <TableCell
+                                          </DeptObjectiveSheetCell>
+                                          <DeptObjectiveSheetCell
+                                            rowId={obj.id}
+                                            column="admin_mee"
+                                            editorSeed={getInlineEditorSeed('admin_mee', obj)}
                                             style={{ width: columnWidths.admin_mee, minWidth: columnWidths.admin_mee }}
                                             className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
                                           >
                                             {(obj as StrategicDepartmentObjective).me_e || '—'}
-                                          </TableCell>
-                                          <TableCell
+                                          </DeptObjectiveSheetCell>
+                                          <DeptObjectiveSheetCell
+                                            rowId={obj.id}
+                                            column="admin_active"
+                                            editorSeed={getInlineEditorSeed('admin_active', obj)}
                                             style={{ width: columnWidths.admin_active, minWidth: columnWidths.admin_active }}
                                             className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
                                           >
                                             {(obj as StrategicDepartmentObjective).active || '—'}
-                                          </TableCell>
-                                          <TableCell
+                                          </DeptObjectiveSheetCell>
+                                          <DeptObjectiveSheetCell
+                                            rowId={obj.id}
+                                            column="admin_notes"
+                                            editorSeed={getInlineEditorSeed('admin_notes', obj)}
                                             style={{ width: columnWidths.admin_notes, minWidth: columnWidths.admin_notes }}
                                             className="border-r border-border/50 align-top py-2 text-sm whitespace-normal break-words min-w-0"
                                           >
                                             {(obj as StrategicDepartmentObjective).notes || '—'}
-                                          </TableCell>
+                                          </DeptObjectiveSheetCell>
                                         </>
                                       )}
                                       <TableCell
@@ -3102,6 +3279,7 @@ export default function DepartmentObjectives() {
                   </DndContext>
                 </TableBody>
               </Table>
+              </DeptObjectiveSpreadsheetProvider>
             </div>
           </CardContent>
         </Card>

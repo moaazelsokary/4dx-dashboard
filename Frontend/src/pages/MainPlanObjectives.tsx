@@ -36,8 +36,8 @@ export default function MainPlanObjectives() {
     }
 
     const userObj = JSON.parse(userData);
-    // Allow CEO and department users to access, but department users are read-only
-    if (userObj.role !== 'CEO' && userObj.role !== 'department') {
+    // CEO / department / topic (topic: view-only like department)
+    if (userObj.role !== 'CEO' && userObj.role !== 'department' && userObj.role !== 'topic') {
       navigate('/access-denied');
       return;
     }
@@ -172,7 +172,7 @@ export default function MainPlanObjectives() {
           </TabsContent>
 
           <TabsContent value="rasci" className="mt-0">
-            <RASCIEditor readOnly={user?.role === 'department'} />
+            <RASCIEditor readOnly={user?.role === 'department' || user?.role === 'topic'} />
           </TabsContent>
 
           <TabsContent value="table" className="mt-0">
@@ -184,7 +184,7 @@ export default function MainPlanObjectives() {
                 <MainPlanTable 
                   objectives={tableData} 
                   onUpdate={() => loadData(false)} 
-                  readOnly={user?.role === 'department'}
+                  readOnly={user?.role === 'department' || user?.role === 'topic'}
                 />
               </CardContent>
             </Card>

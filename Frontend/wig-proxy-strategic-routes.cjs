@@ -427,11 +427,17 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
   function wigUserFromJwt(req) {
     const decoded = decodeWigUser(req, jwt);
     if (!decoded) return null;
+    const rawRole = String(decoded.role ?? decoded.Role ?? '').trim();
+    const roleOut = rawRole.toLowerCase() === 'topic' ? 'topic' : rawRole;
     return {
       userId: decoded.userId,
       username: decoded.username,
-      role: decoded.role,
+      role: roleOut,
       departments: decoded.departments || [],
+      editableStrategicTopic:
+        decoded.editableStrategicTopic ??
+        decoded.editable_strategic_topic ??
+        decoded.EditableStrategicTopic,
     };
   }
 
@@ -448,8 +454,9 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      const r = user.role || '';
-      if (!['CEO', 'Admin', 'department'].includes(r)) {
+      const r = String(user.role || user.Role || '').trim();
+      const rLower = r.toLowerCase();
+      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
         return res.status(403).json({ error: 'Insufficient permissions' });
       }
       const topic = req.query.strategic_topic;

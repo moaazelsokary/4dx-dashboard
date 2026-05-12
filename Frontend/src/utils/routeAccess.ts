@@ -17,15 +17,18 @@ export function getInheritedRoutesForUser(user: User): Set<string> {
   const isCEO = role === 'CEO';
   const isAdmin = role === 'Admin';
   const isDept = role === 'department';
+  const isTopic = role === 'topic';
   const isOps = isDept && depts.includes('operations');
 
-  if (isCEO || isDept) {
+  if (isCEO || isDept || isTopic) {
     paths.add('/main-plan');
     paths.add('/main-plan/volunteers');
     paths.add('/main-plan/refugees');
     paths.add('/main-plan/returnees');
     paths.add('/main-plan/relief');
     paths.add('/main-plan/awareness');
+  }
+  if (isCEO || isDept) {
     paths.add('/wig-plan-2025');
   }
   if (isCEO || isAdmin || isDept) {

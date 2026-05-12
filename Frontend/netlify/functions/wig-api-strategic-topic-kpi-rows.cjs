@@ -11,6 +11,34 @@ const STRATEGIC_TOPICS = ['volunteers', 'refugees', 'returnees', 'relief', 'awar
 const ALLOWED_STATUS = ['Completed', 'In Progress', 'On Hold'];
 const DELIM = '||';
 
+/**
+ * After the column is added in SQL, we short-circuit. We never cache “missing” so a later
+ * migration is picked up without redeploying the function.
+ */
+let _strategicTopicKpiRowsSortOrderColumnKnown = false;
+
+async function strategicTopicKpiRowsHasSortOrderColumn(pool) {
+  if (_strategicTopicKpiRowsSortOrderColumnKnown) {
+    return true;
+  }
+  try {
+    const r = await pool.request().query(`
+      SELECT 1 AS ok
+      FROM sys.columns c
+      INNER JOIN sys.tables t ON c.object_id = t.object_id
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      WHERE s.name = N'dbo' AND t.name = N'strategic_topic_kpi_rows' AND c.name = N'sort_order'
+    `);
+    if (r.recordset?.length) {
+      _strategicTopicKpiRowsSortOrderColumnKnown = true;
+      return true;
+    }
+  } catch {
+    // treat as missing
+  }
+  return false;
+}
+
 function parseDelimited(value) {
   if (value == null || value === '') return [];
   const s = String(value).trim();
@@ -31,7 +59,9 @@ function toDelimited(arr) {
 
 function normalizeRole(user) {
   if (!user) return '';
-  return String(user.role || user.Role || '').trim();
+  return String(user.role || user.Role || '')
+    .trim()
+    .toLowerCase();
 }
 
 function userDeptCodes(user) {
@@ -43,7 +73,7 @@ function userDeptCodes(user) {
 
 function isCeoOrAdmin(user) {
   const r = normalizeRole(user);
-  return r === 'CEO' || r === 'Admin';
+  return r === 'ceo' || r === 'admin';
 }
 
 function deptIntersection(userCodes, rowTokens) {
@@ -115,8 +145,12 @@ async function validateDepartmentTokens(pool, tokens) {
 
 async function getStrategicTopicKpiRows(pool, strategicTopic) {
   const topic = validateStrategicTopic(strategicTopic);
+  const hasSort = await strategicTopicKpiRowsHasSortOrderColumn(pool);
   const request = pool.request();
   request.input('topic', sql.NVarChar, topic);
+  const orderBy = hasSort
+    ? 'ORDER BY COALESCE(r.sort_order, 999999) ASC, r.id ASC'
+    : 'ORDER BY r.id ASC';
   const result = await request.query(`
     SELECT 
       r.*,
@@ -126,9 +160,16 @@ async function getStrategicTopicKpiRows(pool, strategicTopic) {
     FROM strategic_topic_kpi_rows r
     LEFT JOIN main_plan_objectives m ON r.main_objective_id = m.id
     WHERE r.strategic_topic = @topic
-    ORDER BY COALESCE(r.sort_order, 999999) ASC, r.id ASC
+    ${orderBy}
   `);
-  return result.recordset || [];
+  const rows = result.recordset || [];
+  if (!hasSort) {
+    return rows.map((row) => ({
+      ...row,
+      sort_order: row.sort_order != null ? row.sort_order : row.id,
+    }));
+  }
+  return rows;
 }
 
 function assertDeptUserCanMutateRow(user, deptTokens) {
@@ -140,12 +181,71 @@ function assertDeptUserCanMutateRow(user, deptTokens) {
   }
 }
 
+/** mssql / driver may expose column names in varying casing on `recordset` rows. */
+function recordStrategicTopicLower(rec) {
+  if (!rec) return '';
+  const v =
+    rec.strategic_topic ??
+    rec.Strategic_Topic ??
+    rec.strategicTopic ??
+    rec.STRATEGIC_TOPIC ??
+    rec.StrategicTopic;
+  return String(v ?? '').trim().toLowerCase();
+}
+
+function editableStrategicTopicFromUser(user) {
+  if (!user) return null;
+  const v =
+    user.editableStrategicTopic ??
+    user.editable_strategic_topic ??
+    user.EditableStrategicTopic;
+  if (v == null || !String(v).trim()) return null;
+  return String(v).trim().toLowerCase();
+}
+
+function assertTopicUserCanWriteStrategicTopic(user, strategicTopicKey) {
+  const key = String(strategicTopicKey || '').trim().toLowerCase();
+  const home = editableStrategicTopicFromUser(user);
+  if (!home || home !== key) {
+    const err = new Error('You can only modify rows for your assigned strategic topic');
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
+/** JWT may omit pillar (old token); wig-proxy passes userId — load from DB so topic writes succeed. */
+async function enrichTopicRoleUserFromDb(pool, user) {
+  if (!user) return user;
+  if (normalizeRole(user) !== 'topic') return user;
+  if (editableStrategicTopicFromUser(user)) return user;
+  const uid = user.userId ?? user.id ?? user.user_id;
+  const idNum = parseInt(String(uid ?? ''), 10);
+  if (!Number.isFinite(idNum) || idNum <= 0) return user;
+  try {
+    const request = pool.request();
+    request.input('id', sql.Int, idNum);
+    const r = await request.query('SELECT editable_strategic_topic FROM users WHERE id = @id');
+    const row = r.recordset?.[0];
+    if (!row) return user;
+    const raw =
+      row.editable_strategic_topic ??
+      row.Editable_Strategic_Topic ??
+      row.editableStrategicTopic;
+    const t = String(raw ?? '').trim().toLowerCase();
+    if (!t) return user;
+    return { ...user, editableStrategicTopic: t };
+  } catch {
+    return user;
+  }
+}
+
 async function createStrategicTopicKpiRow(pool, body, user) {
   if (!user) {
     const err = new Error('Authentication required');
     err.statusCode = 401;
     throw err;
   }
+  user = await enrichTopicRoleUserFromDb(pool, user);
   const topic = validateStrategicTopic(body.strategic_topic);
   const status = validateStatus(body.status);
   const activity = String(body.activity || '').trim();
@@ -163,6 +263,8 @@ async function createStrategicTopicKpiRow(pool, body, user) {
     // full access
   } else if (role === 'department') {
     assertDeptUserCanMutateRow(user, deptTokens);
+  } else if (role === 'topic') {
+    assertTopicUserCanWriteStrategicTopic(user, topic);
   } else {
     const err = new Error('Insufficient permissions');
     err.statusCode = 403;
@@ -202,14 +304,19 @@ async function createStrategicTopicKpiRow(pool, body, user) {
     }
   }
 
-  const rMax = pool.request();
-  rMax.input('strategic_topic', sql.NVarChar, topic);
-  const nextSort = await rMax.query(`
-    SELECT ISNULL(MAX(sort_order), 0) + 1 AS n
-    FROM strategic_topic_kpi_rows
-    WHERE strategic_topic = @strategic_topic
-  `);
-  const sortOrder = nextSort.recordset[0]?.n != null ? parseInt(nextSort.recordset[0].n, 10) : 1;
+  const hasSort = await strategicTopicKpiRowsHasSortOrderColumn(pool);
+  let sortOrder = 1;
+  if (hasSort) {
+    const rMax = pool.request();
+    rMax.input('strategic_topic', sql.NVarChar, topic);
+    const nextSort = await rMax.query(`
+      SELECT ISNULL(MAX(sort_order), 0) + 1 AS n
+      FROM strategic_topic_kpi_rows
+      WHERE strategic_topic = @strategic_topic
+    `);
+    sortOrder = nextSort.recordset[0]?.n != null ? parseInt(nextSort.recordset[0].n, 10) : 1;
+  }
+
   const insRequest = pool.request();
   insRequest.input('strategic_topic', sql.NVarChar, topic);
   insRequest.input('main_objective_id', sql.Int, mainObjectiveId);
@@ -222,19 +329,34 @@ async function createStrategicTopicKpiRow(pool, body, user) {
   insRequest.input('associated_strategic_topics', sql.NVarChar, toDelimited(topicTokens));
   insRequest.input('status', sql.NVarChar, status);
   insRequest.input('notes', sql.NVarChar, notes || null);
-  insRequest.input('sort_order', sql.Int, sortOrder);
 
-  const ins = await insRequest.query(`
-    INSERT INTO strategic_topic_kpi_rows (
-      strategic_topic, main_objective_id, objective_text, activity, expected_duration,
-      start_date, end_date, associated_departments, associated_strategic_topics, status, notes, sort_order
-    )
-    OUTPUT INSERTED.id
-    VALUES (
-      @strategic_topic, @main_objective_id, @objective_text, @activity, @expected_duration,
-      @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes, @sort_order
-    );
-  `);
+  let ins;
+  if (hasSort) {
+    insRequest.input('sort_order', sql.Int, sortOrder);
+    ins = await insRequest.query(`
+      INSERT INTO strategic_topic_kpi_rows (
+        strategic_topic, main_objective_id, objective_text, activity, expected_duration,
+        start_date, end_date, associated_departments, associated_strategic_topics, status, notes, sort_order
+      )
+      OUTPUT INSERTED.id
+      VALUES (
+        @strategic_topic, @main_objective_id, @objective_text, @activity, @expected_duration,
+        @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes, @sort_order
+      );
+    `);
+  } else {
+    ins = await insRequest.query(`
+      INSERT INTO strategic_topic_kpi_rows (
+        strategic_topic, main_objective_id, objective_text, activity, expected_duration,
+        start_date, end_date, associated_departments, associated_strategic_topics, status, notes
+      )
+      OUTPUT INSERTED.id
+      VALUES (
+        @strategic_topic, @main_objective_id, @objective_text, @activity, @expected_duration,
+        @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes
+      );
+    `);
+  }
   const newId = ins.recordset[0].id;
   const rows = await getStrategicTopicKpiRows(pool, topic);
   return rows.find((r) => r.id === newId) || rows[0];
@@ -255,6 +377,7 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
     err.statusCode = 401;
     throw err;
   }
+  user = await enrichTopicRoleUserFromDb(pool, user);
   const existing = await fetchRowById(pool, id);
   if (!existing) {
     const err = new Error('Row not found');
@@ -264,9 +387,19 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
 
   const role = normalizeRole(user);
   const existingDepts = parseDelimited(existing.associated_departments);
+  let existingTopicKey = recordStrategicTopicLower(existing);
+  if (!existingTopicKey && body.strategic_topic != null && String(body.strategic_topic).trim()) {
+    try {
+      existingTopicKey = validateStrategicTopic(body.strategic_topic);
+    } catch {
+      /* keep empty; assert below */
+    }
+  }
 
   if (role === 'department') {
     assertDeptUserCanMutateRow(user, existingDepts);
+  } else if (role === 'topic') {
+    assertTopicUserCanWriteStrategicTopic(user, existingTopicKey);
   } else if (!isCeoOrAdmin(user)) {
     const err = new Error('Insufficient permissions');
     err.statusCode = 403;
@@ -369,14 +502,17 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
     updates.push('notes = @notes');
   }
   if (body.sort_order !== undefined && body.sort_order !== null) {
-    const so = parseInt(body.sort_order, 10);
-    if (!Number.isFinite(so)) {
-      const err = new Error('Invalid sort_order');
-      err.statusCode = 400;
-      throw err;
+    const hasSort = await strategicTopicKpiRowsHasSortOrderColumn(pool);
+    if (hasSort) {
+      const so = parseInt(body.sort_order, 10);
+      if (!Number.isFinite(so)) {
+        const err = new Error('Invalid sort_order');
+        err.statusCode = 400;
+        throw err;
+      }
+      request.input('sort_order', sql.Int, so);
+      updates.push('sort_order = @sort_order');
     }
-    request.input('sort_order', sql.Int, so);
-    updates.push('sort_order = @sort_order');
   }
 
   if (updates.length === 0) {
@@ -393,8 +529,12 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
     WHERE id = @id
   `);
 
-  const topic = String(existing.strategic_topic).toLowerCase();
-  const all = await getStrategicTopicKpiRows(pool, topic);
+  if (!existingTopicKey) {
+    const err = new Error('Row strategic_topic is missing');
+    err.statusCode = 500;
+    throw err;
+  }
+  const all = await getStrategicTopicKpiRows(pool, existingTopicKey);
   return all.find((r) => r.id === id) || null;
 }
 
@@ -402,6 +542,14 @@ async function updateStrategicTopicKpiRowsOrder(pool, body, user) {
   if (!user) {
     const err = new Error('Authentication required');
     err.statusCode = 401;
+    throw err;
+  }
+  user = await enrichTopicRoleUserFromDb(pool, user);
+  if (!(await strategicTopicKpiRowsHasSortOrderColumn(pool))) {
+    const err = new Error(
+      'Database is missing column strategic_topic_kpi_rows.sort_order. Run migration database/migration-strategic-topic-kpi-rows-sort-order.sql (then redeploy or restart).'
+    );
+    err.statusCode = 503;
     throw err;
   }
   const topic = validateStrategicTopic(body.strategic_topic);
@@ -432,7 +580,7 @@ async function updateStrategicTopicKpiRowsOrder(pool, body, user) {
         err.statusCode = 404;
         throw err;
       }
-      if (String(existing.strategic_topic).toLowerCase() !== topic) {
+      if (recordStrategicTopicLower(existing) !== topic) {
         const err = new Error('Row does not belong to this strategic topic');
         err.statusCode = 400;
         throw err;
@@ -440,6 +588,8 @@ async function updateStrategicTopicKpiRowsOrder(pool, body, user) {
       const existingDepts = parseDelimited(existing.associated_departments);
       if (role === 'department') {
         assertDeptUserCanMutateRow(user, existingDepts);
+      } else if (role === 'topic') {
+        assertTopicUserCanWriteStrategicTopic(user, topic);
       } else if (!isCeoOrAdmin(user)) {
         const err = new Error('Insufficient permissions');
         err.statusCode = 403;

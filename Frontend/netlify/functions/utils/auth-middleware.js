@@ -119,28 +119,30 @@ function hasRole(user, requiredRoles) {
  * to check the role_permissions table for granular permissions.
  */
 function hasPermission(user, resource, action) {
-  const role = user.role || '';
-  
-  // CEO and Admin have full access
-  if (role === 'CEO' || role === 'Admin') {
+  /** JWT / DB casing varies; normalize so `Topic` and `topic` both work. */
+  const roleNorm = String(user.role || user.Role || '').trim().toLowerCase();
+
+  if (roleNorm === 'ceo' || roleNorm === 'admin') {
     return true;
   }
-  
-  // Department users can read, update, create, and delete their own department's data
-  if (role === 'department') {
+
+  if (roleNorm === 'department') {
     return action === 'read' || action === 'update' || action === 'create' || action === 'delete';
   }
-  
-  // Editor can read and update (but not delete)
-  if (role === 'Editor') {
+
+  if (roleNorm === 'editor') {
     return action === 'read' || action === 'update' || action === 'create';
   }
-  
-  // Viewer can only read
-  if (role === 'Viewer') {
+
+  if (roleNorm === 'viewer') {
     return action === 'read';
   }
-  
+
+  /** Strategic-topic owners: read WIG data + create/update on routes the handler allows (not delete). */
+  if (roleNorm === 'topic') {
+    return action === 'read' || action === 'create' || action === 'update';
+  }
+
   return false;
 }
 

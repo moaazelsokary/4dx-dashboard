@@ -13,10 +13,11 @@ export interface ApiError {
 }
 
 /**
- * Check if error is authentication-related (401, 403)
+ * True when the session is invalid or missing — only then should we sign the user out.
+ * 403 means "authenticated but not allowed" and must not clear localStorage (e.g. topic role hitting a forbidden WIG path).
  */
 export function isAuthError(status: number): boolean {
-  return status === 401 || status === 403;
+  return status === 401;
 }
 
 /**

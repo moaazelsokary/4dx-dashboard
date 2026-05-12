@@ -217,6 +217,8 @@ export interface AccountUser {
   default_route: string | null;
   allowed_routes: string[] | null;
   powerbi_dashboard_ids: string[] | null;
+  /** Role `topic`: single strategic pillar this user may edit (view-only on others). */
+  editable_strategic_topic?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -259,4 +261,5 @@ export interface AccountPayload {
   default_route?: string | null;
   allowed_routes?: string[] | null;
   powerbi_dashboard_ids?: string[] | null;
+  editable_strategic_topic?: string | null;
 }

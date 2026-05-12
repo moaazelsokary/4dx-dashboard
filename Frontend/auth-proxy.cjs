@@ -158,7 +158,8 @@ app.post('/api/auth/signin', async (req, res) => {
         is_active,
         default_route,
         allowed_routes,
-        powerbi_dashboard_ids
+        powerbi_dashboard_ids,
+        editable_strategic_topic
       FROM users
       WHERE username = @username
     `);
@@ -226,32 +227,46 @@ app.post('/api/auth/signin', async (req, res) => {
         : null;
     const allowedRoutes = parseJsonArrayColumn(user.allowed_routes);
     const powerbiDashboardIds = parseJsonArrayColumn(user.powerbi_dashboard_ids);
+    const editableStrategicTopic =
+      user.editable_strategic_topic != null && String(user.editable_strategic_topic).trim()
+        ? String(user.editable_strategic_topic).trim().toLowerCase()
+        : null;
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        username: user.username,
-        role: user.role,
-        departments: departments,
-        defaultRoute: defaultRoute || undefined,
-        allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
-        powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
-      },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRY }
-    );
+    const authRole =
+      String(user.role || '')
+        .trim()
+        .toLowerCase() === 'topic'
+        ? 'topic'
+        : String(user.role || '').trim();
+
+    const jwtPayload = {
+      userId: user.id,
+      username: user.username,
+      role: authRole,
+      departments: departments,
+      defaultRoute: defaultRoute || undefined,
+      allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
+      powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
+    };
+    if (authRole === 'topic') {
+      jwtPayload.editableStrategicTopic = editableStrategicTopic;
+    } else if (editableStrategicTopic) {
+      jwtPayload.editableStrategicTopic = editableStrategicTopic;
+    }
+
+    const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
     const userData = {
       username: user.username,
-      role: user.role,
+      role: authRole,
       departments: departments,
       defaultRoute: defaultRoute || null,
       allowedRoutes,
       powerbiDashboardIds,
+      editableStrategicTopic,
     };
 
-    console.log('[Auth Proxy] User signed in successfully:', user.username, 'Role:', user.role);
+    console.log('[Auth Proxy] User signed in successfully:', user.username, 'Role:', authRole);
 
     res.json({
       success: true,
@@ -311,7 +326,7 @@ async function handleAuthSession(req, res) {
       .request()
       .input('id', sql.Int, userId)
       .query(`
-        SELECT default_route, allowed_routes, powerbi_dashboard_ids
+        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic
         FROM users
         WHERE id = @id
       `);
@@ -323,12 +338,17 @@ async function handleAuthSession(req, res) {
       row.default_route && String(row.default_route).trim()
         ? String(row.default_route).trim()
         : null;
+    const editableStrategicTopic =
+      row.editable_strategic_topic != null && String(row.editable_strategic_topic).trim()
+        ? String(row.editable_strategic_topic).trim().toLowerCase()
+        : null;
     return res.json({
       success: true,
       user: {
         defaultRoute,
         allowedRoutes: parseJsonArrayColumnSession(row.allowed_routes),
         powerbiDashboardIds: parseJsonArrayColumnSession(row.powerbi_dashboard_ids),
+        editableStrategicTopic,
       },
     });
   } catch (e) {

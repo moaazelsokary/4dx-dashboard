@@ -10,6 +10,10 @@ export interface User {
   username: string;
   role: string;
   departments: string[];
+  /** Role `topic`: single strategic topic code this user may edit (KPI table). */
+  editableStrategicTopic?: string | null;
+  /** Legacy / API echo — merged into `editableStrategicTopic` in `getCurrentUser`. */
+  editable_strategic_topic?: string | null;
   token?: string;
   /** Post-login path when set (e.g. /department-objectives) */
   defaultRoute?: string | null;
@@ -30,6 +34,8 @@ export interface AuthTokenPayload {
   defaultRoute?: string;
   allowedRoutes?: string[] | null;
   powerbiDashboardIds?: string[] | null;
+  editableStrategicTopic?: string | null;
+  editable_strategic_topic?: string | null;
   exp?: number;
   iat?: number;
 }
@@ -124,6 +130,22 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
       if (payload && Object.prototype.hasOwnProperty.call(payload, 'powerbiDashboardIds')) {
         userToStore.powerbiDashboardIds = payload.powerbiDashboardIds ?? null;
       }
+      /** Topic pillar: JWT may omit camelCase key when null; always merge both claim spellings + API snake_case. */
+      const du = data.user as Record<string, unknown>;
+      const fromApiSnake =
+        du.editable_strategic_topic != null && String(du.editable_strategic_topic).trim()
+          ? String(du.editable_strategic_topic).trim().toLowerCase()
+          : null;
+      if (fromApiSnake) {
+        userToStore.editableStrategicTopic = fromApiSnake;
+      }
+      if (payload) {
+        const p = payload as AuthTokenPayload;
+        const fromJwt = p.editableStrategicTopic ?? p.editable_strategic_topic;
+        if (fromJwt != null && String(fromJwt).trim() !== '') {
+          userToStore.editableStrategicTopic = String(fromJwt).trim().toLowerCase();
+        }
+      }
       localStorage.setItem(AUTH_TOKEN_KEY, data.token);
       localStorage.setItem(USER_KEY, JSON.stringify(userToStore));
       
@@ -172,13 +194,44 @@ export const signOut = (redirect: boolean = true): void => {
 /**
  * Get current authenticated user
  */
+/**
+ * Normalize `user` blob + JWT so role `topic` always has `editableStrategicTopic` for KPI edit checks.
+ * (Some paths only stored snake_case or JWT omitted camelCase when value was empty at issue time.)
+ */
+function hydrateUserFromStorageBlob(u: User): User {
+  const out: User = { ...u };
+  const snake = out.editable_strategic_topic;
+  if (
+    (out.editableStrategicTopic == null || String(out.editableStrategicTopic).trim() === '') &&
+    snake != null &&
+    String(snake).trim() !== ''
+  ) {
+    out.editableStrategicTopic = String(snake).trim().toLowerCase();
+  }
+  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
+  if (token) {
+    const payload = decodeAuthTokenPayload(token);
+    if (payload) {
+      const jet = payload.editableStrategicTopic ?? payload.editable_strategic_topic;
+      if (jet != null && String(jet).trim() !== '') {
+        out.editableStrategicTopic = String(jet).trim().toLowerCase();
+      }
+      if (String(payload.role || '').trim().toLowerCase() === 'topic') {
+        out.role = 'topic';
+      }
+    }
+  }
+  return out;
+}
+
 export const getCurrentUser = (): User | null => {
   try {
     const userStr = localStorage.getItem(USER_KEY);
     if (!userStr) {
       return null;
     }
-    return JSON.parse(userStr) as User;
+    const raw = JSON.parse(userStr) as User;
+    return hydrateUserFromStorageBlob(raw);
   } catch {
     return null;
   }
@@ -196,6 +249,7 @@ export interface AuthSessionUserPayload {
   defaultRoute: string | null;
   allowedRoutes: string[] | null;
   powerbiDashboardIds: string[] | null;
+  editableStrategicTopic?: string | null;
 }
 
 /**
@@ -248,6 +302,9 @@ export function mergeSessionIntoStoredUser(session: AuthSessionUserPayload): Use
     allowedRoutes: session.allowedRoutes,
     powerbiDashboardIds: session.powerbiDashboardIds,
   };
+  if ('editableStrategicTopic' in session) {
+    next.editableStrategicTopic = session.editableStrategicTopic ?? null;
+  }
   localStorage.setItem(USER_KEY, JSON.stringify(next));
   return next;
 }

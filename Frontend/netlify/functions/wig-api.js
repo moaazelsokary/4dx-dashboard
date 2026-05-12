@@ -254,9 +254,17 @@ const handler = rateLimiter('general')(
         };
       }
       
-      // Check permissions based on role
-      const userRole = event.user.role || '';
-      if (!['CEO', 'Admin', 'department'].includes(userRole)) {
+      // Check permissions based on role (topic users may write only strategic-topic KPI routes)
+      const userRole = String(event.user.role || event.user.Role || '').trim();
+      const userRoleLower = userRole.toLowerCase();
+      const pathAllowsTopicWriter =
+        path === '/strategic-topic-kpi-rows' ||
+        path === '/strategic-topic-kpi-rows/update-order' ||
+        /^\/strategic-topic-kpi-rows\/\d+$/.test(path);
+      const writeRoles = pathAllowsTopicWriter
+        ? ['CEO', 'Admin', 'department', 'topic']
+        : ['CEO', 'Admin', 'department'];
+      if (!writeRoles.some((w) => w.toLowerCase() === userRoleLower)) {
         return {
           statusCode: 403,
           headers,
@@ -416,8 +424,9 @@ const handler = rateLimiter('general')(
           body: JSON.stringify({ error: 'Authentication required' }),
         };
       }
-      const r = event.user.role || event.user.Role || '';
-      if (!['CEO', 'Admin', 'department'].includes(r)) {
+      const r = String(event.user.role || event.user.Role || '').trim();
+      const rLower = r.toLowerCase();
+      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
         return {
           statusCode: 403,
           headers,

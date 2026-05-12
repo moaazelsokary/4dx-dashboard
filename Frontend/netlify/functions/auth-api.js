@@ -260,7 +260,8 @@ const handler = rateLimiter('login')(async (event, context) => {
           is_active,
           default_route,
           allowed_routes,
-          powerbi_dashboard_ids
+          powerbi_dashboard_ids,
+          editable_strategic_topic
         FROM users
         WHERE username = @username
       `);
@@ -368,23 +369,40 @@ const handler = rateLimiter('login')(async (event, context) => {
         : null;
     const allowedRoutes = parseJsonArrayColumn(user.allowed_routes);
     const powerbiDashboardIds = parseJsonArrayColumn(user.powerbi_dashboard_ids);
+    const editableStrategicTopic =
+      user.editable_strategic_topic != null && String(user.editable_strategic_topic).trim()
+        ? String(user.editable_strategic_topic).trim().toLowerCase()
+        : null;
+
+    /** Canonical role string so JWT / UI match route checks (`topic` is case-sensitive in the app). */
+    const authRole =
+      String(user.role || '')
+        .trim()
+        .toLowerCase() === 'topic'
+        ? 'topic'
+        : String(user.role || '').trim();
+
+    // JWT payload: role `topic` must always carry `editableStrategicTopic` (even null) so wig-proxy
+    // does not omit the claim — otherwise KPI writes fail with "assigned strategic topic" errors.
+    const jwtPayload = {
+      userId: user.id,
+      username: user.username,
+      role: authRole,
+      departments: departments,
+      defaultRoute: defaultRoute || undefined,
+      allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
+      powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
+    };
+    if (authRole === 'topic') {
+      jwtPayload.editableStrategicTopic = editableStrategicTopic;
+    } else if (editableStrategicTopic) {
+      jwtPayload.editableStrategicTopic = editableStrategicTopic;
+    }
 
     // Generate JWT token
     let token;
     try {
-      token = jwt.sign(
-        {
-          userId: user.id,
-          username: user.username,
-          role: user.role,
-          departments: departments,
-          defaultRoute: defaultRoute || undefined,
-          allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
-          powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
-        },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRY }
-      );
+      token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
     } catch (jwtError) {
       logger.error('JWT token generation failed', { username, error: jwtError.message });
       return {
@@ -396,14 +414,15 @@ const handler = rateLimiter('login')(async (event, context) => {
 
     const userData = {
       username: user.username,
-      role: user.role,
+      role: authRole,
       departments: departments,
       defaultRoute: defaultRoute || null,
       allowedRoutes,
       powerbiDashboardIds,
+      editableStrategicTopic,
     };
 
-    logger.info('User signed in successfully', { username: user.username, role: user.role });
+    logger.info('User signed in successfully', { username: user.username, role: authRole });
     
     // Debug: Log token generation
     console.log('[Auth API] Token generated:', {
@@ -412,7 +431,7 @@ const handler = rateLimiter('login')(async (event, context) => {
       tokenPrefix: token ? token.substring(0, 20) + '...' : 'none',
       userId: user.id,
       username: user.username,
-      role: user.role
+      role: authRole
     });
 
     const responseBody = {

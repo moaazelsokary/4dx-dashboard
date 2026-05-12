@@ -6,10 +6,30 @@ const sql = require('mssql');
 const bcrypt = require('bcryptjs');
 const { getValidPowerbiDashboardIdSet } = require('./powerbi-dashboards-crud.cjs');
 
+/** Strategic topic code for role `topic` (must match wig strategic_topic_kpi_rows topics). */
+const EDITABLE_STRATEGIC_TOPIC_CODES = new Set([
+  'volunteers',
+  'refugees',
+  'returnees',
+  'relief',
+  'awareness',
+]);
+
+/** Persist role as lowercase `topic` so JWT and route checks stay consistent. */
+function normalizeRoleForStorage(role) {
+  const s = String(role ?? '').trim();
+  return s.toLowerCase() === 'topic' ? 'topic' : s;
+}
+
 const ALLOWED_APP_PATHS = new Set([
   '/dashboard',
   '/wig-plan-2025',
   '/main-plan',
+  '/main-plan/volunteers',
+  '/main-plan/refugees',
+  '/main-plan/returnees',
+  '/main-plan/relief',
+  '/main-plan/awareness',
   '/department-objectives',
   '/test',
   '/summary',
@@ -50,10 +70,25 @@ function parseJsonArrayOrNull(val) {
   }
 }
 
+/** Normalize UI paths: trim, ensure leading slash (matches APP_ROUTE_OPTIONS). */
+function normalizeAllowedPath(p) {
+  let s = String(p).trim();
+  if (s.startsWith('[')) s = s.replace(/^\[+/, '').trim();
+  if (s && !s.startsWith('/')) s = `/${s}`;
+  return s;
+}
+
+function canonicalAllowedRoutesArray(arr) {
+  if (!Array.isArray(arr)) return arr;
+  return arr.map((p) => (typeof p === 'string' ? normalizeAllowedPath(p) : p));
+}
+
 function validateRoutesArray(arr) {
   if (!Array.isArray(arr)) return 'allowed_routes must be an array or null';
   for (const p of arr) {
-    if (typeof p !== 'string' || !ALLOWED_APP_PATHS.has(p)) {
+    if (typeof p !== 'string') return `Invalid route: ${String(p)}`;
+    const q = normalizeAllowedPath(p);
+    if (!ALLOWED_APP_PATHS.has(q)) {
       return `Invalid route: ${p}`;
     }
   }
@@ -82,15 +117,24 @@ async function validatePowerbiIds(arr, pool) {
 
 function mapUserAccountRow(row) {
   if (!row) return row;
+  const rawRole = row.role != null ? String(row.role).trim() : '';
+  const roleOut = rawRole.toLowerCase() === 'topic' ? 'topic' : rawRole;
+  const etRaw =
+    row.editable_strategic_topic ??
+    row.EDITABLE_STRATEGIC_TOPIC ??
+    row.EditableStrategicTopic;
+  const etOut =
+    etRaw != null && String(etRaw).trim() !== '' ? String(etRaw).trim().toLowerCase() : null;
   return {
     id: row.id,
     username: row.username,
-    role: row.role,
+    role: roleOut,
     departments: parseDepartmentsColumn(row.departments),
     is_active: row.is_active,
     default_route: row.default_route || null,
     allowed_routes: parseJsonArrayOrNull(row.allowed_routes),
     powerbi_dashboard_ids: parseJsonArrayOrNull(row.powerbi_dashboard_ids),
+    editable_strategic_topic: etOut,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -110,7 +154,8 @@ async function handleAccountsCrud(opts) {
 
   if (method === 'GET' && !accountId) {
     const result = await pool.request().query(`
-      SELECT id, username, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids, created_at, updated_at
+      SELECT id, username, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids,
+        editable_strategic_topic, created_at, updated_at
       FROM users
       ORDER BY username
     `);
@@ -145,9 +190,10 @@ async function handleAccountsCrud(opts) {
       if (allowed_routes === null) {
         routesJson = null;
       } else {
-        const err = validateRoutesArray(allowed_routes);
+        const canonical = canonicalAllowedRoutesArray(allowed_routes);
+        const err = validateRoutesArray(canonical);
         if (err) return { statusCode: 400, json: { success: false, error: err } };
-        routesJson = JSON.stringify(allowed_routes);
+        routesJson = JSON.stringify(canonical);
       }
     }
 
@@ -164,9 +210,29 @@ async function handleAccountsCrud(opts) {
 
     let defaultRouteVal = null;
     if (default_route !== undefined && default_route !== null && String(default_route).trim()) {
-      defaultRouteVal = String(default_route).trim();
+      defaultRouteVal = normalizeAllowedPath(String(default_route).trim());
       if (!ALLOWED_APP_PATHS.has(defaultRouteVal)) {
         return { statusCode: 400, json: { success: false, error: 'Invalid default_route' } };
+      }
+    }
+
+    const roleTrim = String(role).trim();
+    let editableStrategicTopicVal = null;
+    if (roleTrim.toLowerCase() === 'topic') {
+      const rawEt = body.editable_strategic_topic;
+      if (rawEt == null || String(rawEt).trim() === '') {
+        return {
+          statusCode: 400,
+          json: {
+            success: false,
+            error:
+              'Role "topic" requires editable_strategic_topic (volunteers | refugees | returnees | relief | awareness)',
+          },
+        };
+      }
+      editableStrategicTopicVal = String(rawEt).trim().toLowerCase();
+      if (!EDITABLE_STRATEGIC_TOPIC_CODES.has(editableStrategicTopicVal)) {
+        return { statusCode: 400, json: { success: false, error: 'Invalid editable_strategic_topic' } };
       }
     }
 
@@ -183,17 +249,18 @@ async function handleAccountsCrud(opts) {
     const ins = pool.request();
     ins.input('username', sql.NVarChar, String(username).trim());
     ins.input('password_hash', sql.NVarChar, password_hash);
-    ins.input('role', sql.NVarChar, String(role).trim());
+    ins.input('role', sql.NVarChar, normalizeRoleForStorage(role));
     ins.input('departments', sql.NVarChar(sql.MAX), deptStr);
     ins.input('is_active', sql.Bit, is_active === false ? 0 : 1);
     ins.input('default_route', sql.NVarChar(sql.MAX), defaultRouteVal);
     ins.input('allowed_routes', sql.NVarChar(sql.MAX), routesJson);
     ins.input('powerbi_dashboard_ids', sql.NVarChar(sql.MAX), pbiJson);
+    ins.input('editable_strategic_topic', sql.NVarChar(50), editableStrategicTopicVal);
 
     const insertResult = await ins.query(`
-      INSERT INTO users (username, password_hash, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids)
-      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.created_at, INSERTED.updated_at
-      VALUES (@username, @password_hash, @role, @departments, @is_active, @default_route, @allowed_routes, @powerbi_dashboard_ids)
+      INSERT INTO users (username, password_hash, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic)
+      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.created_at, INSERTED.updated_at
+      VALUES (@username, @password_hash, @role, @departments, @is_active, @default_route, @allowed_routes, @powerbi_dashboard_ids, @editable_strategic_topic)
     `);
 
     const row = insertResult.recordset[0];
@@ -210,14 +277,18 @@ async function handleAccountsCrud(opts) {
       default_route,
       allowed_routes,
       powerbi_dashboard_ids,
+      editable_strategic_topic,
     } = body;
 
     const existingReq = pool.request();
     existingReq.input('id', sql.Int, accountId);
-    const existing = await existingReq.query(`SELECT id FROM users WHERE id = @id`);
-    if (existing.recordset.length === 0) {
+    const existingUserResult = await existingReq.query(
+      `SELECT id, role, editable_strategic_topic FROM users WHERE id = @id`
+    );
+    if (existingUserResult.recordset.length === 0) {
       return { statusCode: 404, json: { success: false, error: 'User not found' } };
     }
+    const ex = existingUserResult.recordset[0];
 
     if (username !== undefined) {
       if (!String(username).trim()) {
@@ -237,9 +308,10 @@ async function handleAccountsCrud(opts) {
       if (allowed_routes === null) {
         routesJson = null;
       } else {
-        const err = validateRoutesArray(allowed_routes);
+        const canonical = canonicalAllowedRoutesArray(allowed_routes);
+        const err = validateRoutesArray(canonical);
         if (err) return { statusCode: 400, json: { success: false, error: err } };
-        routesJson = JSON.stringify(allowed_routes);
+        routesJson = JSON.stringify(canonical);
       }
     }
 
@@ -259,10 +331,41 @@ async function handleAccountsCrud(opts) {
       if (default_route === null || default_route === '') {
         defaultRouteVal = null;
       } else {
-        defaultRouteVal = String(default_route).trim();
+        defaultRouteVal = normalizeAllowedPath(String(default_route).trim());
         if (!ALLOWED_APP_PATHS.has(defaultRouteVal)) {
           return { statusCode: 400, json: { success: false, error: 'Invalid default_route' } };
         }
+      }
+    }
+
+    let nextEditableTopicSql = undefined;
+    if (role !== undefined || editable_strategic_topic !== undefined) {
+      const nextRole = role !== undefined ? String(role).trim() : String(ex.role || '').trim();
+      const isTopicRole = nextRole.toLowerCase() === 'topic';
+      let t;
+      if (editable_strategic_topic !== undefined) {
+        t =
+          editable_strategic_topic == null || String(editable_strategic_topic).trim() === ''
+            ? null
+            : String(editable_strategic_topic).trim().toLowerCase();
+      } else if (ex.editable_strategic_topic != null && String(ex.editable_strategic_topic).trim()) {
+        t = String(ex.editable_strategic_topic).trim().toLowerCase();
+      } else {
+        t = null;
+      }
+      if (!isTopicRole) {
+        nextEditableTopicSql = null;
+      } else if (!t || !EDITABLE_STRATEGIC_TOPIC_CODES.has(t)) {
+        return {
+          statusCode: 400,
+          json: {
+            success: false,
+            error:
+              'Topic role requires editable_strategic_topic (volunteers | refugees | returnees | relief | awareness)',
+          },
+        };
+      } else {
+        nextEditableTopicSql = t;
       }
     }
 
@@ -279,7 +382,7 @@ async function handleAccountsCrud(opts) {
       sets.push('password_hash = @password_hash');
     }
     if (role !== undefined) {
-      upd.input('role', sql.NVarChar, String(role).trim());
+      upd.input('role', sql.NVarChar, normalizeRoleForStorage(role));
       sets.push('role = @role');
     }
     if (departments !== undefined) {
@@ -302,6 +405,10 @@ async function handleAccountsCrud(opts) {
       upd.input('powerbi_dashboard_ids', sql.NVarChar(sql.MAX), pbiJson);
       sets.push('powerbi_dashboard_ids = @powerbi_dashboard_ids');
     }
+    if (nextEditableTopicSql !== undefined) {
+      upd.input('editable_strategic_topic', sql.NVarChar(50), nextEditableTopicSql);
+      sets.push('editable_strategic_topic = @editable_strategic_topic');
+    }
 
     if (sets.length === 0) {
       return { statusCode: 400, json: { success: false, error: 'No fields to update' } };
@@ -311,7 +418,7 @@ async function handleAccountsCrud(opts) {
 
     const updateResult = await upd.query(`
       UPDATE users SET ${sets.join(', ')}
-      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.created_at, INSERTED.updated_at
+      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.created_at, INSERTED.updated_at
       WHERE id = @id
     `);
 

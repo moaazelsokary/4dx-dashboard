@@ -11,6 +11,7 @@ import { dataCacheService } from "@/services/dataCacheService";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { signIn } from "@/services/authService";
 import { canAccessAppPath } from "@/utils/routeAccess";
+import { topicRoleEditableCode } from "@/pages/strategic-topics/strategicTopicKpiUtils";
 import OptimizedImage from "@/components/ui/OptimizedImage";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
@@ -55,6 +56,9 @@ const SignIn = () => {
           navigate("/main-plan");
         } else if (u.role === "department") {
           navigate("/department-objectives");
+        } else if (u.role === "topic") {
+          const t = topicRoleEditableCode(u);
+          navigate(t ? `/main-plan/${t}` : "/main-plan");
         } else {
           navigate("/dashboard");
         }
