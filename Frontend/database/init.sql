@@ -246,3 +246,26 @@ BEGIN
     CREATE INDEX [IX_strategic_topic_kpi_rows_dates] ON [dbo].[strategic_topic_kpi_rows]([start_date], [end_date]);
 END;
 
+-- Strategic topic content folder (files per pillar — Content folder tab)
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[strategic_topic_content_files]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[strategic_topic_content_files] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [strategic_topic] NVARCHAR(50) NOT NULL
+            CHECK ([strategic_topic] IN (N'volunteers', N'refugees', N'returnees', N'relief', N'awareness')),
+        [display_name] NVARCHAR(500) NOT NULL,
+        [description] NVARCHAR(MAX) NULL,
+        [original_file_name] NVARCHAR(500) NOT NULL,
+        [mime_type] NVARCHAR(200) NULL,
+        [file_data] VARBINARY(MAX) NOT NULL,
+        [file_size_bytes] INT NOT NULL,
+        [created_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        [created_by_user_id] INT NULL,
+        [created_by_username] NVARCHAR(200) NULL,
+        [updated_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        [updated_by_user_id] INT NULL,
+        [updated_by_username] NVARCHAR(200) NULL
+    );
+    CREATE INDEX [IX_strategic_topic_content_files_topic] ON [dbo].[strategic_topic_content_files]([strategic_topic]);
+END;
+

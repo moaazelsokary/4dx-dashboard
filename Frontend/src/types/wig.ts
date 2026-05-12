@@ -181,6 +181,21 @@ export type StrategicTopicCode = 'volunteers' | 'refugees' | 'returnees' | 'reli
 
 export type StrategicTopicKpiStatus = 'Completed' | 'In Progress' | 'On Hold';
 
+/** Content Folder files (per strategic topic pillar) */
+export interface StrategicTopicContentItem {
+  id: number;
+  strategic_topic: StrategicTopicCode;
+  display_name: string;
+  description: string | null;
+  original_file_name: string;
+  mime_type: string | null;
+  file_size_bytes: number;
+  created_at: string;
+  created_by_username: string | null;
+  updated_at: string;
+  updated_by_username: string | null;
+}
+
 export interface StrategicTopicKpiRow {
   id: number;
   strategic_topic: StrategicTopicCode;

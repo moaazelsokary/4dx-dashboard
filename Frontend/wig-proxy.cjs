@@ -24,7 +24,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '32mb' }));
 
 // Import all handler functions - we'll copy the key ones we need
 // For now, let's create a simplified version that handles the main endpoints

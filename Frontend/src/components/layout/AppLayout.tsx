@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Menu } from 'lucide-react';
 import { HeaderUserSection } from '@/components/shared/HeaderUserSection';
 import SidebarNav from '@/components/shared/SidebarNav';
@@ -22,6 +22,8 @@ export interface AppLayoutProps {
   badge?: React.ReactNode;
   /** Mobile buttons (e.g. Refresh, Sign Out) - shown below header on small screens */
   mobileActions?: React.ReactNode;
+  /** Optional center strip in the main header row (e.g. strategic topic tabs). Omitted on most pages. */
+  headerToolbar?: ReactNode;
   className?: string;
 }
 
@@ -37,6 +39,7 @@ export function AppLayout({
   status,
   badge,
   mobileActions,
+  headerToolbar,
   className,
 }: AppLayoutProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -63,8 +66,13 @@ export function AppLayout({
         {/* Header - only over content area */}
         <header className="border-b bg-card sticky top-0 z-50 shrink-0 shadow-sm">
           <div className="container mx-auto px-3 sm:px-4 py-2">
-            <div className="flex items-center justify-between gap-2 sm:gap-3">
-              <div className="flex items-center gap-3 min-w-0">
+            <div
+              className={cn(
+                'flex items-center gap-2 sm:gap-3 min-w-0',
+                headerToolbar ? 'flex-nowrap' : 'justify-between'
+              )}
+            >
+              <div className="flex items-center gap-3 min-w-0 shrink-0">
                 {headerLeft}
                 {/* Mobile: hamburger to open nav */}
                 <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -93,20 +101,27 @@ export function AppLayout({
                 </Sheet>
                 {/* Mobile: show title in header when sidebar closed */}
                 {headerTitle && (
-                  <div className="min-w-0 md:hidden">
+                  <div className="min-w-0 md:hidden max-w-[40vw] sm:max-w-none">
                     <h1 className="text-sm sm:text-base font-bold text-foreground truncate leading-relaxed">{headerTitle}</h1>
                     {headerSubtitle && <p className="text-xs text-muted-foreground truncate leading-relaxed">{headerSubtitle}</p>}
                   </div>
                 )}
               </div>
-              <HeaderUserSection
-                user={user}
-                onSignOut={onSignOut ?? (() => {})}
-                onRefresh={onRefresh}
-                exportSlot={exportSlot}
-                status={status}
-                badge={badge}
-              />
+              {headerToolbar ? (
+                <div className="flex-1 min-w-0 overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] flex justify-center px-1">
+                  {headerToolbar}
+                </div>
+              ) : null}
+              <div className="shrink-0">
+                <HeaderUserSection
+                  user={user}
+                  onSignOut={onSignOut ?? (() => {})}
+                  onRefresh={onRefresh}
+                  exportSlot={exportSlot}
+                  status={status}
+                  badge={badge}
+                />
+              </div>
             </div>
           </div>
         </header>

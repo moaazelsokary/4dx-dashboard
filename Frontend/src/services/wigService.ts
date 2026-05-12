@@ -13,6 +13,7 @@ import type {
   KPIBreakdownResponse,
   KPIBreakdownSource,
   StrategicTopicCode,
+  StrategicTopicContentItem,
   StrategicTopicKpiRow,
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
@@ -427,6 +428,90 @@ export async function updateStrategicTopicKpiRowsOrder(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+const MAX_STRATEGIC_TOPIC_CONTENT_BYTES = 24 * 1024 * 1024;
+
+export async function getStrategicTopicContentList(strategicTopic: StrategicTopicCode): Promise<StrategicTopicContentItem[]> {
+  const qs = new URLSearchParams({ strategic_topic: strategicTopic });
+  return fetchAPI<StrategicTopicContentItem[]>(`/strategic-topic-content?${qs.toString()}`);
+}
+
+export async function createStrategicTopicContentItem(payload: {
+  strategic_topic: StrategicTopicCode;
+  display_name: string;
+  description?: string | null;
+  original_file_name: string;
+  mime_type?: string | null;
+  file_base64: string;
+}): Promise<StrategicTopicContentItem> {
+  return fetchAPI<StrategicTopicContentItem>('/strategic-topic-content', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateStrategicTopicContentItem(
+  id: number,
+  payload: {
+    display_name?: string;
+    description?: string | null;
+    file_base64?: string;
+    original_file_name?: string;
+    mime_type?: string | null;
+  }
+): Promise<StrategicTopicContentItem> {
+  return fetchAPI<StrategicTopicContentItem>(`/strategic-topic-content/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteStrategicTopicContentItem(id: number): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>(`/strategic-topic-content/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Browser download (binary GET). */
+export async function downloadStrategicTopicContentFile(id: number): Promise<void> {
+  const authHeaders = getAuthHeader();
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLocalWigProxy =
+    hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  const API_BASE_URL = isLocalWigProxy ? '/api/wig' : '/.netlify/functions/wig-api';
+  const url = `${API_BASE_URL}/strategic-topic-content/${id}/download?_t=${Date.now()}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { ...authHeaders, 'Cache-Control': 'no-cache' },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || `Download failed (${response.status})`);
+  }
+  let filename = `file-${id}`;
+  const cd = response.headers.get('Content-Disposition');
+  const m = cd?.match(/filename\*=UTF-8''([^;\s]+)/);
+  if (m?.[1]) {
+    try {
+      filename = decodeURIComponent(m[1]);
+    } catch {
+      /* keep default */
+    }
+  }
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(href);
+}
+
+export { MAX_STRATEGIC_TOPIC_CONTENT_BYTES };
 
 // RASCI summary per department (when All Departments is selected)
 export interface RASCISummaryByDepartment {

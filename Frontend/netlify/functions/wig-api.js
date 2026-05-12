@@ -4,6 +4,7 @@ const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
 const strategicTopicKpiRows = require('./wig-api-strategic-topic-kpi-rows.cjs');
+const strategicTopicContent = require('./wig-api-strategic-topic-content.cjs');
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
 const { computeKPIBreakdown } = require('./utils/kpi-breakdown.cjs');
 
@@ -260,7 +261,9 @@ const handler = rateLimiter('general')(
       const pathAllowsTopicWriter =
         path === '/strategic-topic-kpi-rows' ||
         path === '/strategic-topic-kpi-rows/update-order' ||
-        /^\/strategic-topic-kpi-rows\/\d+$/.test(path);
+        /^\/strategic-topic-kpi-rows\/\d+$/.test(path) ||
+        path === '/strategic-topic-content' ||
+        /^\/strategic-topic-content\/\d+$/.test(path);
       const writeRoles = pathAllowsTopicWriter
         ? ['CEO', 'Admin', 'department', 'topic']
         : ['CEO', 'Admin', 'department'];
@@ -452,6 +455,72 @@ const handler = rateLimiter('general')(
     } else if (/^\/strategic-topic-kpi-rows\/\d+$/.test(path) && method === 'DELETE') {
       const id = parseInt(path.split('/')[2], 10);
       result = await strategicTopicKpiRows.deleteStrategicTopicKpiRow(pool, id, event.user);
+    }
+    // Strategic topic content folder (files per pillar)
+    else if (path === '/strategic-topic-content' && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      const r = String(event.user.role || event.user.Role || '').trim();
+      const rLower = r.toLowerCase();
+      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      const topic = queryParams.strategic_topic;
+      if (!topic) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'strategic_topic query parameter is required' }),
+        };
+      }
+      result = await strategicTopicContent.listStrategicTopicContent(pool, topic, event.user);
+    } else if (/^\/strategic-topic-content\/\d+\/download$/.test(path) && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      const r = String(event.user.role || event.user.Role || '').trim();
+      const rLower = r.toLowerCase();
+      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      const id = parseInt(path.match(/^\/strategic-topic-content\/(\d+)\/download$/)[1], 10);
+      const bin = await strategicTopicContent.getStrategicTopicContentDownload(pool, id, event.user);
+      const fname = encodeURIComponent(bin.filename);
+      return {
+        statusCode: 200,
+        headers: {
+          ...headers,
+          'Content-Type': bin.mime,
+          'Content-Disposition': `attachment; filename*=UTF-8''${fname}`,
+        },
+        body: bin.buffer.toString('base64'),
+        isBase64Encoded: true,
+      };
+    } else if (path === '/strategic-topic-content' && method === 'POST') {
+      result = await strategicTopicContent.createStrategicTopicContent(pool, body, event.user);
+    } else if (/^\/strategic-topic-content\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await strategicTopicContent.updateStrategicTopicContent(pool, id, body, event.user);
+    } else if (/^\/strategic-topic-content\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await strategicTopicContent.deleteStrategicTopicContent(pool, id, event.user);
     }
     // RASCI Metrics
     else if (path === '/rasci' && method === 'GET') {

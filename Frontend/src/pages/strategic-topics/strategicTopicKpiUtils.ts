@@ -95,6 +95,14 @@ export function canCreateStrategicTopicRow(user: User | null, pageTopic: Strateg
   return user.role === 'department' && userDepartmentCodes(user).length > 0;
 }
 
+/** Upload, replace, or delete files in the topic Content Folder (CEO/Admin or topic lead for this pillar). */
+export function canManageStrategicTopicContent(user: User | null, pageTopic: StrategicTopicCode): boolean {
+  if (!user) return false;
+  if (isCeoOrAdmin(user)) return true;
+  const topicHome = topicRoleEditableCode(user);
+  return Boolean(topicHome && topicHome === pageTopic);
+}
+
 /** Default department pipe tokens for an inline-created row (department users: own dept only). */
 export function pickDefaultDeptCodesForNewRow(user: User | null, departments: Department[]): string[] {
   const sorted = [...departments]

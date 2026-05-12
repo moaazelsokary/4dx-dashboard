@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Department, MainPlanObjective, StrategicTopicCode, StrategicTopicKpiRow } from '@/types/wig';
 import { getDepartments, getMainObjectives, getStrategicTopicKpiRows } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
-import { LayoutDashboard, Table2, SquareChartGantt } from 'lucide-react';
+import { LayoutDashboard, Table2, SquareChartGantt, FolderOpen } from 'lucide-react';
 import StrategicTopicDashboard from './StrategicTopicDashboard';
 import StrategicTopicKpiTable from './StrategicTopicKpiTable';
 import StrategicTopicGantt from './StrategicTopicGantt';
+import StrategicTopicContentFolder from './StrategicTopicContentFolder';
 import { STRATEGIC_TOPIC_LABELS, parsePipeList } from './strategicTopicKpiUtils';
 
 type StrategicTopicTemplateProps = {
@@ -20,11 +21,11 @@ type StrategicTopicTemplateProps = {
   strategicTopicCode: StrategicTopicCode;
 };
 
-const TAB_VALUES = ['dashboard', 'table', 'gantt'] as const;
+const TAB_VALUES = ['dashboard', 'table', 'gantt', 'content'] as const;
 type TabValue = (typeof TAB_VALUES)[number];
 
 function isTabValue(v: string | null): v is TabValue {
-  return v === 'dashboard' || v === 'table' || v === 'gantt';
+  return v === 'dashboard' || v === 'table' || v === 'gantt' || v === 'content';
 }
 
 export default function StrategicTopicTemplate({ title, strategicTopicCode }: StrategicTopicTemplateProps) {
@@ -183,40 +184,50 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
     </div>
   );
 
-  return (
-    <AppLayout
-      user={user}
-      headerTitle={title}
-      headerSubtitle={`${topicLabel} Dashboard`}
-      onSignOut={handleSignOut}
-      onRefresh={() => void loadAll()}
-    >
-      <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-        <TabsList className="w-full sm:w-auto flex flex-wrap h-auto gap-1.5 rounded-xl border border-border/80 bg-muted/60 p-1.5 shadow-sm">
-          <TabsTrigger
-            value="table"
-            className="gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-          >
-            <Table2 className="h-4 w-4 shrink-0" />
-            Table KPI
-          </TabsTrigger>
-          <TabsTrigger
-            value="dashboard"
-            className="gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-          >
-            <LayoutDashboard className="h-4 w-4 shrink-0" />
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger
-            value="gantt"
-            className="gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-          >
-            <SquareChartGantt className="h-4 w-4 shrink-0" />
-            Gantt
-          </TabsTrigger>
-        </TabsList>
+  const topicTabList = (
+    <TabsList className="w-max max-w-[min(100%,72rem)] flex flex-wrap sm:flex-nowrap h-auto min-h-10 gap-1 rounded-xl border border-border/80 bg-muted/60 p-1 shadow-sm justify-center">
+      <TabsTrigger
+        value="table"
+        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
+      >
+        <Table2 className="h-4 w-4 shrink-0" />
+        Table KPI
+      </TabsTrigger>
+      <TabsTrigger
+        value="dashboard"
+        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
+      >
+        <LayoutDashboard className="h-4 w-4 shrink-0" />
+        Dashboard
+      </TabsTrigger>
+      <TabsTrigger
+        value="gantt"
+        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
+      >
+        <SquareChartGantt className="h-4 w-4 shrink-0" />
+        Gantt
+      </TabsTrigger>
+      <TabsTrigger
+        value="content"
+        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
+      >
+        <FolderOpen className="h-4 w-4 shrink-0" />
+        Content folder
+      </TabsTrigger>
+    </TabsList>
+  );
 
-        <TabsContent value="table" className="mt-4 focus-visible:outline-none">
+  return (
+    <Tabs value={activeTab} onValueChange={onTabChange} className="flex flex-col flex-1 min-h-0">
+      <AppLayout
+        user={user}
+        headerTitle={title}
+        headerSubtitle={`${topicLabel} Dashboard`}
+        headerToolbar={topicTabList}
+        onSignOut={handleSignOut}
+        onRefresh={() => void loadAll()}
+      >
+        <TabsContent value="table" className="mt-0 sm:mt-1 focus-visible:outline-none">
           {loading ? (
             pageSkeleton
           ) : (
@@ -232,7 +243,7 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
           )}
         </TabsContent>
 
-        <TabsContent value="dashboard" className="mt-4 focus-visible:outline-none">
+        <TabsContent value="dashboard" className="mt-4 sm:mt-4 focus-visible:outline-none">
           {loading ? pageSkeleton : (
             <StrategicTopicDashboard
               rows={vizRows}
@@ -256,7 +267,11 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
             />
           )}
         </TabsContent>
-      </Tabs>
-    </AppLayout>
+
+        <TabsContent value="content" className="mt-4 focus-visible:outline-none">
+          <StrategicTopicContentFolder strategicTopicCode={strategicTopicCode} user={user} />
+        </TabsContent>
+      </AppLayout>
+    </Tabs>
   );
 }

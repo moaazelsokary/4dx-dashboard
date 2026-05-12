@@ -5,6 +5,7 @@
 const { normalizeStrategicDbRow } = require('./netlify/functions/utils/normalize-strategic-db-row.cjs');
 const { collectJwtSecrets } = require('./netlify/functions/utils/jwt-secrets.cjs');
 const strategicTopicKpiRows = require('./netlify/functions/wig-api-strategic-topic-kpi-rows.cjs');
+const strategicTopicContent = require('./netlify/functions/wig-api-strategic-topic-content.cjs');
 
 function getAuthorizationHeader(req) {
   if (!req.headers) return null;
@@ -538,6 +539,92 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
     } catch (error) {
       if (error.statusCode) return sendTopicKpiStatus(res, error);
       handleError(res, error, 'Error deleting strategic topic KPI row');
+    }
+  });
+
+  app.get('/api/wig/strategic-topic-content', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const rLower = String(user.role || '').trim().toLowerCase();
+      if (!['ceo', 'admin', 'department', 'topic'].includes(rLower)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+      const topic = req.query.strategic_topic;
+      if (!topic) return res.status(400).json({ error: 'strategic_topic query parameter is required' });
+      const pool = await getPool();
+      const rows = await strategicTopicContent.listStrategicTopicContent(pool, topic, user);
+      res.json(rows);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error listing strategic topic content');
+    }
+  });
+
+  app.get('/api/wig/strategic-topic-content/:id/download', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const rLower = String(user.role || '').trim().toLowerCase();
+      if (!['ceo', 'admin', 'department', 'topic'].includes(rLower)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const bin = await strategicTopicContent.getStrategicTopicContentDownload(pool, id, user);
+      const fname = encodeURIComponent(bin.filename);
+      res.setHeader('Content-Type', bin.mime);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${fname}`);
+      res.send(bin.buffer);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error downloading strategic topic file');
+    }
+  });
+
+  app.post('/api/wig/strategic-topic-content', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const row = await strategicTopicContent.createStrategicTopicContent(pool, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error uploading strategic topic file');
+    }
+  });
+
+  app.put('/api/wig/strategic-topic-content/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const row = await strategicTopicContent.updateStrategicTopicContent(pool, id, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating strategic topic file');
+    }
+  });
+
+  app.delete('/api/wig/strategic-topic-content/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const result = await strategicTopicContent.deleteStrategicTopicContent(pool, id, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error deleting strategic topic file');
     }
   });
 };
