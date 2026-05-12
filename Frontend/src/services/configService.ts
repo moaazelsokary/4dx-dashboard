@@ -19,6 +19,7 @@ import type {
   PowerbiDashboardPayload,
   PowerbiDashboardUpdatePayload,
   StrategicObjectiveDataSourceMapping,
+  TopicKpiDataSourceMapping,
 } from '@/types/config';
 import { getAuthHeader } from './authService';
 import { getCsrfHeader } from '@/utils/csrf';
@@ -215,7 +216,7 @@ export async function checkLockStatus(
   fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
   month?: string,
-  objectiveKind: 'bau' | 'strategic' = 'bau'
+  objectiveKind: 'bau' | 'strategic' | 'topic_kpi' = 'bau'
 ): Promise<LockCheckResponse> {
   const params = new URLSearchParams({
     field_type: fieldType,
@@ -226,6 +227,8 @@ export async function checkLockStatus(
   }
   if (objectiveKind === 'strategic') {
     params.append('objective_kind', 'strategic');
+  } else if (objectiveKind === 'topic_kpi') {
+    params.append('objective_kind', 'topic_kpi');
   }
   return fetchAPI<LockCheckResponse>(`/locks/check?${params.toString()}`);
 }
@@ -243,7 +246,7 @@ export async function checkOperationLock(
   operation: 'add' | 'delete',
   kpi?: string,
   departmentId?: number,
-  objectiveKind: 'bau' | 'strategic' = 'bau'
+  objectiveKind: 'bau' | 'strategic' | 'topic_kpi' = 'bau'
 ): Promise<{ is_locked: boolean; lock_reason?: string }> {
   const params = new URLSearchParams({
     operation,
@@ -256,6 +259,8 @@ export async function checkOperationLock(
   }
   if (objectiveKind === 'strategic') {
     params.append('objective_kind', 'strategic');
+  } else if (objectiveKind === 'topic_kpi') {
+    params.append('objective_kind', 'topic_kpi');
   }
   return fetchAPI<{ is_locked: boolean; lock_reason?: string }>(`/locks/check-operation?${params.toString()}`);
 }
@@ -572,6 +577,24 @@ export async function createOrUpdateStrategicMapping(
   mappingData: MappingFormData
 ): Promise<StrategicObjectiveDataSourceMapping> {
   return fetchAPI<StrategicObjectiveDataSourceMapping>(`/strategic-mappings/${strategicDepartmentObjectiveId}`, {
+    method: 'PUT',
+    body: JSON.stringify(mappingData),
+  });
+}
+
+export async function getTopicKpiMappings(): Promise<TopicKpiDataSourceMapping[]> {
+  return fetchAPI<TopicKpiDataSourceMapping[]>('/topic-kpi-mappings');
+}
+
+export async function getTopicKpiMapping(rowId: number): Promise<TopicKpiDataSourceMapping> {
+  return fetchAPI<TopicKpiDataSourceMapping>(`/topic-kpi-mappings/${rowId}`);
+}
+
+export async function createOrUpdateTopicKpiMapping(
+  rowId: number,
+  mappingData: MappingFormData
+): Promise<TopicKpiDataSourceMapping> {
+  return fetchAPI<TopicKpiDataSourceMapping>(`/topic-kpi-mappings/${rowId}`, {
     method: 'PUT',
     body: JSON.stringify(mappingData),
   });

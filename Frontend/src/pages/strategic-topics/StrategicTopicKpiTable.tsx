@@ -46,6 +46,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { Department, MainPlanObjective, StrategicTopicCode, StrategicTopicKpiRow } from '@/types/wig';
 import type { User } from '@/services/authService';
 import KPISelector from '@/components/wig/KPISelector';
+import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import {
   STRATEGIC_TOPIC_CODES,
   STRATEGIC_TOPIC_LABELS,
@@ -75,7 +76,7 @@ import { StrategicTopicKpiSpreadsheetProvider } from '@/components/wig/Strategic
 import { StrategicTopicKpiFormulaBar } from '@/components/wig/SpreadsheetFormulaBar';
 import { StrategicTopicKpiSheetCell } from '@/components/wig/StrategicTopicKpiSheetCell';
 import { toast } from '@/hooks/use-toast';
-import { Pencil, Plus, Trash2, Loader2, Filter, Search, ZoomIn, ZoomOut, GripVertical } from 'lucide-react';
+import { Pencil, Plus, Trash2, Loader2, Filter, Search, ZoomIn, ZoomOut, GripVertical, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -1183,6 +1184,30 @@ export default function StrategicTopicKpiTable({
                             </StrategicTopicKpiSheetCell>
                             <TableCell className="align-top text-right space-x-1 whitespace-nowrap" data-no-drag>
                               {canEdit && (
+                                <div
+                                  className="inline-block"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MonthlyDataEditor
+                                    departmentObjectiveId={row.id}
+                                    objectiveKind="topic_kpi"
+                                    trigger={
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label="Edit monthly data"
+                                        title="Monthly data"
+                                      >
+                                        <Calendar className="h-4 w-4" />
+                                      </Button>
+                                    }
+                                  />
+                                </div>
+                              )}
+                              {canEdit && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1332,6 +1357,26 @@ export default function StrategicTopicKpiTable({
                             <BidirectionalText>{row.notes || '—'}</BidirectionalText>
                           </StrategicTopicKpiSheetCell>
                           <TableCell className="align-top text-right space-x-1 whitespace-nowrap">
+                            {canEdit && (
+                              <div className="inline-block">
+                                <MonthlyDataEditor
+                                  departmentObjectiveId={row.id}
+                                  objectiveKind="topic_kpi"
+                                  trigger={
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      aria-label="Edit monthly data"
+                                      title="Monthly data"
+                                    >
+                                      <Calendar className="h-4 w-4" />
+                                    </Button>
+                                  }
+                                />
+                              </div>
+                            )}
                             {canEdit && (
                               <Button
                                 variant="ghost"

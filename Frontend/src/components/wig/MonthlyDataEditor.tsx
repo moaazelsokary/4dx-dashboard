@@ -12,29 +12,40 @@ import {
   getStrategicMonthlyData,
   createOrUpdateStrategicMonthlyData,
   getStrategicDepartmentObjectives,
+  getStrategicTopicKpiMonthlyData,
+  createOrUpdateStrategicTopicKpiMonthlyData,
 } from '@/services/wigService';
-import { getMapping, getStrategicMapping } from '@/services/configService';
+import { getMapping, getStrategicMapping, getTopicKpiMapping } from '@/services/configService';
 import { useBatchLockStatus } from '@/hooks/useLockStatus';
 import { createLockCheckRequest } from '@/services/lockService';
 import { toast } from '@/hooks/use-toast';
 import { isAuthenticated } from '@/services/authService';
-import type { MonthlyData, StrategicMonthlyData } from '@/types/wig';
+import type { MonthlyData, StrategicMonthlyData, StrategicTopicKpiMonthlyData } from '@/types/wig';
 import { Calendar, Loader2, Lock as LockIcon, CheckCircle2, XCircle, AlertCircle, Database, Cloud } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { getUserFriendlyError } from '@/utils/errorMessages';
 
-type MonthRow = MonthlyData | StrategicMonthlyData;
+type MonthRow = MonthlyData | StrategicMonthlyData | StrategicTopicKpiMonthlyData;
 
 function emptyMonthRow(
-  departmentObjectiveId: number,
+  entityId: number,
   month: string,
-  objectiveKind: 'bau' | 'strategic'
+  kind: 'bau' | 'strategic' | 'topic_kpi'
 ): MonthRow {
   const monthIso = `${month}-01`;
-  if (objectiveKind === 'strategic') {
+  if (kind === 'topic_kpi') {
     return {
       id: 0,
-      strategic_department_objective_id: departmentObjectiveId,
+      strategic_topic_kpi_row_id: entityId,
+      month: monthIso,
+      target_value: null,
+      actual_value: null,
+    };
+  }
+  if (kind === 'strategic') {
+    return {
+      id: 0,
+      strategic_department_objective_id: entityId,
       month: monthIso,
       target_value: null,
       actual_value: null,
@@ -42,7 +53,7 @@ function emptyMonthRow(
   }
   return {
     id: 0,
-    department_objective_id: departmentObjectiveId,
+    department_objective_id: entityId,
     month: monthIso,
     target_value: null,
     actual_value: null,
@@ -50,9 +61,10 @@ function emptyMonthRow(
 }
 
 interface MonthlyDataEditorProps {
+  /** Department objective id, strategic department objective id, or strategic topic KPI row id depending on objectiveKind. */
   departmentObjectiveId: number;
-  /** When strategic, loads/saves strategic_department_monthly_data and uses strategic lock scope. */
-  objectiveKind?: 'bau' | 'strategic';
+  /** When strategic, loads/saves strategic_department_monthly_data. When topic_kpi, loads/saves strategic_topic_kpi_monthly_data for the Table KPI row. */
+  objectiveKind?: 'bau' | 'strategic' | 'topic_kpi';
   trigger?: React.ReactNode;
 }
 
@@ -76,6 +88,7 @@ export default function MonthlyDataEditor({
   trigger,
 }: MonthlyDataEditorProps) {
   const isStrategic = objectiveKind === 'strategic';
+  const isTopicKpi = objectiveKind === 'topic_kpi';
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Map<string, MonthRow>>(new Map());
   const [originalData, setOriginalData] = useState<Map<string, MonthRow>>(new Map()); // Track original data to detect changes
@@ -90,17 +103,20 @@ export default function MonthlyDataEditor({
   // Note: monthly_target locks work for both Direct and In direct types
   // Note: monthly_actual locks work for Direct type only (backend enforces this)
   const lockChecks = MONTHS.flatMap((month) => [
-    createLockCheckRequest('monthly_target', departmentObjectiveId, month, isStrategic ? 'strategic' : 'bau'),
-    createLockCheckRequest('monthly_actual', departmentObjectiveId, month, isStrategic ? 'strategic' : 'bau'),
+    createLockCheckRequest('monthly_target', departmentObjectiveId, month, isTopicKpi ? 'topic_kpi' : isStrategic ? 'strategic' : 'bau'),
+    createLockCheckRequest('monthly_actual', departmentObjectiveId, month, isTopicKpi ? 'topic_kpi' : isStrategic ? 'strategic' : 'bau'),
   ]);
 
-  const { getLockStatus } = useBatchLockStatus(lockChecks, open && !!objectiveType);
+  const { getLockStatus } = useBatchLockStatus(lockChecks, open && (isTopicKpi || !!objectiveType));
 
   // Fetch data source mapping for this objective (for source badges: PMS / Odoo)
   const { data: mapping } = useQuery({
     queryKey: ['mapping', departmentObjectiveId, objectiveKind],
     queryFn: async () => {
       try {
+        if (isTopicKpi) {
+          return await getTopicKpiMapping(departmentObjectiveId);
+        }
         if (isStrategic) {
           return await getStrategicMapping(departmentObjectiveId);
         }
@@ -109,7 +125,7 @@ export default function MonthlyDataEditor({
         return null;
       }
     },
-    enabled: open,
+    enabled: open && (isTopicKpi || !!objectiveType),
     staleTime: 0,
     retry: false,
   });
@@ -118,9 +134,14 @@ export default function MonthlyDataEditor({
     try {
       setLoading(true);
       // Fetch fresh data from server with cache-busting
-      const monthlyData = isStrategic
-        ? await getStrategicMonthlyData(departmentObjectiveId)
-        : await getMonthlyData(departmentObjectiveId);
+      let monthlyData: MonthRow[] = [];
+      if (isTopicKpi) {
+        monthlyData = await getStrategicTopicKpiMonthlyData(departmentObjectiveId);
+      } else if (isStrategic) {
+        monthlyData = await getStrategicMonthlyData(departmentObjectiveId);
+      } else {
+        monthlyData = await getMonthlyData(departmentObjectiveId);
+      }
       const dataMap = new Map<string, MonthRow>();
       const originalMap = new Map<string, MonthRow>();
       
@@ -151,33 +172,33 @@ export default function MonthlyDataEditor({
     } finally {
       setLoading(false);
     }
-  }, [departmentObjectiveId, isStrategic]);
+  }, [departmentObjectiveId, isStrategic, isTopicKpi]);
 
-  // Load department objective to check type
+  // Load department objective to check type (locks / mapping). Topic KPI rows skip this.
   useEffect(() => {
     if (open) {
-      const loadObjective = async () => {
-        try {
-          const objectives = isStrategic
-            ? await getStrategicDepartmentObjectives()
-            : await getDepartmentObjectives();
-          const objective = objectives.find((obj) => obj.id === departmentObjectiveId);
-          setObjectiveType(objective?.type || null);
-        } catch (error) {
-          console.error('Error loading department objective:', error);
-        }
-      };
-      void loadObjective();
+      if (!isTopicKpi) {
+        const loadObjective = async () => {
+          try {
+            const objectives = isStrategic
+              ? await getStrategicDepartmentObjectives()
+              : await getDepartmentObjectives();
+            const objective = objectives.find((obj) => obj.id === departmentObjectiveId);
+            setObjectiveType(objective?.type || null);
+          } catch (error) {
+            console.error('Error loading department objective:', error);
+          }
+        };
+        void loadObjective();
+      }
       void loadData();
     }
-  }, [open, departmentObjectiveId, loadData, isStrategic]);
+  }, [open, departmentObjectiveId, loadData, isStrategic, isTopicKpi]);
 
   const updateMonthData = (month: string, field: 'target_value' | 'actual_value', value: string) => {
-    // Check if field is locked
-    // Note: Backend enforces that monthly_actual only locks Direct type
-    // monthly_target locks both Direct and In direct types
     const fieldType = field === 'target_value' ? 'monthly_target' : 'monthly_actual';
-    const lockInfo = getLockStatus(fieldType, departmentObjectiveId, month, isStrategic ? 'strategic' : 'bau');
+    const lockScope = isTopicKpi ? 'topic_kpi' : isStrategic ? 'strategic' : 'bau';
+    const lockInfo = getLockStatus(fieldType, departmentObjectiveId, month, lockScope);
     if (lockInfo.is_locked) {
       toast({
         title: 'Field Locked',
@@ -188,7 +209,8 @@ export default function MonthlyDataEditor({
     }
 
     const updated = new Map(data);
-    const existing = updated.get(month) || emptyMonthRow(departmentObjectiveId, month, isStrategic ? 'strategic' : 'bau');
+    const rowKind: 'bau' | 'strategic' | 'topic_kpi' = isTopicKpi ? 'topic_kpi' : isStrategic ? 'strategic' : 'bau';
+    const existing = updated.get(month) || emptyMonthRow(departmentObjectiveId, month, rowKind);
     
     const newValue = value === '' ? null : parseFloat(value) || null;
     
@@ -231,35 +253,32 @@ export default function MonthlyDataEditor({
     }
 
     // Check for locked fields before saving
-    // Note: Backend enforces that monthly_actual only locks Direct type
-    // monthly_target locks both Direct and In direct types
     const lockedFields: string[] = [];
+    const lockScopeSave = isTopicKpi ? 'topic_kpi' : isStrategic ? 'strategic' : 'bau';
     MONTHS.forEach((month) => {
       const targetLocked = getLockStatus(
         'monthly_target',
         departmentObjectiveId,
         month,
-        isStrategic ? 'strategic' : 'bau'
+        lockScopeSave
       ).is_locked;
       const actualLocked = getLockStatus(
         'monthly_actual',
         departmentObjectiveId,
         month,
-        isStrategic ? 'strategic' : 'bau'
+        lockScopeSave
       ).is_locked;
-      const monthData = data.get(month);
-      const originalMonthData = originalData.get(month);
-      
-      // Check if field was changed and is locked
-      if (monthData && originalMonthData) {
-        if (monthData.target_value !== originalMonthData.target_value && targetLocked) {
-          lockedFields.push(`${month} target`);
-        }
-        if (monthData.actual_value !== originalMonthData.actual_value && actualLocked) {
-          lockedFields.push(`${month} actual`);
-        }
-      } else if (monthData) {
-        // New data
+        const monthData = data.get(month);
+        const originalMonthData = originalData.get(month);
+
+        if (monthData && originalMonthData) {
+          if (monthData.target_value !== originalMonthData.target_value && targetLocked) {
+            lockedFields.push(`${month} target`);
+          }
+          if (monthData.actual_value !== originalMonthData.actual_value && actualLocked) {
+            lockedFields.push(`${month} actual`);
+          }
+        } else if (monthData) {
           if (monthData.target_value !== null && targetLocked) {
             lockedFields.push(`${month} target`);
           }
@@ -303,7 +322,16 @@ export default function MonthlyDataEditor({
         if (hasChanged) {
           monthsToSave.push(month);
           const monthIso = `${month}-01`;
-          if (isStrategic) {
+          if (isTopicKpi) {
+            promises.push(
+              createOrUpdateStrategicTopicKpiMonthlyData({
+                strategic_topic_kpi_row_id: departmentObjectiveId,
+                month: monthIso,
+                target_value: monthData.target_value,
+                actual_value: monthData.actual_value,
+              })
+            );
+          } else if (isStrategic) {
             promises.push(
               createOrUpdateStrategicMonthlyData({
                 strategic_department_objective_id: departmentObjectiveId,
@@ -476,7 +504,16 @@ export default function MonthlyDataEditor({
         
         const monthIso = `${month}-01`;
         monthsToRetry.push(month);
-        if (isStrategic) {
+        if (isTopicKpi) {
+          retryPromises.push(
+            createOrUpdateStrategicTopicKpiMonthlyData({
+              strategic_topic_kpi_row_id: departmentObjectiveId,
+              month: monthIso,
+              target_value: monthData.target_value,
+              actual_value: monthData.actual_value,
+            })
+          );
+        } else if (isStrategic) {
           retryPromises.push(
             createOrUpdateStrategicMonthlyData({
               strategic_department_objective_id: departmentObjectiveId,
@@ -635,30 +672,32 @@ export default function MonthlyDataEditor({
             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 md:px-6">
               <div className="space-y-1 md:space-y-2">
                 {MONTHS.map((month) => {
+                  const rowKind: 'bau' | 'strategic' | 'topic_kpi' = isTopicKpi
+                    ? 'topic_kpi'
+                    : isStrategic
+                      ? 'strategic'
+                      : 'bau';
                   const monthData =
-                    data.get(month) || emptyMonthRow(departmentObjectiveId, month, isStrategic ? 'strategic' : 'bau');
-                  
+                    data.get(month) || emptyMonthRow(departmentObjectiveId, month, rowKind);
+
                   const variance =
                     monthData.target_value !== null && monthData.actual_value !== null
                       ? monthData.actual_value - monthData.target_value
                       : null;
-                  
+
                   const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'MMM yyyy');
-                  
-                  // Check lock status for this month's fields
-                  // Note: Backend enforces that monthly_actual only locks Direct type
-                  // monthly_target locks both Direct and In direct types
+
                   const targetLockInfo = getLockStatus(
                     'monthly_target',
                     departmentObjectiveId,
                     month,
-                    isStrategic ? 'strategic' : 'bau'
+                    rowKind === 'topic_kpi' ? 'topic_kpi' : rowKind === 'strategic' ? 'strategic' : 'bau'
                   );
                   const actualLockInfo = getLockStatus(
                     'monthly_actual',
                     departmentObjectiveId,
                     month,
-                    isStrategic ? 'strategic' : 'bau'
+                    rowKind === 'topic_kpi' ? 'topic_kpi' : rowKind === 'strategic' ? 'strategic' : 'bau'
                   );
                   const isTargetLocked = targetLockInfo.is_locked;
                   const isActualLocked = actualLockInfo.is_locked;

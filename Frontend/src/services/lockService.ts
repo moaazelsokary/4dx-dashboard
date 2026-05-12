@@ -77,7 +77,7 @@ export function createLockCheckRequest(
   fieldType: 'target' | 'monthly_target' | 'monthly_actual' | 'all_fields',
   departmentObjectiveId: number,
   month?: string,
-  objective_kind: 'bau' | 'strategic' = 'bau'
+  objective_kind: 'bau' | 'strategic' | 'topic_kpi' = 'bau'
 ): LockCheckRequest {
   return {
     field_type: fieldType,

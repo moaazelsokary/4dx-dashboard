@@ -246,6 +246,90 @@ BEGIN
     CREATE INDEX [IX_strategic_topic_kpi_rows_dates] ON [dbo].[strategic_topic_kpi_rows]([start_date], [end_date]);
 END;
 
+-- Strategic topic KPI monthly data (per Table KPI row — same months window as department objectives)
+IF NOT EXISTS (
+  SELECT * FROM sys.objects
+  WHERE object_id = OBJECT_ID(N'[dbo].[strategic_topic_kpi_monthly_data]') AND type IN (N'U')
+)
+BEGIN
+  CREATE TABLE [dbo].[strategic_topic_kpi_monthly_data] (
+    [id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [strategic_topic_kpi_row_id] INT NOT NULL,
+    [month] DATE NOT NULL,
+    [target_value] DECIMAL(18,2) NULL,
+    [actual_value] DECIMAL(18,2) NULL,
+    [created_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    [updated_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT [FK_strategic_topic_kpi_monthly_data_row]
+      FOREIGN KEY ([strategic_topic_kpi_row_id]) REFERENCES [dbo].[strategic_topic_kpi_rows]([id]) ON DELETE CASCADE,
+    CONSTRAINT [UQ_strategic_topic_kpi_monthly_data_row_month]
+      UNIQUE ([strategic_topic_kpi_row_id], [month])
+  );
+  CREATE INDEX [IX_strategic_topic_kpi_monthly_data_row]
+    ON [dbo].[strategic_topic_kpi_monthly_data]([strategic_topic_kpi_row_id]);
+END;
+
+IF NOT EXISTS (
+  SELECT * FROM sys.objects
+  WHERE object_id = OBJECT_ID(N'[dbo].[TR_strategic_topic_kpi_monthly_data_updated_at]') AND type = N'TR'
+)
+BEGIN
+  EXEC('
+  CREATE TRIGGER [dbo].[TR_strategic_topic_kpi_monthly_data_updated_at]
+  ON [dbo].[strategic_topic_kpi_monthly_data]
+  AFTER UPDATE
+  AS
+  BEGIN
+    SET NOCOUNT ON;
+    UPDATE m
+    SET [updated_at] = SYSUTCDATETIME()
+    FROM [dbo].[strategic_topic_kpi_monthly_data] m
+    INNER JOIN inserted i ON m.[id] = i.[id];
+  END
+  ');
+END;
+
+-- Strategic topic KPI data source mapping (PMS/Odoo monthly fills — same shape as strategic_objective_data_source_mapping)
+IF NOT EXISTS (
+  SELECT * FROM sys.objects
+  WHERE object_id = OBJECT_ID(N'[dbo].[strategic_topic_kpi_data_source_mapping]') AND type IN (N'U')
+)
+BEGIN
+  CREATE TABLE [dbo].[strategic_topic_kpi_data_source_mapping] (
+    [strategic_topic_kpi_row_id] INT NOT NULL PRIMARY KEY,
+    [pms_project_name] NVARCHAR(500) NULL,
+    [pms_metric_name] NVARCHAR(500) NULL,
+    [target_source] NVARCHAR(50) NULL,
+    [actual_source] NVARCHAR(50) NOT NULL DEFAULT N'manual',
+    [odoo_project_name] NVARCHAR(500) NULL,
+    [derived_project_name] NVARCHAR(500) NULL,
+    [created_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    [updated_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT [FK_strategic_topic_kpi_dsm_row]
+      FOREIGN KEY ([strategic_topic_kpi_row_id]) REFERENCES [dbo].[strategic_topic_kpi_rows]([id]) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (
+  SELECT * FROM sys.objects
+  WHERE object_id = OBJECT_ID(N'[dbo].[TR_strategic_topic_kpi_dsm_updated_at]') AND type = N'TR'
+)
+BEGIN
+  EXEC('
+  CREATE TRIGGER [dbo].[TR_strategic_topic_kpi_dsm_updated_at]
+  ON [dbo].[strategic_topic_kpi_data_source_mapping]
+  AFTER UPDATE
+  AS
+  BEGIN
+    SET NOCOUNT ON;
+    UPDATE t
+    SET [updated_at] = SYSUTCDATETIME()
+    FROM [dbo].[strategic_topic_kpi_data_source_mapping] t
+    INNER JOIN inserted i ON t.[strategic_topic_kpi_row_id] = i.[strategic_topic_kpi_row_id];
+  END
+  ');
+END;
+
 -- Strategic topic content folder (files per pillar — Content folder tab)
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[strategic_topic_content_files]') AND type in (N'U'))
 BEGIN

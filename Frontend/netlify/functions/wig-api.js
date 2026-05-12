@@ -262,6 +262,7 @@ const handler = rateLimiter('general')(
         path === '/strategic-topic-kpi-rows' ||
         path === '/strategic-topic-kpi-rows/update-order' ||
         /^\/strategic-topic-kpi-rows\/\d+$/.test(path) ||
+        path === '/strategic-topic-kpi-monthly-data' ||
         path === '/strategic-topic-content' ||
         /^\/strategic-topic-content\/\d+$/.test(path);
       const writeRoles = pathAllowsTopicWriter
@@ -455,6 +456,34 @@ const handler = rateLimiter('general')(
     } else if (/^\/strategic-topic-kpi-rows\/\d+$/.test(path) && method === 'DELETE') {
       const id = parseInt(path.split('/')[2], 10);
       result = await strategicTopicKpiRows.deleteStrategicTopicKpiRow(pool, id, event.user);
+    } else if (/^\/strategic-topic-kpi-monthly-data\/\d+$/.test(path) && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      const r = String(event.user.role || event.user.Role || '').trim();
+      const rLower = r.toLowerCase();
+      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      const rowId = parseInt(path.split('/strategic-topic-kpi-monthly-data/')[1].split('/')[0], 10);
+      if (!Number.isFinite(rowId)) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Invalid row id' }),
+        };
+      }
+      result = await strategicTopicKpiRows.getStrategicTopicKpiMonthlyData(pool, rowId, event.user);
+    } else if (path === '/strategic-topic-kpi-monthly-data' && method === 'POST') {
+      result = await strategicTopicKpiRows.createOrUpdateStrategicTopicKpiMonthlyData(pool, body, event.user);
     }
     // Strategic topic content folder (files per pillar)
     else if (path === '/strategic-topic-content' && method === 'GET') {

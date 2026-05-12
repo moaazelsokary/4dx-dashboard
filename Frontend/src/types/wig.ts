@@ -104,6 +104,17 @@ export interface StrategicMonthlyData {
   updated_at?: string;
 }
 
+/** Per-row monthly target/actual on Strategic Topics → Table KPI (mirrors department monthly shape). */
+export interface StrategicTopicKpiMonthlyData {
+  id: number;
+  strategic_topic_kpi_row_id: number;
+  month: string;
+  target_value: number | null;
+  actual_value: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface StrategicMainObjectiveLink {
   main_objective_id: number;
   sort_order: number;

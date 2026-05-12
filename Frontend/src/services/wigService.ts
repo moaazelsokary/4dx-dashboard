@@ -6,6 +6,7 @@ import type {
   DepartmentObjective,
   StrategicDepartmentObjective,
   StrategicMonthlyData,
+  StrategicTopicKpiMonthlyData,
   StrategicMainObjectiveLink,
   MonthlyData,
   PlanChecker,
@@ -322,6 +323,19 @@ export async function createOrUpdateStrategicMonthlyData(
   data: Omit<StrategicMonthlyData, 'id' | 'created_at' | 'updated_at'>
 ): Promise<StrategicMonthlyData> {
   return fetchAPI<StrategicMonthlyData>('/strategic-monthly-data', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getStrategicTopicKpiMonthlyData(rowId: number): Promise<StrategicTopicKpiMonthlyData[]> {
+  return fetchAPI<StrategicTopicKpiMonthlyData[]>(`/strategic-topic-kpi-monthly-data/${rowId}`);
+}
+
+export async function createOrUpdateStrategicTopicKpiMonthlyData(
+  data: Omit<StrategicTopicKpiMonthlyData, 'id' | 'created_at' | 'updated_at'>
+): Promise<StrategicTopicKpiMonthlyData> {
+  return fetchAPI<StrategicTopicKpiMonthlyData>('/strategic-topic-kpi-monthly-data', {
     method: 'POST',
     body: JSON.stringify(data),
   });

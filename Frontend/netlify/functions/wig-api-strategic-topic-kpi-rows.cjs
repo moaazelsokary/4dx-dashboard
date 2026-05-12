@@ -608,6 +608,84 @@ async function updateStrategicTopicKpiRowsOrder(pool, body, user) {
   }
 }
 
+/** Same visibility rules as updateStrategicTopicKpiRow (read/write monthly data). */
+async function assertUserCanAccessStrategicTopicKpiRowForMonthly(pool, user, rowId) {
+  if (!user) {
+    const err = new Error('Authentication required');
+    err.statusCode = 401;
+    throw err;
+  }
+  user = await enrichTopicRoleUserFromDb(pool, user);
+  const row = await fetchRowById(pool, rowId);
+  if (!row) {
+    const err = new Error('Row not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  const role = normalizeRole(user);
+  const existingDepts = parseDelimited(row.associated_departments);
+  const topicKey = recordStrategicTopicLower(row);
+  if (role === 'department') {
+    assertDeptUserCanMutateRow(user, existingDepts);
+  } else if (role === 'topic') {
+    assertTopicUserCanWriteStrategicTopic(user, topicKey);
+  } else if (!isCeoOrAdmin(user)) {
+    const err = new Error('Insufficient permissions');
+    err.statusCode = 403;
+    throw err;
+  }
+  return { user, row };
+}
+
+async function getStrategicTopicKpiMonthlyData(pool, rowId, user) {
+  await assertUserCanAccessStrategicTopicKpiRowForMonthly(pool, user, rowId);
+  const request = pool.request();
+  request.input('rid', sql.Int, rowId);
+  const result = await request.query(`
+    SELECT * FROM strategic_topic_kpi_monthly_data
+    WHERE strategic_topic_kpi_row_id = @rid
+    ORDER BY month
+  `);
+  return result.recordset || [];
+}
+
+async function createOrUpdateStrategicTopicKpiMonthlyData(pool, body, user) {
+  const rowId = parseInt(body.strategic_topic_kpi_row_id, 10);
+  if (!Number.isFinite(rowId) || rowId <= 0) {
+    const err = new Error('strategic_topic_kpi_row_id is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!body.month) {
+    const err = new Error('month is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  await assertUserCanAccessStrategicTopicKpiRowForMonthly(pool, user, rowId);
+
+  const monthStr = String(body.month).trim();
+  const monthDate =
+    monthStr.length === 7 && /^\d{4}-\d{2}$/.test(monthStr) ? `${monthStr}-01` : monthStr;
+
+  const request = pool.request();
+  request.input('rid', sql.Int, rowId);
+  request.input('month', sql.Date, monthDate);
+  request.input('target_value', sql.Decimal(18, 2), body.target_value != null ? body.target_value : null);
+  request.input('actual_value', sql.Decimal(18, 2), body.actual_value != null ? body.actual_value : null);
+  const result = await request.query(`
+    MERGE strategic_topic_kpi_monthly_data AS target
+    USING (SELECT @rid AS rid, @month AS month) AS source
+    ON target.strategic_topic_kpi_row_id = source.rid AND target.month = source.month
+    WHEN MATCHED THEN
+      UPDATE SET target_value = @target_value, actual_value = @actual_value, updated_at = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+      INSERT (strategic_topic_kpi_row_id, month, target_value, actual_value)
+      VALUES (@rid, @month, @target_value, @actual_value)
+    OUTPUT INSERTED.*;
+  `);
+  return result.recordset[0];
+}
+
 async function deleteStrategicTopicKpiRow(pool, id, user) {
   if (!user) {
     const err = new Error('Authentication required');
@@ -641,4 +719,6 @@ module.exports = {
   updateStrategicTopicKpiRow,
   updateStrategicTopicKpiRowsOrder,
   deleteStrategicTopicKpiRow,
+  getStrategicTopicKpiMonthlyData,
+  createOrUpdateStrategicTopicKpiMonthlyData,
 };

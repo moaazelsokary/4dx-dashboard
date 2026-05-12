@@ -5,12 +5,30 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { getDepartmentObjectives } from '@/services/wigService';
-import { getMappings, createOrUpdateMapping, type ObjectiveDataSourceMapping, type MappingFormData } from '@/services/configService';
+import {
+  getDepartmentObjectives,
+  getStrategicDepartmentObjectives,
+  getStrategicTopicKpiRows,
+} from '@/services/wigService';
+import {
+  getMappings,
+  createOrUpdateMapping,
+  getStrategicMappings,
+  createOrUpdateStrategicMapping,
+  getTopicKpiMappings,
+  createOrUpdateTopicKpiMapping,
+  type MappingFormData,
+} from '@/services/configService';
+import type {
+  ObjectiveDataSourceMapping,
+  StrategicObjectiveDataSourceMapping,
+  TopicKpiDataSourceMapping,
+} from '@/types/config';
 import { getMetrics, getDistinctProjectsAndMetrics } from '@/services/metricsService';
 import { Save, Loader2 } from 'lucide-react';
-import type { DepartmentObjective } from '@/types/wig';
+import type { DepartmentObjective, StrategicDepartmentObjective, StrategicTopicKpiRow } from '@/types/wig';
 import { ColumnFilter } from '@/components/ui/column-filter';
 import {
   loadFilterState,
@@ -18,16 +36,21 @@ import {
   getListSelected,
   type TableFilterState,
 } from '@/lib/tableFilterState';
+import { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS } from '@/pages/strategic-topics/strategicTopicKpiUtils';
+
+type MappingTab = 'bau' | 'strategic' | 'topic';
 
 interface MappingRow extends DepartmentObjective {
-  mapping?: ObjectiveDataSourceMapping;
+  /** Topics tab: objective line from topic KPI table (objective_text or main plan objective). */
+  topic_objective_label?: string;
+  mapping?: ObjectiveDataSourceMapping | StrategicObjectiveDataSourceMapping | TopicKpiDataSourceMapping;
   editedMapping?: Partial<MappingFormData>;
 }
 
 const DEFAULT_COLUMN_WIDTHS = {
   department: 160,
-  kpi: 180,
-  activity: 280,
+  topicObjective: 300,
+  activity: 320,
   targetFrom: 140,
   actualFrom: 160,
   pmsProject: 200,
@@ -40,16 +63,31 @@ const DEFAULT_COLUMN_WIDTHS = {
 const DATA_SOURCE_MAPPING_FILTERS_KEY = 'data-source-mapping-filters';
 
 export default function DataSourceMappingList() {
+  const [mappingTab, setMappingTab] = useState<MappingTab>('bau');
+  const filtersKey = `${DATA_SOURCE_MAPPING_FILTERS_KEY}-${mappingTab}`;
+
   const [tableFilterState, setTableFilterState] = useState<TableFilterState>(() =>
-    loadFilterState(DATA_SOURCE_MAPPING_FILTERS_KEY)
+    loadFilterState(`${DATA_SOURCE_MAPPING_FILTERS_KEY}-bau`)
   );
-  const updateColumnFilter = useCallback((columnKey: string, state: TableFilterState[string]) => {
-    setTableFilterState((prev) => {
-      const next = { ...prev, [columnKey]: state };
-      saveFilterState(DATA_SOURCE_MAPPING_FILTERS_KEY, next);
-      return next;
-    });
-  }, []);
+
+  useEffect(() => {
+    setTableFilterState(loadFilterState(filtersKey));
+  }, [filtersKey]);
+
+  useEffect(() => {
+    setEditedMappings({});
+  }, [mappingTab]);
+
+  const updateColumnFilter = useCallback(
+    (columnKey: string, state: TableFilterState[string]) => {
+      setTableFilterState((prev) => {
+        const next = { ...prev, [columnKey]: state };
+        saveFilterState(filtersKey, next);
+        return next;
+      });
+    },
+    [filtersKey]
+  );
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [editedMappings, setEditedMappings] = useState<Record<number, Partial<MappingFormData>>>({});
   const [columnWidths, setColumnWidths] = useState(DEFAULT_COLUMN_WIDTHS);
@@ -81,16 +119,24 @@ export default function DataSourceMappingList() {
     };
   }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
-  // Load department objectives
-  const { data: objectives = [], isLoading: objectivesLoading } = useQuery({
-    queryKey: ['department-objectives'],
-    queryFn: () => getDepartmentObjectives(),
+  // Load objectives / strategic objectives / topic KPI rows
+  const { data: rawObjectives = [], isLoading: objectivesLoading } = useQuery({
+    queryKey: ['data-source-mapping-objectives', mappingTab],
+    queryFn: async () => {
+      if (mappingTab === 'bau') return getDepartmentObjectives();
+      if (mappingTab === 'strategic') return getStrategicDepartmentObjectives();
+      const chunks = await Promise.all(STRATEGIC_TOPIC_CODES.map((t) => getStrategicTopicKpiRows(t)));
+      return chunks.flat();
+    },
   });
 
-  // Load existing mappings
   const { data: mappings = [], isLoading: mappingsLoading } = useQuery({
-    queryKey: ['objective-mappings'],
-    queryFn: () => getMappings(),
+    queryKey: ['data-source-mapping-mappings', mappingTab],
+    queryFn: () => {
+      if (mappingTab === 'bau') return getMappings();
+      if (mappingTab === 'strategic') return getStrategicMappings();
+      return getTopicKpiMappings();
+    },
   });
 
   // Load metrics data for dropdowns (force fetch to include derived definitions)
@@ -101,10 +147,22 @@ export default function DataSourceMappingList() {
 
   // Memoized mapping index and derived data
   const mappingIndex = useMemo(() => {
-    const index: Record<number, ObjectiveDataSourceMapping> = {};
-    mappings.forEach(m => { index[m.department_objective_id] = m; });
+    const index: Record<
+      number,
+      ObjectiveDataSourceMapping | StrategicObjectiveDataSourceMapping | TopicKpiDataSourceMapping
+    > = {};
+    mappings.forEach((m) => {
+      const rec = m as Record<string, unknown>;
+      const id =
+        mappingTab === 'bau'
+          ? Number(rec.department_objective_id)
+          : mappingTab === 'strategic'
+            ? Number(rec.strategic_department_objective_id)
+            : Number(rec.strategic_topic_kpi_row_id);
+      if (Number.isFinite(id)) index[id] = m as ObjectiveDataSourceMapping;
+    });
     return index;
-  }, [mappings]);
+  }, [mappings, mappingTab]);
 
   const { pmsProjects, pmsMetrics, odooProjects, derivedProjects } = useMemo(
     () => metricsData ? getDistinctProjectsAndMetrics(metricsData) : { pmsProjects: [], pmsMetrics: [], odooProjects: [], derivedProjects: [] },
@@ -130,22 +188,49 @@ export default function DataSourceMappingList() {
   }, [pmsMetrics, pmsMetricsByProject]);
 
   // Combine objectives with mappings (memoized)
-  const rows = useMemo<MappingRow[]>(() =>
-    objectives.map(obj => ({
-      ...obj,
+  const rows = useMemo<MappingRow[]>(() => {
+    if (mappingTab === 'bau') {
+      return (rawObjectives as DepartmentObjective[]).map((obj) => ({
+        ...obj,
+        mapping: mappingIndex[obj.id],
+        editedMapping: editedMappings[obj.id],
+      }));
+    }
+    if (mappingTab === 'strategic') {
+      return (rawObjectives as StrategicDepartmentObjective[]).map((obj) => ({
+        ...(obj as unknown as DepartmentObjective),
+        kpi: obj.kpi || '',
+        activity: obj.activity || '',
+        mapping: mappingIndex[obj.id],
+        editedMapping: editedMappings[obj.id],
+      }));
+    }
+    return (rawObjectives as StrategicTopicKpiRow[]).map((obj) => ({
+      id: obj.id,
+      main_objective_id: obj.main_objective_id,
+      department_id: 0,
+      department_name: STRATEGIC_TOPIC_LABELS[obj.strategic_topic] || obj.strategic_topic,
+      kpi: '',
+      topic_objective_label: (obj.objective_text || obj.main_objective || '—').trim() || '—',
+      activity: obj.activity,
+      type: 'Direct',
+      activity_target: 0,
+      responsible_person: '—',
+      mov: '—',
       mapping: mappingIndex[obj.id],
       editedMapping: editedMappings[obj.id],
-    })),
-    [objectives, mappingIndex, editedMappings]
-  );
+    })) as MappingRow[];
+  }, [rawObjectives, mappingIndex, editedMappings, mappingTab]);
 
-  // Distinct values for filter dropdowns (from objectives)
   const filterOptions = useMemo(() => {
-    const departments = [...new Set(objectives.map(o => o.department_name).filter(Boolean))].sort() as string[];
-    const kpis = [...new Set(objectives.map(o => o.kpi).filter(Boolean))].sort() as string[];
-    const activities = [...new Set(objectives.map(o => o.activity).filter(Boolean))].sort() as string[];
-    return { departments, kpis, activities };
-  }, [objectives]);
+    const departments = [...new Set(rows.map((o) => o.department_name).filter(Boolean))].sort() as string[];
+    const topicObjectives =
+      mappingTab === 'topic'
+        ? ([...new Set(rows.map((o) => o.topic_objective_label).filter(Boolean))].sort() as string[])
+        : [];
+    const activities = [...new Set(rows.map((o) => o.activity).filter(Boolean))].sort() as string[];
+    return { departments, topicObjectives, activities };
+  }, [rows, mappingTab]);
 
   // Effective target/actual source for a row (for filtering)
   const getEffectiveTargetSource = useCallback((row: MappingRow): 'manual' | 'pms_target' | 'derived' => {
@@ -163,19 +248,26 @@ export default function DataSourceMappingList() {
 
   const filteredRows = useMemo(() => {
     const deptList = getListSelected(tableFilterState, 'department');
-    const kpiList = getListSelected(tableFilterState, 'kpi');
+    const topicObjectiveList =
+      mappingTab === 'topic' ? getListSelected(tableFilterState, 'topicObjective') : [];
     const activityList = getListSelected(tableFilterState, 'activity');
     const targetFromList = getListSelected(tableFilterState, 'targetFrom');
     const actualFromList = getListSelected(tableFilterState, 'actualFrom');
     return rows.filter((row) => {
       if (deptList.length > 0 && !deptList.includes(row.department_name ?? '')) return false;
-      if (kpiList.length > 0 && !kpiList.includes(row.kpi ?? '')) return false;
+      if (
+        mappingTab === 'topic' &&
+        topicObjectiveList.length > 0 &&
+        !topicObjectiveList.includes(row.topic_objective_label ?? '')
+      ) {
+        return false;
+      }
       if (activityList.length > 0 && !activityList.includes(row.activity ?? '')) return false;
       if (targetFromList.length > 0 && !targetFromList.includes(getEffectiveTargetSource(row))) return false;
       if (actualFromList.length > 0 && !actualFromList.includes(getEffectiveActualSource(row))) return false;
       return true;
     });
-  }, [rows, tableFilterState, getEffectiveTargetSource, getEffectiveActualSource]);
+  }, [rows, tableFilterState, getEffectiveTargetSource, getEffectiveActualSource, mappingTab]);
 
   const updateMapping = useCallback(<K extends keyof MappingFormData>(objectiveId: number, field: K, value: MappingFormData[K]) => {
     setEditedMappings(prev => {
@@ -224,18 +316,22 @@ export default function DataSourceMappingList() {
   }, [mappingIndex, getFilteredPmsMetrics]);
 
   const saveMutation = useMutation({
-    mutationFn: ({ objectiveId, mappingData }: { objectiveId: number; mappingData: MappingFormData }) =>
-      createOrUpdateMapping(objectiveId, mappingData),
+    mutationFn: ({ objectiveId, mappingData }: { objectiveId: number; mappingData: MappingFormData }) => {
+      if (mappingTab === 'bau') return createOrUpdateMapping(objectiveId, mappingData);
+      if (mappingTab === 'strategic') return createOrUpdateStrategicMapping(objectiveId, mappingData);
+      return createOrUpdateTopicKpiMapping(objectiveId, mappingData);
+    },
     onSuccess: (_data, variables) => {
       const objectiveId = variables.objectiveId;
-      setEditedMappings(prev => {
+      setEditedMappings((prev) => {
         const next = { ...prev };
         delete next[objectiveId];
         return next;
       });
-      queryClient.invalidateQueries({ queryKey: ['objective-mappings'] });
-      queryClient.invalidateQueries({ queryKey: ['mapping', objectiveId] });
-      queryClient.refetchQueries({ queryKey: ['objective-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['data-source-mapping-mappings', mappingTab] });
+      const okind = mappingTab === 'bau' ? 'bau' : mappingTab === 'strategic' ? 'strategic' : 'topic_kpi';
+      queryClient.invalidateQueries({ queryKey: ['mapping', objectiveId, okind] });
+      queryClient.refetchQueries({ queryKey: ['data-source-mapping-mappings', mappingTab] });
       toast({
         title: 'Success',
         description: 'Mapping saved successfully',
@@ -316,8 +412,17 @@ export default function DataSourceMappingList() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Objective Data Source Mapping</CardTitle>
+      <CardHeader className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-sm">Data source mapping</CardTitle>
+          <Tabs value={mappingTab} onValueChange={(v) => setMappingTab(v as MappingTab)}>
+            <TabsList className="grid w-full grid-cols-3 sm:w-auto sm:min-w-[22rem]">
+              <TabsTrigger value="bau">BAU KPIs</TabsTrigger>
+              <TabsTrigger value="strategic">Strategic KPIs</TabsTrigger>
+              <TabsTrigger value="topic">Topics KPIs</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="border rounded-md overflow-x-auto">
@@ -326,11 +431,11 @@ export default function DataSourceMappingList() {
               <TableRow>
                 <TableHead style={{ width: columnWidths.department, minWidth: columnWidths.department, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
-                    <span>Department</span>
+                    <span>{mappingTab === 'topic' ? 'Topic' : 'Department'}</span>
                     <ColumnFilter
                       columnKey="department"
-                      columnLabel="Department"
-                      filterId="mapping-department"
+                      columnLabel={mappingTab === 'topic' ? 'Topic' : 'Department'}
+                      filterId={`mapping-department-${mappingTab}`}
                       columnType="text"
                       uniqueValues={filterOptions.departments}
                       selectedValues={getListSelected(tableFilterState, 'department')}
@@ -342,31 +447,40 @@ export default function DataSourceMappingList() {
                   </div>
                   <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('department', e)} />
                 </TableHead>
-                <TableHead style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi, position: 'relative' }} className="border-r border-border/50">
-                  <div className="flex items-center gap-2">
-                    <span>KPI</span>
-                    <ColumnFilter
-                      columnKey="kpi"
-                      columnLabel="KPI"
-                      filterId="mapping-kpi"
-                      columnType="text"
-                      uniqueValues={filterOptions.kpis}
-                      selectedValues={getListSelected(tableFilterState, 'kpi')}
-                      onListChange={(selected) => updateColumnFilter('kpi', { mode: 'list', selectedValues: selected })}
-                      openFilterId={openFilter}
-                      onOpenFilterChange={setOpenFilter}
-                      listOnly
+                {mappingTab === 'topic' ? (
+                  <TableHead
+                    style={{ width: columnWidths.topicObjective, minWidth: columnWidths.topicObjective, position: 'relative' }}
+                    className="border-r border-border/50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>Objective</span>
+                      <ColumnFilter
+                        columnKey="topicObjective"
+                        columnLabel="Objective"
+                        filterId={`mapping-topicObjective-${mappingTab}`}
+                        columnType="text"
+                        uniqueValues={filterOptions.topicObjectives}
+                        selectedValues={getListSelected(tableFilterState, 'topicObjective')}
+                        onListChange={(selected) => updateColumnFilter('topicObjective', { mode: 'list', selectedValues: selected })}
+                        getLabel={(a) => (a.length > 60 ? a.slice(0, 60) + '…' : a)}
+                        openFilterId={openFilter}
+                        onOpenFilterChange={setOpenFilter}
+                        listOnly
+                      />
+                    </div>
+                    <div
+                      className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                      onMouseDown={(e) => handleResizeStart('topicObjective', e)}
                     />
-                  </div>
-                  <div className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50" onMouseDown={(e) => handleResizeStart('kpi', e)} />
-                </TableHead>
+                  </TableHead>
+                ) : null}
                 <TableHead style={{ width: columnWidths.activity, minWidth: columnWidths.activity, position: 'relative' }} className="border-r border-border/50">
                   <div className="flex items-center gap-2">
                     <span>Activity</span>
                     <ColumnFilter
                       columnKey="activity"
-                      columnLabel="Objective"
-                      filterId="mapping-activity"
+                      columnLabel="Activity"
+                      filterId={`mapping-activity-${mappingTab}`}
                       columnType="text"
                       uniqueValues={filterOptions.activities}
                       selectedValues={getListSelected(tableFilterState, 'activity')}
@@ -385,7 +499,7 @@ export default function DataSourceMappingList() {
                     <ColumnFilter
                       columnKey="targetFrom"
                       columnLabel="Target From"
-                      filterId="mapping-targetFrom"
+                      filterId={`mapping-targetFrom-${mappingTab}`}
                       columnType="text"
                       uniqueValues={['manual', 'pms_target', 'derived']}
                       selectedValues={getListSelected(tableFilterState, 'targetFrom')}
@@ -404,7 +518,7 @@ export default function DataSourceMappingList() {
                     <ColumnFilter
                       columnKey="actualFrom"
                       columnLabel="Actual From"
-                      filterId="mapping-actualFrom"
+                      filterId={`mapping-actualFrom-${mappingTab}`}
                       columnType="text"
                       uniqueValues={['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived']}
                       selectedValues={getListSelected(tableFilterState, 'actualFrom')}
@@ -435,7 +549,7 @@ export default function DataSourceMappingList() {
             <TableBody>
               {                filteredRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={mappingTab === 'topic' ? 10 : 9} className="text-center text-muted-foreground py-8">
                     No objectives found
                   </TableCell>
                 </TableRow>
@@ -455,8 +569,22 @@ export default function DataSourceMappingList() {
                   return (
                     <TableRow key={row.id}>
                       <TableCell style={{ width: columnWidths.department, minWidth: columnWidths.department }} className="font-medium border-r border-border/50">{row.department_name || '-'}</TableCell>
-                      <TableCell style={{ width: columnWidths.kpi, minWidth: columnWidths.kpi }} className="border-r border-border/50">{row.kpi || '-'}</TableCell>
-                      <TableCell style={{ width: columnWidths.activity, minWidth: columnWidths.activity }} className="truncate border-r border-border/50" title={row.activity || ''}>{row.activity || '-'}</TableCell>
+                      {mappingTab === 'topic' ? (
+                        <TableCell
+                          style={{ width: columnWidths.topicObjective, minWidth: columnWidths.topicObjective }}
+                          className="text-sm min-w-0 border-r border-border/50 break-words [overflow-wrap:anywhere]"
+                          title={row.topic_objective_label || ''}
+                        >
+                          {row.topic_objective_label || '—'}
+                        </TableCell>
+                      ) : null}
+                      <TableCell
+                        style={{ width: columnWidths.activity, minWidth: columnWidths.activity }}
+                        className="text-sm min-w-0 border-r border-border/50 break-words [overflow-wrap:anywhere]"
+                        title={row.activity || ''}
+                      >
+                        {row.activity || '-'}
+                      </TableCell>
                       <TableCell style={{ width: columnWidths.targetFrom, minWidth: columnWidths.targetFrom }} className="border-r border-border/50">
                         <Select value={targetSource} onValueChange={(value: 'pms_target' | 'derived' | 'manual') => updateMapping(row.id, 'target_source', value)}>
                           <SelectTrigger className="h-8 min-w-0 w-full max-w-full">

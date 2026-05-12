@@ -13,7 +13,7 @@ export function useLockStatus(
   departmentObjectiveId: number | null,
   month?: string,
   enabled: boolean = true,
-  objectiveKind: 'bau' | 'strategic' = 'bau'
+  objectiveKind: 'bau' | 'strategic' | 'topic_kpi' = 'bau'
 ) {
   const { data, isLoading, error, refetch } = useQuery<LockCheckResponse>({
     queryKey: ['lockStatus', fieldType, departmentObjectiveId, month, objectiveKind],

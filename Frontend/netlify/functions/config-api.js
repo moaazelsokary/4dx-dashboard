@@ -359,7 +359,55 @@ async function logActivity(pool, logData) {
 
 // Helper function to check lock status for a single field
 async function checkLockStatus(pool, fieldType, departmentObjectiveId, userId, month = null, objectiveKind = 'bau') {
-  const kind = objectiveKind === 'strategic' ? 'strategic' : 'bau';
+  const kindStr = String(objectiveKind || 'bau').toLowerCase();
+  const entityKind =
+    kindStr === 'strategic' ? 'strategic' : kindStr === 'topic_kpi' ? 'topic_kpi' : 'bau';
+
+  if (entityKind === 'topic_kpi') {
+    if (fieldType === 'monthly_target' || fieldType === 'monthly_actual') {
+      try {
+        const mapReq = pool.request();
+        mapReq.input('row_id', sql.Int, departmentObjectiveId);
+        const mapResult = await mapReq.query(`
+          SELECT target_source, actual_source
+          FROM strategic_topic_kpi_data_source_mapping
+          WHERE strategic_topic_kpi_row_id = @row_id
+        `);
+        const mapping = mapResult.recordset[0];
+        if (mapping) {
+          if (fieldType === 'monthly_target' && (mapping.target_source === 'pms_target' || mapping.target_source === 'derived')) {
+            return {
+              is_locked: true,
+              lock_reason:
+                mapping.target_source === 'derived'
+                  ? 'Value from data source (Derived)'
+                  : 'Value from data source (PMS Target)',
+              scope_type: 'data_source_mapping',
+            };
+          }
+          if (fieldType === 'monthly_actual') {
+            if (mapping.actual_source === 'pms_actual') {
+              return { is_locked: true, lock_reason: 'Value from data source (PMS Actual)', scope_type: 'data_source_mapping' };
+            }
+            if (mapping.actual_source === 'odoo_services_done') {
+              return { is_locked: true, lock_reason: 'Value from data source (Odoo Services Done)', scope_type: 'data_source_mapping' };
+            }
+            if (mapping.actual_source === 'odoo_services_created') {
+              return { is_locked: true, lock_reason: 'Value from data source (Odoo Services Created)', scope_type: 'data_source_mapping' };
+            }
+            if (mapping.actual_source === 'derived') {
+              return { is_locked: true, lock_reason: 'Value from data source (Derived)', scope_type: 'data_source_mapping' };
+            }
+          }
+        }
+      } catch (e) {
+        if (!e.message || !String(e.message).includes('strategic_topic_kpi_data_source_mapping')) throw e;
+      }
+    }
+    return { is_locked: false };
+  }
+
+  const kind = entityKind === 'strategic' ? 'strategic' : 'bau';
   try {
     // Get department objective details including type
     const deptObjRequest = pool.request();
@@ -871,11 +919,12 @@ const handler = rateLimiter('general')(
       // GET /mappings/:id is allowed for any authenticated user (so Monthly Data Editor can show source badges)
       const isGetSingleMapping = resource === 'mappings' && method === 'GET' && id;
       const isGetSingleStrategicMapping = resource === 'strategic-mappings' && method === 'GET' && id;
+      const isGetSingleTopicKpiMapping = resource === 'topic-kpi-mappings' && method === 'GET' && id;
       // GET /powerbi-dashboards — catalog for Power BI page & user form (any signed-in user)
       const isPowerbiCatalogListGet =
         resource === 'powerbi-dashboards' && method === 'GET' && pathParts.length === 1;
       // All other endpoints require Admin or CEO role
-      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping && !isGetSingleStrategicMapping && !isPowerbiCatalogListGet) {
+      if (!isLockCheckEndpoint && !isHelperEndpoint && !isGetSingleMapping && !isGetSingleStrategicMapping && !isGetSingleTopicKpiMapping && !isPowerbiCatalogListGet) {
         const isAdmin = user.role === 'Admin' || user.role === 'CEO';
         if (!isAdmin) {
           logger.warn(`[Config API] Access denied:`, {
@@ -1368,7 +1417,12 @@ const handler = rateLimiter('general')(
             };
           }
 
-          const objectiveKindParam = (params.objective_kind || 'bau').toLowerCase() === 'strategic' ? 'strategic' : 'bau';
+          const objectiveKindParam =
+            (params.objective_kind || 'bau').toLowerCase() === 'strategic'
+              ? 'strategic'
+              : (params.objective_kind || 'bau').toLowerCase() === 'topic_kpi'
+                ? 'topic_kpi'
+                : 'bau';
           const lockStatus = await checkLockStatus(
             pool,
             fieldType,
@@ -1554,15 +1608,17 @@ const handler = rateLimiter('general')(
 
           const results = await Promise.all(
             checks.map((check) => {
-              const okind = (check.objective_kind || 'bau').toLowerCase() === 'strategic' ? 'strategic' : 'bau';
-              return checkLockStatus(
-                pool,
-                check.field_type,
-                check.department_objective_id,
-                user.id,
-                check.month,
-                okind
-              ).then((status) => ({
+          const okindRaw = String(check.objective_kind || 'bau').toLowerCase();
+          const okind =
+            okindRaw === 'strategic' ? 'strategic' : okindRaw === 'topic_kpi' ? 'topic_kpi' : 'bau';
+          return checkLockStatus(
+            pool,
+            check.field_type,
+            check.department_objective_id,
+            user.id,
+            check.month,
+            okind
+          ).then((status) => ({
                 ...status,
                 field_type: check.field_type,
                 department_objective_id: check.department_objective_id,
@@ -2319,6 +2375,185 @@ const handler = rateLimiter('general')(
           getRequest.input('sid', sql.Int, id);
           const getResult = await getRequest.query(`
             SELECT * FROM strategic_objective_data_source_mapping WHERE strategic_department_objective_id = @sid
+          `);
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: getResult.recordset[0] }),
+          };
+        }
+      }
+
+      // ========== STRATEGIC TOPIC KPI DATA SOURCE MAPPING (Table KPI rows) ==========
+      if (resource === 'topic-kpi-mappings') {
+        if (method === 'GET' && !action && !id) {
+          if (user.role !== 'Admin' && user.role !== 'CEO') {
+            return {
+              statusCode: 403,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Access denied. Admin or CEO role required.' }),
+            };
+          }
+          const request = pool.request();
+          const result = await request.query(`
+            SELECT
+              m.strategic_topic_kpi_row_id AS strategic_topic_kpi_row_id,
+              r.strategic_topic,
+              mo.kpi AS main_kpi,
+              r.activity,
+              m.pms_project_name,
+              m.pms_metric_name,
+              m.target_source,
+              m.actual_source,
+              m.odoo_project_name,
+              m.derived_project_name,
+              m.created_at,
+              m.updated_at
+            FROM strategic_topic_kpi_data_source_mapping m
+            INNER JOIN strategic_topic_kpi_rows r ON m.strategic_topic_kpi_row_id = r.id
+            LEFT JOIN main_plan_objectives mo ON r.main_objective_id = mo.id
+            ORDER BY r.strategic_topic, r.id
+          `);
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset }),
+          };
+        }
+
+        if (method === 'GET' && id) {
+          const request = pool.request();
+          request.input('rid', sql.Int, id);
+          const result = await request.query(`
+            SELECT
+              m.strategic_topic_kpi_row_id AS strategic_topic_kpi_row_id,
+              r.strategic_topic,
+              mo.kpi AS main_kpi,
+              r.activity,
+              m.pms_project_name,
+              m.pms_metric_name,
+              m.target_source,
+              m.actual_source,
+              m.odoo_project_name,
+              m.derived_project_name,
+              m.created_at,
+              m.updated_at
+            FROM strategic_topic_kpi_data_source_mapping m
+            INNER JOIN strategic_topic_kpi_rows r ON m.strategic_topic_kpi_row_id = r.id
+            LEFT JOIN main_plan_objectives mo ON r.main_objective_id = mo.id
+            WHERE m.strategic_topic_kpi_row_id = @rid
+          `);
+          if (result.recordset.length === 0) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Topic KPI mapping not found' }),
+            };
+          }
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: result.recordset[0] }),
+          };
+        }
+
+        if (method === 'PUT' && id) {
+          if (user.role !== 'Admin' && user.role !== 'CEO') {
+            return {
+              statusCode: 403,
+              headers,
+              body: JSON.stringify({ success: false, error: 'Access denied. Admin or CEO role required.' }),
+            };
+          }
+          const body = JSON.parse(event.body || '{}');
+          const {
+            pms_project_name,
+            pms_metric_name,
+            target_source,
+            actual_source,
+            odoo_project_name,
+            derived_project_name,
+          } = body;
+          const targetSourceValue = target_source === 'pms_target' || target_source === 'derived' ? target_source : null;
+          if (
+            !actual_source ||
+            !['manual', 'pms_actual', 'odoo_services_done', 'odoo_services_created', 'derived'].includes(actual_source)
+          ) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error:
+                  'actual_source is required and must be "manual", "pms_actual", "odoo_services_done", "odoo_services_created", or "derived"',
+              }),
+            };
+          }
+          if (
+            (actual_source === 'odoo_services_done' || actual_source === 'odoo_services_created') &&
+            !odoo_project_name
+          ) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'odoo_project_name is required when Actual From is Odoo ServicesDone or Odoo ServicesCreated',
+              }),
+            };
+          }
+          const needsDerived = targetSourceValue === 'derived' || actual_source === 'derived';
+          if (needsDerived && !derived_project_name) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'derived_project_name is required when Target From or Actual From is Derived',
+              }),
+            };
+          }
+          const needsPms = targetSourceValue === 'pms_target' || actual_source === 'pms_actual';
+          if (needsPms && (!pms_project_name || !pms_metric_name)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error:
+                  'pms_project_name and pms_metric_name are required when Target From is PMS or Actual From is PMS Actual',
+              }),
+            };
+          }
+          const request = pool.request();
+          request.input('strategic_topic_kpi_row_id', sql.Int, id);
+          request.input('pms_project_name', sql.NVarChar, pms_project_name || null);
+          request.input('pms_metric_name', sql.NVarChar, pms_metric_name || null);
+          request.input('target_source', sql.NVarChar, targetSourceValue);
+          request.input('actual_source', sql.NVarChar, actual_source);
+          request.input('odoo_project_name', sql.NVarChar, odoo_project_name || null);
+          request.input('derived_project_name', sql.NVarChar, derived_project_name || null);
+          await request.query(`
+            MERGE strategic_topic_kpi_data_source_mapping AS target
+            USING (SELECT @strategic_topic_kpi_row_id AS strategic_topic_kpi_row_id) AS source
+            ON target.strategic_topic_kpi_row_id = source.strategic_topic_kpi_row_id
+            WHEN MATCHED THEN
+              UPDATE SET
+                pms_project_name = @pms_project_name,
+                pms_metric_name = @pms_metric_name,
+                target_source = @target_source,
+                actual_source = @actual_source,
+                odoo_project_name = @odoo_project_name,
+                derived_project_name = @derived_project_name,
+                updated_at = SYSUTCDATETIME()
+            WHEN NOT MATCHED THEN
+              INSERT (strategic_topic_kpi_row_id, pms_project_name, pms_metric_name, target_source, actual_source, odoo_project_name, derived_project_name, created_at, updated_at)
+              VALUES (@strategic_topic_kpi_row_id, @pms_project_name, @pms_metric_name, @target_source, @actual_source, @odoo_project_name, @derived_project_name, SYSUTCDATETIME(), SYSUTCDATETIME());
+          `);
+          const getRequest = pool.request();
+          getRequest.input('rid', sql.Int, id);
+          const getResult = await getRequest.query(`
+            SELECT * FROM strategic_topic_kpi_data_source_mapping WHERE strategic_topic_kpi_row_id = @rid
           `);
           return {
             statusCode: 200,

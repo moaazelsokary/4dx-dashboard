@@ -542,6 +542,45 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
     }
   });
 
+  app.get('/api/wig/strategic-topic-kpi-monthly-data/:rowId', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const rLower = String(user.role || user.Role || '').trim().toLowerCase();
+      if (!['ceo', 'admin', 'department', 'topic'].includes(rLower)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+      const rowId = parseInt(req.params.rowId, 10);
+      if (Number.isNaN(rowId)) {
+        return res.status(400).json({ error: 'Invalid row id' });
+      }
+      const pool = await getPool();
+      const rows = await strategicTopicKpiRows.getStrategicTopicKpiMonthlyData(pool, rowId, user);
+      res.json(rows);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error loading strategic topic KPI monthly data');
+    }
+  });
+
+  app.post('/api/wig/strategic-topic-kpi-monthly-data', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const pool = await getPool();
+      const row = await strategicTopicKpiRows.createOrUpdateStrategicTopicKpiMonthlyData(pool, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error saving strategic topic KPI monthly data');
+    }
+  });
+
   app.get('/api/wig/strategic-topic-content', async (req, res) => {
     try {
       setNoCacheHeaders(res);

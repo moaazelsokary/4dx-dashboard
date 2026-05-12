@@ -85,8 +85,8 @@ export interface LockCheckRequest {
   department_objective_id: number;
   month?: string; // YYYY-MM format for monthly fields
   user_id?: number;
-  /** Defaults to bau. Use strategic for strategic_department_objectives IDs. */
-  objective_kind?: 'bau' | 'strategic';
+  /** Defaults to bau. Use strategic for strategic_department_objectives; topic_kpi for strategic_topic_kpi_rows IDs. */
+  objective_kind?: 'bau' | 'strategic' | 'topic_kpi';
 }
 
 export interface LockCheckResponse {
@@ -106,7 +106,7 @@ export interface BatchLockCheckResponse {
       field_type: TargetField;
       department_objective_id: number;
       month?: string;
-      objective_kind?: 'bau' | 'strategic';
+      objective_kind?: 'bau' | 'strategic' | 'topic_kpi';
     }
   >;
 }
@@ -163,6 +163,22 @@ export interface StrategicObjectiveDataSourceMapping {
   activity?: string;
   department_id?: number;
   department_name?: string;
+}
+
+/** Topic Table KPI row — same mapping fields as strategic, keyed by strategic_topic_kpi_rows.id */
+export interface TopicKpiDataSourceMapping {
+  strategic_topic_kpi_row_id: number;
+  strategic_topic?: string;
+  main_kpi?: string | null;
+  activity?: string | null;
+  pms_project_name: string | null;
+  pms_metric_name: string | null;
+  target_source: 'pms_target' | 'derived' | null;
+  actual_source: 'manual' | 'pms_actual' | 'odoo_services_done' | 'odoo_services_created' | 'derived';
+  odoo_project_name: string | null;
+  derived_project_name: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ObjectiveDataSourceMapping {
