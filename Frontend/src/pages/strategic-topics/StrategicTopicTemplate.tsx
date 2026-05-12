@@ -184,34 +184,25 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
     </div>
   );
 
+  const topicTabTriggerClass =
+    'gap-1 rounded-md px-2 py-0.5 text-[11px] leading-snug font-medium sm:px-2.5 sm:py-1 sm:text-xs data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm';
+
   const topicTabList = (
-    <TabsList className="w-max max-w-[min(100%,72rem)] flex flex-wrap sm:flex-nowrap h-auto min-h-10 gap-1 rounded-xl border border-border/80 bg-muted/60 p-1 shadow-sm justify-center">
-      <TabsTrigger
-        value="table"
-        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-      >
-        <Table2 className="h-4 w-4 shrink-0" />
+    <TabsList className="w-max max-w-[min(100%,72rem)] flex flex-wrap sm:flex-nowrap h-auto min-h-7 gap-0.5 rounded-lg border border-border/80 bg-muted/60 p-0.5 shadow-sm justify-start">
+      <TabsTrigger value="table" className={topicTabTriggerClass}>
+        <Table2 className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         Table KPI
       </TabsTrigger>
-      <TabsTrigger
-        value="dashboard"
-        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-      >
-        <LayoutDashboard className="h-4 w-4 shrink-0" />
+      <TabsTrigger value="dashboard" className={topicTabTriggerClass}>
+        <LayoutDashboard className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         Dashboard
       </TabsTrigger>
-      <TabsTrigger
-        value="gantt"
-        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-      >
-        <SquareChartGantt className="h-4 w-4 shrink-0" />
+      <TabsTrigger value="gantt" className={topicTabTriggerClass}>
+        <SquareChartGantt className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         Gantt
       </TabsTrigger>
-      <TabsTrigger
-        value="content"
-        className="gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
-      >
-        <FolderOpen className="h-4 w-4 shrink-0" />
+      <TabsTrigger value="content" className={topicTabTriggerClass}>
+        <FolderOpen className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         Content folder
       </TabsTrigger>
     </TabsList>

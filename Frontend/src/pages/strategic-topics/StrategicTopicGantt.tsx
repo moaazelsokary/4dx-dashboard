@@ -262,7 +262,7 @@ export default function StrategicTopicGantt({
     };
   }, [reduceMotion]);
 
-  const { datedBars, unscheduled, min, max, lanes, totalDays } = useMemo(() => {
+  const { datedBars, unscheduled, min, max, lanes } = useMemo(() => {
     const unsched: StrategicTopicKpiRow[] = [];
     type Bar = {
       row: StrategicTopicKpiRow;
@@ -305,7 +305,6 @@ export default function StrategicTopicGantt({
         min: null as Date | null,
         max: null as Date | null,
         lanes: [] as string[],
-        totalDays: 0,
       };
     }
 
@@ -317,11 +316,23 @@ export default function StrategicTopicGantt({
     }
     minD = addDays(minD, -7);
     maxD = addDays(maxD, 14);
-    const total = Math.max(1, differenceInCalendarDays(maxD, minD));
     const laneList = [...laneSet].sort();
 
-    return { datedBars: bars, unscheduled: unsched, min: minD, max: maxD, lanes: laneList, totalDays: total };
+    return { datedBars: bars, unscheduled: unsched, min: minD, max: maxD, lanes: laneList };
   }, [rows]);
+
+  const scheduledKpiCount = useMemo(() => {
+    const ids = new Set<number>();
+    for (const b of datedBars) ids.add(b.row.id);
+    return ids.size;
+  }, [datedBars]);
+
+  const timelineSubtitle = useMemo(() => {
+    const d = lanes.length;
+    const s = scheduledKpiCount;
+    const u = unscheduled.length;
+    return `${d} department${d === 1 ? '' : 's'} · ${s} scheduled KPI${s === 1 ? '' : 's'} · ${u} unscheduled KPI${u === 1 ? '' : 's'}`;
+  }, [lanes.length, scheduledKpiCount, unscheduled.length]);
 
   useEffect(() => {
     if (!min || !max) return;
@@ -469,8 +480,13 @@ export default function StrategicTopicGantt({
 
   const renderTimelineCard = () => (
     <Card className="overflow-hidden border-2 border-border">
-      <CardHeader className="flex flex-col gap-3 space-y-0 border-b bg-muted/20 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="flex items-start gap-2 min-w-0 flex-1">
+      <CardHeader className="flex flex-col gap-0 space-y-0 border-b bg-muted/20 p-0">
+        <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-3 sm:px-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+            <h2 className="shrink-0 text-sm font-semibold leading-tight sm:text-base sm:pt-0.5">
+              Gantt — {topicLabel}
+            </h2>
+            <div className="flex min-w-0 flex-1 items-start gap-2">
           <button
             type="button"
             id="gantt-timeline-trigger"
@@ -510,15 +526,14 @@ export default function StrategicTopicGantt({
           <div className="min-w-0">
             <CardTitle className="text-base font-semibold">
               Timeline{' '}
-              <span className="font-normal text-muted-foreground">(Click To Expand 🖱️)</span>
+              <span className="font-normal text-muted-foreground">: click months & weeks in the header</span>
             </CardTitle>
-            <p className="text-xs text-muted-foreground font-normal mt-0.5">
-              {lanes.length} department{lanes.length === 1 ? '' : 's'} · {totalDays} days · click months & weeks in the
-              header
-            </p>
+            <p className="text-xs text-muted-foreground font-normal mt-0.5">{timelineSubtitle}</p>
           </div>
-        </div>
+            </div>
+          </div>
         <div className="w-full shrink-0 sm:w-auto sm:max-w-[280px] sm:pt-0.5">{deptFilterTrigger}</div>
+        </div>
       </CardHeader>
       {timelineOpen && (
         <CardContent id="gantt-timeline-panel" role="region" aria-labelledby="gantt-timeline-trigger" className="p-0">
@@ -797,18 +812,20 @@ export default function StrategicTopicGantt({
 
   return (
     <div className={cn('space-y-4', !reduceMotion && entered && 'animate-in fade-in-0 duration-500')}>
-      <div>
-        <h2 className="text-sm font-semibold leading-tight sm:text-base">Gantt — {topicLabel}</h2>
-      </div>
-
       {datedBars.length === 0 || !min || !max ? (
         <Card className="overflow-hidden border-2 border-border">
-          <CardHeader className="flex flex-col gap-3 space-y-0 border-b bg-muted/20 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-base font-semibold">
-                Timeline{' '}
-                <span className="font-normal text-muted-foreground">(Click To Expand 🖱️)</span>
-              </CardTitle>
+          <CardHeader className="flex flex-col gap-3 space-y-0 border-b bg-muted/20 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+              <h2 className="shrink-0 text-sm font-semibold leading-tight sm:text-base sm:pt-0.5">
+                Gantt — {topicLabel}
+              </h2>
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-base font-semibold">
+                  Timeline{' '}
+                  <span className="font-normal text-muted-foreground">: click months & weeks in the header</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground font-normal mt-0.5">{timelineSubtitle}</p>
+              </div>
             </div>
             <div className="w-full shrink-0 sm:w-auto sm:max-w-[280px] sm:pt-0.5">{deptFilterTrigger}</div>
           </CardHeader>

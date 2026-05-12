@@ -108,7 +108,7 @@ export function AppLayout({
                 )}
               </div>
               {headerToolbar ? (
-                <div className="flex-1 min-w-0 overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] flex justify-center px-1">
+                <div className="flex-1 min-w-0 overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] flex justify-start px-1">
                   {headerToolbar}
                 </div>
               ) : null}
