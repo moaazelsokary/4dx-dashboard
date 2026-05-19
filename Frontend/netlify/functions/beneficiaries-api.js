@@ -10,6 +10,7 @@ const {
   getDashboardSummary,
   getDashboardCharts,
   getDashboardAnalytics,
+  getDashboardFiltered,
   getCategoryProducts,
   searchCases,
   getCaseProfile,
@@ -73,6 +74,7 @@ function parsePath(path) {
   if (p === '/dashboard/summary') return { name: 'summary' };
   if (p === '/dashboard/charts') return { name: 'charts' };
   if (p === '/dashboard/analytics') return { name: 'analytics' };
+  if (p === '/dashboard/filtered') return { name: 'filtered' };
   const mCatProd = p.match(/^\/dashboard\/categories\/([^/]+)\/products$/);
   if (mCatProd) return { name: 'category-products', category: decodeURIComponent(mCatProd[1]) };
   if (p.startsWith('/search')) return { name: 'search' };
@@ -114,7 +116,7 @@ const handler = rateLimiter('general')(
       }
 
       if (method === 'GET' && route.name === 'charts') {
-        const payload = await getDashboardCharts(pool);
+        const payload = await getDashboardCharts(pool, event.queryStringParameters || {});
         const body = JSON.stringify(payload);
         logger.info('beneficiaries_route', { route: 'charts', ms: Date.now() - t0, bytes: body.length });
         return { statusCode: 200, headers, body };
@@ -127,9 +129,16 @@ const handler = rateLimiter('general')(
         return { statusCode: 200, headers, body };
       }
 
+      if (method === 'GET' && route.name === 'filtered') {
+        const payload = await getDashboardFiltered(pool, event.queryStringParameters || {});
+        const body = JSON.stringify(payload);
+        logger.info('beneficiaries_route', { route: 'filtered', ms: Date.now() - t0, bytes: body.length });
+        return { statusCode: 200, headers, body };
+      }
+
       if (method === 'GET' && route.name === 'category-products') {
         const mode = (event.queryStringParameters?.mode || 'services').toLowerCase() === 'cases' ? 'cases' : 'services';
-        const payload = await getCategoryProducts(pool, route.category, mode);
+        const payload = await getCategoryProducts(pool, route.category, mode, event.queryStringParameters || {});
         const body = JSON.stringify(payload);
         logger.info('beneficiaries_route', { route: 'category-products', ms: Date.now() - t0, bytes: body.length });
         return { statusCode: 200, headers, body };

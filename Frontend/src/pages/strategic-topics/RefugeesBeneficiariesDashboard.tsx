@@ -7,8 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import type { User } from '@/services/authService';
 import {
+  buildDashboardStats,
   enqueueBeneficiariesSync,
   fetchBeneficiariesSyncJob,
+  fetchDashboardCharts,
   fetchDashboardSummary,
   refreshBeneficiariesImmediate,
 } from '@/services/beneficiariesService';
@@ -70,19 +72,24 @@ export default function RefugeesBeneficiariesDashboard({ user }: Props) {
     refetchOnMount: false,
   });
 
-  const stats = useMemo((): RbDashboardStats | null => {
-    const s = summaryQuery.data;
-    if (!s?.ok) return null;
-    const k = s.kpis;
-    return {
-      totalPrimaryCases: k.primaryCases,
-      totalIndividuals: k.totalIndividuals,
-      totalServices: k.totalServices,
-      servicesWithActualDate: k.servicesCompleted,
-      feedbackChart: [],
-      servicesByMonthChart: [],
-    };
-  }, [summaryQuery.data]);
+  const chartsQuery = useQuery({
+    queryKey: ['rb', 'charts', {}],
+    queryFn: () => fetchDashboardCharts(),
+    staleTime: 30 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
+    enabled: !!summaryQuery.data?.ok,
+    placeholderData: (p) => p,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const stats = useMemo(
+    (): RbDashboardStats | null => buildDashboardStats(summaryQuery.data, chartsQuery.data),
+    [summaryQuery.data, chartsQuery.data]
+  );
+
+  const globalStats = stats;
 
   const emptyWarehouse = useMemo(() => {
     const k = summaryQuery.data?.kpis;
@@ -231,14 +238,15 @@ export default function RefugeesBeneficiariesDashboard({ user }: Props) {
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-4 mt-0">
-          {summaryQuery.isLoading && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Skeleton className="h-28 rounded-xl" />
-              <Skeleton className="h-28 rounded-xl" />
+          {(summaryQuery.isLoading || chartsQuery.isLoading) && !stats && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
             </div>
           )}
 
-          {!summaryQuery.isLoading && emptyWarehouse && (
+          {!summaryQuery.isLoading && !chartsQuery.isLoading && emptyWarehouse && (
             <Alert>
               <AlertTitle>Warehouse empty</AlertTitle>
               <AlertDescription>
@@ -247,11 +255,12 @@ export default function RefugeesBeneficiariesDashboard({ user }: Props) {
             </Alert>
           )}
 
-          {!summaryQuery.isLoading && !emptyWarehouse && (
+          {!summaryQuery.isLoading && !emptyWarehouse && stats && (
             <PanelErrorBoundary label="Dashboard analytics">
               <RefugeesBeneficiariesAnalyticsTab
                 stats={stats}
-                loading={summaryQuery.isLoading}
+                globalStats={globalStats}
+                loading={summaryQuery.isLoading || (chartsQuery.isLoading && !chartsQuery.data)}
                 emptyWarehouse={emptyWarehouse}
               />
             </PanelErrorBoundary>

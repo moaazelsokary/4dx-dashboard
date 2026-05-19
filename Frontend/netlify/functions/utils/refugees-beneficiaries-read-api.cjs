@@ -12,6 +12,7 @@ const {
 const summaryCache = new Map();
 const chartsCache = new Map();
 const analyticsCache = new Map();
+const filteredBundleCache = new Map();
 /* Data changes only after a sync (which calls invalidateAnalyticsCache); long TTL = always-warm dashboard. */
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -150,10 +151,23 @@ async function getDashboardSummary(pool) {
 }
 
 /** Tiny payload: ≈24 monthly rows + handful of feedback rows. Read from precomputed analytics. */
-async function getDashboardCharts(pool) {
-  const ck = 'charts:v2';
+async function getDashboardCharts(pool, qs = {}) {
+  const filters = parseAnalyticsFilters(qs);
+  const filtered = hasActiveFilters(filters);
+  const ck = filtered ? `charts:v3:${JSON.stringify(filters)}` : 'charts:v2';
   const hit = cacheGet(chartsCache, ck);
   if (hit) return hit;
+
+  if (filtered) {
+    const [fb, dy, kpis] = await Promise.all([
+      queryFilteredFeedback(pool, filters),
+      queryFilteredMonthly(pool, filters),
+      getFilteredKpis(pool, filters),
+    ]);
+    const payload = { ok: true, fb, dy, kpis, filters };
+    cacheSet(chartsCache, ck, payload);
+    return payload;
+  }
 
   const hasMonthly = await poolHasTable(pool, 'rb_analytics_monthly');
   const [fb, monthly] = await Promise.all([
@@ -211,7 +225,14 @@ function parseAnalyticsFilters(qs = {}) {
     gender: pick('gender'),
     age: pick('age') || pick('ageGroup'),
     team: pick('team'),
+    category: pick('category'),
+    month: pick('month'),
+    feedback: pick('feedback'),
   };
+}
+
+function hasActiveFilters(filters) {
+  return Object.values(filters).some(Boolean);
 }
 
 function appendIndividualFilters(filters, req, exclude = {}) {
@@ -237,7 +258,119 @@ function appendIndividualFilters(filters, req, exclude = {}) {
         AND COALESCE(NULLIF(LTRIM(RTRIM(t.team_name)), N''), N'(no team)') = @fTeam
     )`);
   }
+  if (filters.category && !exclude.category) {
+    req.input('fCat', sql.NVarChar(400), filters.category);
+    clauses.push(`EXISTS (
+      SELECT 1 FROM dbo.rb_case_service s
+      WHERE s.res_case_id = i.res_case_id
+        AND COALESCE(NULLIF(LTRIM(RTRIM(s.category_name)), N''), N'(uncategorized)') = @fCat
+    )`);
+  }
+  if (filters.feedback && !exclude.feedback) {
+    req.input('fFb', sql.NVarChar(400), filters.feedback);
+    clauses.push(`EXISTS (
+      SELECT 1 FROM dbo.rb_case_service s
+      WHERE s.res_case_id = i.res_case_id
+        AND COALESCE(NULLIF(LTRIM(RTRIM(s.feedback)), N''), N'(blank)') = @fFb
+    )`);
+  }
+  if (filters.month && !exclude.month) {
+    req.input('fMonth', sql.Char(7), filters.month);
+    clauses.push(`EXISTS (
+      SELECT 1 FROM dbo.rb_case_service s
+      WHERE s.res_case_id = i.res_case_id
+        AND (
+          CONVERT(CHAR(7), s.create_date, 126) = @fMonth
+          OR CONVERT(CHAR(7), s.actual_date, 126) = @fMonth
+        )
+    )`);
+  }
   return clauses.length ? ` AND ${clauses.join(' AND ')}` : '';
+}
+
+function serviceScopedIndividualExists(filters, req, exclude = {}) {
+  const indWhere = appendIndividualFilters(filters, req, exclude);
+  return `EXISTS (
+    SELECT 1 FROM dbo.rb_case_individual i
+    WHERE i.res_case_id = s.res_case_id${indWhere}
+  )`;
+}
+
+async function getFilteredKpis(pool, filters) {
+  const req = pool.request();
+  const indWhere = appendIndividualFilters(filters, req);
+  const svcExists = `EXISTS (
+    SELECT 1 FROM dbo.rb_case_individual i
+    WHERE i.res_case_id = s.res_case_id${indWhere}
+  )`;
+  const r = await req.query(`
+    SELECT
+      (SELECT COUNT(*) FROM dbo.rb_case_individual i WHERE 1=1${indWhere}) AS individuals,
+      (SELECT COUNT(*) FROM dbo.rb_case_individual i WHERE i.receiver_type = N'Case'${indWhere}) AS primary_cases,
+      (SELECT COUNT(*) FROM dbo.rb_case_service s WHERE ${svcExists}) AS total_services,
+      (SELECT COUNT(*) FROM dbo.rb_case_service s
+        WHERE s.actual_date IS NOT NULL AND ${svcExists}) AS services_completed;
+  `);
+  const row = r.recordset[0] || {};
+  return {
+    totalIndividuals: Number(row.individuals) || 0,
+    primaryCases: Number(row.primary_cases) || 0,
+    totalServices: Number(row.total_services) || 0,
+    servicesCompleted: Number(row.services_completed) || 0,
+  };
+}
+
+async function queryFilteredFeedback(pool, filters) {
+  const req = pool.request();
+  const exists = serviceScopedIndividualExists(filters, req, { feedback: !!filters.feedback });
+  const r = await req.query(`
+    SELECT TOP (40)
+      COALESCE(NULLIF(LTRIM(RTRIM(s.feedback)), N''), N'(blank)') AS n,
+      COUNT(*) AS v
+    FROM dbo.rb_case_service s
+    WHERE ${exists}
+    GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(s.feedback)), N''), N'(blank)')
+    ORDER BY v DESC;
+  `);
+  return r.recordset.map((row) => ({ n: row.n, v: Number(row.v) || 0 }));
+}
+
+async function queryFilteredMonthly(pool, filters) {
+  const req = pool.request();
+  const exists = serviceScopedIndividualExists(filters, req, { month: !!filters.month });
+  const r = await req.query(`
+    WITH filtered AS (
+      SELECT s.create_date, s.actual_date
+      FROM dbo.rb_case_service s
+      WHERE ${exists}
+    ),
+    c AS (
+      SELECT DATEFROMPARTS(YEAR(create_date), MONTH(create_date), 1) AS m, COUNT(*) AS cnt
+      FROM filtered
+      WHERE create_date IS NOT NULL
+      GROUP BY DATEFROMPARTS(YEAR(create_date), MONTH(create_date), 1)
+    ),
+    x AS (
+      SELECT DATEFROMPARTS(YEAR(actual_date), MONTH(actual_date), 1) AS m, COUNT(*) AS cnt
+      FROM filtered
+      WHERE actual_date IS NOT NULL
+      GROUP BY DATEFROMPARTS(YEAR(actual_date), MONTH(actual_date), 1)
+    ),
+    u AS (SELECT m FROM c UNION SELECT m FROM x)
+    SELECT TOP (24)
+      CONVERT(CHAR(7), u.m, 126) AS m,
+      ISNULL(c.cnt, 0) AS c,
+      ISNULL(x.cnt, 0) AS d
+    FROM u
+    LEFT JOIN c ON c.m = u.m
+    LEFT JOIN x ON x.m = u.m
+    ORDER BY u.m DESC;
+  `);
+  return r.recordset.slice().reverse().map((row) => ({
+    m: row.m,
+    c: Number(row.c) || 0,
+    d: Number(row.d) || 0,
+  }));
 }
 
 async function queryIndividualDimension(pool, dimension, filters) {
@@ -288,7 +421,7 @@ async function queryTeamsFiltered(pool, filters) {
 
 async function queryCategoriesFiltered(pool, filters) {
   const req = pool.request();
-  const indWhere = appendIndividualFilters(filters, req);
+  const indWhere = appendIndividualFilters(filters, req, { category: !!filters.category });
   const r = await req.query(`
     SELECT TOP (50)
       COALESCE(NULLIF(LTRIM(RTRIM(s.category_name)), N''), N'(uncategorized)') AS label,
@@ -314,12 +447,10 @@ async function queryCategoriesFiltered(pool, filters) {
  */
 async function getDashboardAnalytics(pool, qs = {}) {
   const filters = parseAnalyticsFilters(qs);
-  const hasFilter = Object.values(filters).some(Boolean);
+  const hasFilter = hasActiveFilters(filters);
   const ck = `analytics:v1:${JSON.stringify(filters)}`;
-  if (!hasFilter) {
-    const hit = cacheGet(analyticsCache, ck);
-    if (hit) return hit;
-  }
+  const hit = cacheGet(analyticsCache, ck);
+  if (hit) return hit;
 
   const hasDemo = await poolHasTable(pool, 'rb_analytics_demographic');
   if (!hasDemo) {
@@ -375,11 +506,56 @@ async function getDashboardAnalytics(pool, qs = {}) {
   }
 
   const payload = { ok: true, nationality, gender, age, teams, categories, filters };
-  if (!hasFilter) cacheSet(analyticsCache, ck, payload);
+  cacheSet(analyticsCache, ck, payload);
   return payload;
 }
 
-async function getCategoryProducts(pool, categoryName, mode = 'services') {
+/** One round-trip for cross-filtered analytics + charts (server runs both in parallel). */
+async function getDashboardFiltered(pool, qs = {}) {
+  const filters = parseAnalyticsFilters(qs);
+  const ck = `filtered:v1:${JSON.stringify(filters)}`;
+  const hit = cacheGet(filteredBundleCache, ck);
+  if (hit) return hit;
+
+  const [analytics, charts] = await Promise.all([
+    getDashboardAnalytics(pool, qs),
+    getDashboardCharts(pool, qs),
+  ]);
+  const payload = { ok: true, analytics, charts, filters };
+  cacheSet(filteredBundleCache, ck, payload);
+  return payload;
+}
+
+async function getCategoryProducts(pool, categoryName, mode = 'services', qs = {}) {
+  const filters = parseAnalyticsFilters(qs);
+  const hasFilter = hasActiveFilters(filters);
+
+  if (hasFilter) {
+    const req = pool.request();
+    req.input('cat', sql.NVarChar(400), categoryName);
+    const indWhere = appendIndividualFilters(filters, req, { category: true });
+    const r = await req.query(`
+      SELECT TOP (60)
+        COALESCE(NULLIF(LTRIM(RTRIM(s.product_name)), N''), N'(unnamed)') AS label,
+        COUNT(DISTINCT s.res_case_id) AS cases,
+        COUNT(*) AS services
+      FROM dbo.rb_case_service s
+      WHERE COALESCE(NULLIF(LTRIM(RTRIM(s.category_name)), N''), N'(uncategorized)') = @cat
+        AND EXISTS (
+          SELECT 1 FROM dbo.rb_case_individual i
+          WHERE i.res_case_id = s.res_case_id${indWhere}
+        )
+      GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(s.product_name)), N''), N'(unnamed)')
+      ORDER BY ${mode === 'cases' ? 'cases' : 'services'} DESC;
+    `);
+    const products = r.recordset.map((row) => ({
+      label: row.label,
+      cases: Number(row.cases) || 0,
+      services: Number(row.services) || 0,
+    }));
+    return { ok: true, category: categoryName, mode, products };
+  }
+
   const has = await poolHasTable(pool, 'rb_analytics_product');
   if (!has) return { ok: true, products: [] };
   const r = await pool.request().input('cat', sql.NVarChar(400), categoryName).query(`
@@ -402,6 +578,7 @@ function invalidateAnalyticsCache() {
   summaryCache.clear();
   chartsCache.clear();
   analyticsCache.clear();
+  filteredBundleCache.clear();
   _colCheckCache.clear();
 }
 
@@ -738,6 +915,7 @@ module.exports = {
   getDashboardSummary,
   getDashboardCharts,
   getDashboardAnalytics,
+  getDashboardFiltered,
   getCategoryProducts,
   searchCases,
   getCaseProfile,

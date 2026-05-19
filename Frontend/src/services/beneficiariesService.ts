@@ -4,6 +4,7 @@ import type {
   RbAnalyticsResponse,
   RbCategoryProductsResponse,
   RbChartsResponse,
+  RbFilteredDashboardResponse,
   RbDashboardStats,
   RbKeysetPage,
   RbProfileResponse,
@@ -37,19 +38,24 @@ export async function fetchDashboardSummary(): Promise<RbSummaryResponse> {
   return readJson<RbSummaryResponse>(res);
 }
 
-export async function fetchDashboardCharts(): Promise<RbChartsResponse> {
-  const res = await fetch(`${API_BASE}/dashboard/charts`, { headers: authHeaders() });
-  return readJson<RbChartsResponse>(res);
-}
-
-function analyticsQueryString(filters: RbAnalyticsFilters): string {
+export function analyticsQueryString(filters: RbAnalyticsFilters = {}): string {
   const qs = new URLSearchParams();
   if (filters.nationality) qs.set('nationality', filters.nationality);
   if (filters.gender) qs.set('gender', filters.gender);
   if (filters.age) qs.set('age', filters.age);
   if (filters.team) qs.set('team', filters.team);
+  if (filters.category) qs.set('category', filters.category);
+  if (filters.month) qs.set('month', filters.month);
+  if (filters.feedback) qs.set('feedback', filters.feedback);
   const s = qs.toString();
   return s ? `?${s}` : '';
+}
+
+export async function fetchDashboardCharts(filters: RbAnalyticsFilters = {}): Promise<RbChartsResponse> {
+  const res = await fetch(`${API_BASE}/dashboard/charts${analyticsQueryString(filters)}`, {
+    headers: authHeaders(),
+  });
+  return readJson<RbChartsResponse>(res);
 }
 
 export async function fetchDashboardAnalytics(filters: RbAnalyticsFilters = {}): Promise<RbAnalyticsResponse> {
@@ -59,11 +65,33 @@ export async function fetchDashboardAnalytics(filters: RbAnalyticsFilters = {}):
   return readJson<RbAnalyticsResponse>(res);
 }
 
+/** Cross-filtered analytics + charts (parallel requests; works without /dashboard/filtered route). */
+export async function fetchDashboardFiltered(
+  filters: RbAnalyticsFilters
+): Promise<RbFilteredDashboardResponse> {
+  const [analytics, charts] = await Promise.all([
+    fetchDashboardAnalytics(filters),
+    fetchDashboardCharts(filters),
+  ]);
+  if (!analytics.ok || !charts.ok) {
+    throw new Error('Dashboard filter request failed');
+  }
+  return { ok: true, analytics, charts, filters };
+}
+
 export async function fetchCategoryProducts(
   category: string,
-  mode: 'cases' | 'services'
+  mode: 'cases' | 'services',
+  filters: RbAnalyticsFilters = {}
 ): Promise<RbCategoryProductsResponse> {
   const qs = new URLSearchParams({ mode });
+  if (filters.nationality) qs.set('nationality', filters.nationality);
+  if (filters.gender) qs.set('gender', filters.gender);
+  if (filters.age) qs.set('age', filters.age);
+  if (filters.team) qs.set('team', filters.team);
+  if (filters.category) qs.set('category', filters.category);
+  if (filters.month) qs.set('month', filters.month);
+  if (filters.feedback) qs.set('feedback', filters.feedback);
   const res = await fetch(
     `${API_BASE}/dashboard/categories/${encodeURIComponent(category)}/products?${qs.toString()}`,
     { headers: authHeaders() }
@@ -180,7 +208,7 @@ export async function fetchBeneficiariesSyncJob(jobId: string): Promise<RbSyncJo
   return body;
 }
 
-function formatMonthLabel(ym: string): string {
+export function formatMonthLabel(ym: string): string {
   if (!ym || ym.length < 7) return ym || '';
   const y = Number(ym.slice(0, 4));
   const m = Number(ym.slice(5, 7));
@@ -190,21 +218,38 @@ function formatMonthLabel(ym: string): string {
 }
 
 /** Map summary + charts into KPI + chart props used by the dashboard cards. */
-export function buildDashboardStats(summary: RbSummaryResponse | undefined, charts: RbChartsResponse | undefined): RbDashboardStats | null {
+export function buildDashboardStats(
+  summary: RbSummaryResponse | undefined,
+  charts: RbChartsResponse | undefined,
+  filteredCharts?: RbChartsResponse | undefined
+): RbDashboardStats | null {
   if (!summary?.ok || !charts?.ok) return null;
-  const k = summary.kpis;
+  const k = filteredCharts?.kpis ?? summary.kpis;
+  const chartSource = filteredCharts?.ok ? filteredCharts : charts;
   return {
     totalPrimaryCases: k.primaryCases,
     totalIndividuals: k.totalIndividuals,
     totalServices: k.totalServices,
     servicesWithActualDate: k.servicesCompleted,
-    feedbackChart: charts.fb.map((x) => ({ name: x.n || '—', value: Number(x.v) || 0 })),
-    servicesByMonthChart: charts.dy.map((x) => ({
+    feedbackChart: chartSource.fb.map((x) => ({ name: x.n || '—', value: Number(x.v) || 0 })),
+    servicesByMonthChart: chartSource.dy.map((x) => ({
       month: formatMonthLabel(x.m),
       created: Number(x.c) || 0,
       completed: Number(x.d) || 0,
     })),
   };
+}
+
+export function hasAnalyticsFilters(filters: RbAnalyticsFilters): boolean {
+  return !!(
+    filters.nationality ||
+    filters.gender ||
+    filters.age ||
+    filters.team ||
+    filters.category ||
+    filters.month ||
+    filters.feedback
+  );
 }
 
 export function rowVal(row: unknown, ...keys: string[]): unknown {

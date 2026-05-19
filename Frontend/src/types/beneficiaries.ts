@@ -20,10 +20,19 @@ export type RbSummaryResponse = {
   };
 };
 
+export type RbFilteredKpis = {
+  totalIndividuals: number;
+  primaryCases: number;
+  totalServices: number;
+  servicesCompleted: number;
+};
+
 export type RbChartsResponse = {
   ok: boolean;
   fb: { n: string; v: number }[];
   dy: { m: string; c: number; d: number }[];
+  kpis?: RbFilteredKpis;
+  filters?: RbAnalyticsFilters;
 };
 
 export type RbSearchHit = {
@@ -131,6 +140,10 @@ export type RbAnalyticsFilters = {
   gender?: string | null;
   age?: string | null;
   team?: string | null;
+  category?: string | null;
+  /** YYYY-MM */
+  month?: string | null;
+  feedback?: string | null;
 };
 
 export type RbAnalyticsResponse = {
@@ -140,6 +153,13 @@ export type RbAnalyticsResponse = {
   age: RbAnalyticsSlice[];
   teams: RbAnalyticsTeamRow[];
   categories: RbAnalyticsCategoryRow[];
+  filters?: RbAnalyticsFilters;
+};
+
+export type RbFilteredDashboardResponse = {
+  ok: boolean;
+  analytics: RbAnalyticsResponse;
+  charts: RbChartsResponse;
   filters?: RbAnalyticsFilters;
 };
 
