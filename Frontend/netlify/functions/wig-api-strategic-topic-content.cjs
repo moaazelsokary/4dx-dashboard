@@ -74,11 +74,12 @@ function assertAuthenticated(user) {
   }
 }
 
-/** List / download: strategic topic pages are readable by CEO, Admin, department, topic. */
-function assertCanReadStrategicTopicContent(user) {
+const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
+
+/** List / download: role matrix + Viewer/case worker with matching app routes. */
+function assertCanReadStrategicTopicContent(user, strategicTopicKey) {
   assertAuthenticated(user);
-  const r = normalizeRole(user);
-  if (isCeoOrAdmin(user) || r === 'department' || r === 'topic') return;
+  if (canReadStrategicTopicApi(user, strategicTopicKey)) return;
   const err = new Error('Insufficient permissions');
   err.statusCode = 403;
   throw err;
@@ -153,8 +154,8 @@ function userAuditFields(user) {
 }
 
 async function listStrategicTopicContent(pool, strategicTopic, user) {
-  assertCanReadStrategicTopicContent(user);
   const topic = validateStrategicTopic(strategicTopic);
+  assertCanReadStrategicTopicContent(user, topic);
   const request = pool.request();
   request.input('topic', sql.NVarChar, topic);
   const result = await request.query(`
@@ -188,13 +189,14 @@ async function fetchRowWithBlob(pool, id) {
 }
 
 async function getStrategicTopicContentDownload(pool, id, user) {
-  assertCanReadStrategicTopicContent(user);
   const row = await fetchRowWithBlob(pool, id);
   if (!row) {
     const err = new Error('Not found');
     err.statusCode = 404;
     throw err;
   }
+  const topicKey = String(row.strategic_topic ?? row.Strategic_Topic ?? '').trim().toLowerCase();
+  assertCanReadStrategicTopicContent(user, topicKey);
   const blob =
     row.file_data ?? row.File_Data ?? row.file_Data;
   if (!blob) {

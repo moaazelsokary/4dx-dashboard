@@ -6,6 +6,7 @@
  */
 
 const sql = require('mssql');
+const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
 
 const STRATEGIC_TOPICS = ['volunteers', 'refugees', 'returnees', 'relief', 'awareness'];
 const ALLOWED_STATUS = ['Completed', 'In Progress', 'On Hold'];
@@ -629,7 +630,11 @@ async function assertUserCanAccessStrategicTopicKpiRowForMonthly(pool, user, row
     assertDeptUserCanMutateRow(user, existingDepts);
   } else if (role === 'topic') {
     assertTopicUserCanWriteStrategicTopic(user, topicKey);
-  } else if (!isCeoOrAdmin(user)) {
+  } else if (isCeoOrAdmin(user)) {
+    /* ok */
+  } else if (canReadStrategicTopicApi(user, topicKey)) {
+    /* Viewer / case worker / project — read monthly data only */
+  } else {
     const err = new Error('Insufficient permissions');
     err.statusCode = 403;
     throw err;

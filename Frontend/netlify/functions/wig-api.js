@@ -5,6 +5,7 @@ const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
 const strategicTopicKpiRows = require('./wig-api-strategic-topic-kpi-rows.cjs');
 const strategicTopicContent = require('./wig-api-strategic-topic-content.cjs');
+const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
 const { computeKPIBreakdown } = require('./utils/kpi-breakdown.cjs');
 
@@ -428,21 +429,19 @@ const handler = rateLimiter('general')(
           body: JSON.stringify({ error: 'Authentication required' }),
         };
       }
-      const r = String(event.user.role || event.user.Role || '').trim();
-      const rLower = r.toLowerCase();
-      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
-        return {
-          statusCode: 403,
-          headers,
-          body: JSON.stringify({ error: 'Insufficient permissions' }),
-        };
-      }
       const topic = queryParams.strategic_topic;
       if (!topic) {
         return {
           statusCode: 400,
           headers,
           body: JSON.stringify({ error: 'strategic_topic query parameter is required' }),
+        };
+      }
+      if (!canReadStrategicTopicApi(event.user, topic)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
         };
       }
       result = await strategicTopicKpiRows.getStrategicTopicKpiRows(pool, topic);
@@ -462,15 +461,6 @@ const handler = rateLimiter('general')(
           statusCode: 401,
           headers,
           body: JSON.stringify({ error: 'Authentication required' }),
-        };
-      }
-      const r = String(event.user.role || event.user.Role || '').trim();
-      const rLower = r.toLowerCase();
-      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
-        return {
-          statusCode: 403,
-          headers,
-          body: JSON.stringify({ error: 'Insufficient permissions' }),
         };
       }
       const rowId = parseInt(path.split('/strategic-topic-kpi-monthly-data/')[1].split('/')[0], 10);
@@ -494,21 +484,19 @@ const handler = rateLimiter('general')(
           body: JSON.stringify({ error: 'Authentication required' }),
         };
       }
-      const r = String(event.user.role || event.user.Role || '').trim();
-      const rLower = r.toLowerCase();
-      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
-        return {
-          statusCode: 403,
-          headers,
-          body: JSON.stringify({ error: 'Insufficient permissions' }),
-        };
-      }
       const topic = queryParams.strategic_topic;
       if (!topic) {
         return {
           statusCode: 400,
           headers,
           body: JSON.stringify({ error: 'strategic_topic query parameter is required' }),
+        };
+      }
+      if (!canReadStrategicTopicApi(event.user, topic)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
         };
       }
       result = await strategicTopicContent.listStrategicTopicContent(pool, topic, event.user);
@@ -518,15 +506,6 @@ const handler = rateLimiter('general')(
           statusCode: 401,
           headers,
           body: JSON.stringify({ error: 'Authentication required' }),
-        };
-      }
-      const r = String(event.user.role || event.user.Role || '').trim();
-      const rLower = r.toLowerCase();
-      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
-        return {
-          statusCode: 403,
-          headers,
-          body: JSON.stringify({ error: 'Insufficient permissions' }),
         };
       }
       const id = parseInt(path.match(/^\/strategic-topic-content\/(\d+)\/download$/)[1], 10);

@@ -6,6 +6,7 @@ const { normalizeStrategicDbRow } = require('./netlify/functions/utils/normalize
 const { collectJwtSecrets } = require('./netlify/functions/utils/jwt-secrets.cjs');
 const strategicTopicKpiRows = require('./netlify/functions/wig-api-strategic-topic-kpi-rows.cjs');
 const strategicTopicContent = require('./netlify/functions/wig-api-strategic-topic-content.cjs');
+const { canReadStrategicTopicApi } = require('./netlify/functions/utils/strategic-topic-wig-access.cjs');
 
 function getAuthorizationHeader(req) {
   if (!req.headers) return null;
@@ -455,14 +456,12 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      const r = String(user.role || user.Role || '').trim();
-      const rLower = r.toLowerCase();
-      if (!['CEO', 'Admin', 'department', 'topic'].some((x) => x.toLowerCase() === rLower)) {
-        return res.status(403).json({ error: 'Insufficient permissions' });
-      }
       const topic = req.query.strategic_topic;
       if (!topic) {
         return res.status(400).json({ error: 'strategic_topic query parameter is required' });
+      }
+      if (!canReadStrategicTopicApi(user, topic)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
       }
       const { withPoolRetry } = require('./netlify/functions/db.cjs');
       const rows = await withPoolRetry(async (pool) => strategicTopicKpiRows.getStrategicTopicKpiRows(pool, topic));
@@ -549,10 +548,6 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      const rLower = String(user.role || user.Role || '').trim().toLowerCase();
-      if (!['ceo', 'admin', 'department', 'topic'].includes(rLower)) {
-        return res.status(403).json({ error: 'Insufficient permissions' });
-      }
       const rowId = parseInt(req.params.rowId, 10);
       if (Number.isNaN(rowId)) {
         return res.status(400).json({ error: 'Invalid row id' });
@@ -586,12 +581,11 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       setNoCacheHeaders(res);
       const user = wigUserFromJwt(req);
       if (!user) return res.status(401).json({ error: 'Authentication required' });
-      const rLower = String(user.role || '').trim().toLowerCase();
-      if (!['ceo', 'admin', 'department', 'topic'].includes(rLower)) {
-        return res.status(403).json({ error: 'Insufficient permissions' });
-      }
       const topic = req.query.strategic_topic;
       if (!topic) return res.status(400).json({ error: 'strategic_topic query parameter is required' });
+      if (!canReadStrategicTopicApi(user, topic)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
       const pool = await getPool();
       const rows = await strategicTopicContent.listStrategicTopicContent(pool, topic, user);
       res.json(rows);
@@ -606,10 +600,6 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       setNoCacheHeaders(res);
       const user = wigUserFromJwt(req);
       if (!user) return res.status(401).json({ error: 'Authentication required' });
-      const rLower = String(user.role || '').trim().toLowerCase();
-      if (!['ceo', 'admin', 'department', 'topic'].includes(rLower)) {
-        return res.status(403).json({ error: 'Insufficient permissions' });
-      }
       const id = parseInt(req.params.id, 10);
       if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
       const pool = await getPool();
