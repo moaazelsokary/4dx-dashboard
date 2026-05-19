@@ -3396,7 +3396,7 @@ export default function DepartmentObjectives() {
                 <CardContent className="p-8 text-center space-y-4">
                   <p className="text-muted-foreground">
                     {!selectedDepartment
-                      ? 'No department RASCI summary available. Ensure "All Departments" is selected above and run "npm run dev" (which starts the wig-proxy).'
+                      ? 'No department RASCI summary available. Ensure "All Departments" is selected above and run `npm run proxies` (includes wig-proxy), then `npm run dev` — or use `npm run dev:all` in one terminal.'
                       : 'No RASCI metrics with assigned roles found for this department.'}
                   </p>
                   {!selectedDepartment && (user?.role === 'CEO' || user?.role === 'Admin') && (

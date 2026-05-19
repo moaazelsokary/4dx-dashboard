@@ -464,8 +464,8 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       if (!topic) {
         return res.status(400).json({ error: 'strategic_topic query parameter is required' });
       }
-      const pool = await getPool();
-      const rows = await strategicTopicKpiRows.getStrategicTopicKpiRows(pool, topic);
+      const { withPoolRetry } = require('./netlify/functions/db.cjs');
+      const rows = await withPoolRetry(async (pool) => strategicTopicKpiRows.getStrategicTopicKpiRows(pool, topic));
       res.json(rows);
     } catch (error) {
       if (error.statusCode) return sendTopicKpiStatus(res, error);

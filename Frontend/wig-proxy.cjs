@@ -3,7 +3,7 @@ require('dotenv').config({ path: '.env.local' });
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { getPool, sql } = require('./netlify/functions/db.cjs');
+const { getPool, sql, withPoolRetry, isConnectionError } = require('./netlify/functions/db.cjs');
 
 const app = express();
 const PORT = 3003;
@@ -32,9 +32,12 @@ app.use(express.json({ limit: '32mb' }));
 // Helper to handle errors
 function handleError(res, error, message) {
   console.error(`[WIG Proxy] ${message}:`, error);
-  res.status(500).json({ 
-    error: error.message || 'Internal server error',
-    details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+  const status = isConnectionError(error) ? 503 : 500;
+  res.status(status).json({
+    error: isConnectionError(error)
+      ? 'Database connection was interrupted. If a large beneficiaries sync is running, wait a minute and refresh.'
+      : error.message || 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
   });
 }
 
@@ -49,9 +52,9 @@ function setNoCacheHeaders(res) {
 app.get('/api/wig/main-objectives', async (req, res) => {
   try {
     setNoCacheHeaders(res);
-    const pool = await getPool();
-    const request = pool.request();
-    const result = await request.query('SELECT * FROM main_plan_objectives ORDER BY updated_at DESC, pillar, objective, target, kpi');
+    const result = await withPoolRetry((pool) =>
+      pool.request().query('SELECT * FROM main_plan_objectives ORDER BY updated_at DESC, pillar, objective, target, kpi')
+    );
     res.json(result.recordset);
   } catch (error) {
     handleError(res, error, 'Error getting main objectives');

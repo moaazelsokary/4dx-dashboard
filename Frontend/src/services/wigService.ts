@@ -132,9 +132,14 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       return response.json();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Request failed');
-      
+      if (lastError.name === 'AbortError') {
+        lastError = new Error(
+          'Request timed out after 30 seconds. If a beneficiaries sync is running, wait for it to finish and refresh the page.'
+        );
+      }
+
       // Handle network errors
-      if (lastError.name === 'AbortError' || lastError.message.includes('timeout')) {
+      if (lastError.message.includes('timeout')) {
         const apiError = await handleApiError(lastError);
         if (shouldRetry(apiError, attempt, MAX_RETRIES)) {
           const delay = getRetryDelay(attempt);

@@ -7,6 +7,7 @@ export const APP_ROUTE_OPTIONS: { path: string; label: string }[] = [
   { path: '/main-plan', label: 'Strategic Plan' },
   { path: '/main-plan/volunteers', label: 'Strategic Topics - Volunteers' },
   { path: '/main-plan/refugees', label: 'Strategic Topics - Refugees' },
+  { path: '/main-plan/refugees/case-story', label: 'Refugees — Find a case story' },
   { path: '/main-plan/returnees', label: 'Strategic Topics - Returnees' },
   { path: '/main-plan/relief', label: 'Strategic Topics - Relief' },
   { path: '/main-plan/awareness', label: 'Strategic Topics - Awareness' },

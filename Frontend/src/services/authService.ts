@@ -23,6 +23,8 @@ export interface User {
   powerbiDashboardIds?: string[] | null;
   /** Some stored blobs may only have snake_case (legacy / API echo) */
   powerbi_dashboard_ids?: string[] | null;
+  avatarKey?: string | null;
+  avatar_key?: string | null;
 }
 
 /** Subset of JWT claims we encode at sign-in (see auth-api / auth-proxy). */
@@ -36,6 +38,7 @@ export interface AuthTokenPayload {
   powerbiDashboardIds?: string[] | null;
   editableStrategicTopic?: string | null;
   editable_strategic_topic?: string | null;
+  avatarKey?: string | null;
   exp?: number;
   iat?: number;
 }
@@ -145,6 +148,12 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
         if (fromJwt != null && String(fromJwt).trim() !== '') {
           userToStore.editableStrategicTopic = String(fromJwt).trim().toLowerCase();
         }
+        if (p.avatarKey) {
+          userToStore.avatarKey = p.avatarKey;
+        }
+      }
+      if ((userToStore as User).avatarKey == null && (du.avatarKey || du.avatar_key)) {
+        userToStore.avatarKey = String(du.avatarKey || du.avatar_key);
       }
       localStorage.setItem(AUTH_TOKEN_KEY, data.token);
       localStorage.setItem(USER_KEY, JSON.stringify(userToStore));

@@ -11,6 +11,7 @@ import { dataCacheService } from "@/services/dataCacheService";
 import { sharePointCacheService } from "@/services/sharePointCacheService";
 import { signIn } from "@/services/authService";
 import { canAccessAppPath } from "@/utils/routeAccess";
+import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from "@/config/refugeesBeneficiaries";
 import { topicRoleEditableCode } from "@/pages/strategic-topics/strategicTopicKpiUtils";
 import OptimizedImage from "@/components/ui/OptimizedImage";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
@@ -50,6 +51,8 @@ const SignIn = () => {
         const u = result.user;
         if (u.defaultRoute && String(u.defaultRoute).trim() && canAccessAppPath(String(u.defaultRoute).trim(), u)) {
           navigate(String(u.defaultRoute).trim());
+        } else if (isCaseWorkerRole(u.role)) {
+          navigate(REFUGEES_CASE_STORY_PATH);
         } else if (u.role === "project") {
           navigate("/summary");
         } else if (u.role === "CEO") {

@@ -1,6 +1,6 @@
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet, BookOpen } from 'lucide-react';
 import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
 import { OdooIcon } from '@/components/icons/OdooIcon';
 import { RASCIIcon } from '@/components/icons/RASCIIcon';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { AppLogo } from '@/components/shared/AppLogo';
 import type { User } from '@/services/authService';
 import { canAccessAppPath } from '@/utils/routeAccess';
+import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
 
 interface SidebarNavProps {
   user: User | null;
@@ -271,8 +272,13 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
   };
 
   const items: React.ReactNode[] = [];
+  const caseWorker = isCaseWorkerRole(user?.role);
 
-  if (canAccessMainPlan && canAccessAppPath('/main-plan', user)) {
+  if (caseWorker) {
+    if (canAccessAppPath(REFUGEES_CASE_STORY_PATH, user)) {
+      items.push(navItem('refugees-case-story', REFUGEES_CASE_STORY_PATH, 'Find a case story', BookOpen));
+    }
+  } else if (canAccessMainPlan && canAccessAppPath('/main-plan', user)) {
     const mainPlanSub = [
       subNavItem('main-view', '/main-plan', 'view', 'View', true, Home),
       subNavItem('main-rasci', '/main-plan', 'rasci', 'RASCI', undefined, RASCIIcon),
@@ -280,7 +286,8 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     ];
     items.push(navItemWithChildren('main-plan', '/main-plan', 'Strategic Plan 2026', Home, mainPlanSub));
   }
-  if (canAccessMainPlan && canAccessAppPath('/main-plan/volunteers', user)) {
+
+  if (!caseWorker && canAccessMainPlan && canAccessAppPath('/main-plan/volunteers', user)) {
     const strategicTopicsSub = [
       subNavItem('main-volunteers', '/main-plan/volunteers', '', 'Volunteers', undefined, undefined, '/volunteers.png'),
       subNavItem('main-refugees', '/main-plan/refugees', '', 'Refugees', undefined, undefined, '/Refugees.png'),
@@ -308,29 +315,29 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     ];
     items.push(navItemWithChildren('strategic-topics', '/main-plan/volunteers', 'Strategic Topics', Users, strategicTopicsSub));
   }
-  if (canAccessDepartmentObjectives && canAccessAppPath('/department-objectives', user) && shouldShowButton('/department-objectives')) {
+  if (!caseWorker && canAccessDepartmentObjectives && canAccessAppPath('/department-objectives', user) && shouldShowButton('/department-objectives')) {
     const deptSub = [
       subNavItem('dept-objectives', '/department-objectives', 'objectives', 'Objectives', true, FileSpreadsheet),
       subNavItem('dept-rasci', '/department-objectives', 'rasci', 'RASCI Metrics', undefined, RASCIIcon),
     ];
     items.push(navItemWithChildren('department-objectives', '/department-objectives', isCEO ? 'Department Objectives' : 'My Objectives', Users, deptSub));
   }
-  if (canAccessAppPath('/powerbi', user) && shouldShowButton('/powerbi')) {
+  if (!caseWorker && canAccessAppPath('/powerbi', user) && shouldShowButton('/powerbi')) {
     items.push(navItem('powerbi', '/powerbi', 'Power BI Dashboards', PowerBIIcon));
   }
-  if (canAccessAdmin && canAccessAppPath('/pms-odoo-metrics', user) && shouldShowButton('/pms-odoo-metrics')) {
+  if (!caseWorker && canAccessAdmin && canAccessAppPath('/pms-odoo-metrics', user) && shouldShowButton('/pms-odoo-metrics')) {
     items.push(navItem('pms-odoo-metrics', '/pms-odoo-metrics', 'PMS & Odoo Metrics', OdooIcon));
   }
-  if (canAccessWIGPlan && canAccessAppPath('/wig-plan-2025', user) && shouldShowButton('/wig-plan-2025')) {
+  if (!caseWorker && canAccessWIGPlan && canAccessAppPath('/wig-plan-2025', user) && shouldShowButton('/wig-plan-2025')) {
     items.push(navItem('wig-plan-2025', '/wig-plan-2025', '2025 Plan', BarChart3));
   }
   // Projects Summary and Projects Details hidden from UI
-  if (canAccessSummary) {
+  if (!caseWorker && canAccessSummary) {
     items.push(
       navItem('projects-website', '/summary', 'Projects Website', History, () => window.open('http://pms.lifemakers.org/', '_blank'))
     );
   }
-  if (canAccessAdmin && canAccessAppPath('/admin/configuration', user) && shouldShowButton('/admin/configuration')) {
+  if (!caseWorker && canAccessAdmin && canAccessAppPath('/admin/configuration', user) && shouldShowButton('/admin/configuration')) {
     const configSub = [
       subNavItem('config-locks', '/admin/configuration', 'locks', 'Lock Management', true),
       subNavItem('config-logs', '/admin/configuration', 'logs', 'Activity Logs'),
@@ -352,8 +359,16 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
       <div className="shrink-0">
         <button
           type="button"
-          onClick={() => navigate('/main-plan?tab=view')}
-          aria-current={location.pathname === '/main-plan' ? 'page' : undefined}
+          onClick={() => navigate(caseWorker ? REFUGEES_CASE_STORY_PATH : '/main-plan?tab=view')}
+          aria-current={
+            caseWorker
+              ? location.pathname === REFUGEES_CASE_STORY_PATH
+                ? 'page'
+                : undefined
+              : location.pathname === '/main-plan'
+                ? 'page'
+                : undefined
+          }
           className="mb-2 flex h-[52px] min-h-11 w-[52px] min-w-11 items-center justify-center rounded-md p-2 mx-auto transition-colors duration-150 hover:bg-primary/10"
           aria-label="Home"
         >

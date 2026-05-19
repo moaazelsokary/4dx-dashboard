@@ -4,21 +4,7 @@ import type { User } from '@/services/authService';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 
-const AVATAR_PATHS = {
-  hairWoman: '/Hair Woman Avatar.png',  // Life community
-  woman: '/Woman Avatar.png',           // case, communication, hr
-  man: '/Man Avatar.png',               // others
-} as const;
-
-function getAvatarForUser(user: { departments?: string[]; role?: string }): string {
-  const depts = (user.departments || []).map((d) => d.toLowerCase());
-  // Hair Woman: Life community
-  if (depts.includes('community')) return AVATAR_PATHS.hairWoman;
-  // Woman: case, communication, hr
-  if (depts.some((d) => ['case', 'communication', 'hr'].includes(d))) return AVATAR_PATHS.woman;
-  // Man: others (it, operations, dfr, bdm, security, admin, procurement, offices, etc.)
-  return AVATAR_PATHS.man;
-}
+import { resolveAvatarSrc } from '@/config/avatars';
 
 function getInitials(username: string): string {
   const parts = username.split(/[\s._-]/).filter(Boolean);
@@ -125,7 +111,7 @@ export function HeaderUserSection({
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Avatar className="w-9 h-9 sm:w-10 sm:h-10 shrink-0">
               <AvatarImage
-                src={getAvatarForUser(user)}
+                src={resolveAvatarSrc(user)}
                 alt={user.username}
               />
               <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">

@@ -143,6 +143,10 @@ function hasPermission(user, resource, action) {
     return action === 'read' || action === 'create' || action === 'update';
   }
 
+  if (roleNorm === 'case worker') {
+    return action === 'read';
+  }
+
   return false;
 }
 

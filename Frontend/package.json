@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run proxies\" \"vite\"",
+    "dev": "node scripts/start-vite-when-auth-ready.cjs",
+    "dev:all": "concurrently -n proxies,vite \"npm run proxies\" \"node scripts/start-vite-when-auth-ready.cjs\"",
     "vite:only": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
@@ -30,6 +31,7 @@
     "migrate-order-column": "node scripts/run-order-migration.cjs",
     "init-config-schema": "node scripts/run-config-schema.cjs",
     "sync-pms-odoo": "node scripts/run-pms-odoo-sync.cjs",
+    "sync-beneficiary-queue": "node scripts/drain-beneficiary-sync-queue.cjs",
     "proxy": "node proxy-server.cjs",
     "onedrive-proxy": "node onedrive-proxy.cjs",
     "wig-proxy": "node wig-proxy.cjs",

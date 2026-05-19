@@ -1,13 +1,14 @@
 const sql = require('mssql');
 
 let pool = null;
+let connecting = null;
 
 // Parse server and port
 const serverValue = process.env.SERVER || process.env.VITE_SERVER || '';
 let server, port;
 if (serverValue.includes(',')) {
-  [server, port] = serverValue.split(',').map(s => s.trim());
-  port = parseInt(port) || 1433;
+  [server, port] = serverValue.split(',').map((s) => s.trim());
+  port = parseInt(port, 10) || 1433;
 } else {
   server = serverValue;
   port = 1433;
@@ -18,15 +19,17 @@ let password = process.env.DB_PASSWORD || process.env.VITE_PWD || process.env.PW
 if (password && password.startsWith('/')) {
   password = process.env.DB_PASSWORD || process.env.VITE_PWD;
 }
-if (password && (password.includes('%'))) {
+if (password && password.includes('%')) {
   try {
     password = decodeURIComponent(password);
   } catch (e) {
     // Keep original if decode fails
   }
 }
-if ((password && password.startsWith('"') && password.endsWith('"')) || 
-    (password && password.startsWith("'") && password.endsWith("'"))) {
+if (
+  (password && password.startsWith('"') && password.endsWith('"')) ||
+  (password && password.startsWith("'") && password.endsWith("'"))
+) {
   password = password.slice(1, -1);
 }
 if (password) {
@@ -43,7 +46,7 @@ const config = {
     encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true,
-    requestTimeout: 60000,
+    requestTimeout: 120000,
     connectionTimeout: 30000,
   },
   pool: {
@@ -53,34 +56,110 @@ const config = {
   },
 };
 
-async function getPool() {
-  if (!pool) {
+function isConnectionError(err) {
+  if (!err) return false;
+  const msg = String(err.message || err);
+  const code = err.code || err.originalError?.code || err.originalError?.info?.code;
+  return (
+    code === 'ESOCKET' ||
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEOUT' ||
+    msg.includes('Connection lost') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('Connection is closed') ||
+    msg.includes('Final state') ||
+    msg.includes('LoggedIn state')
+  );
+}
+
+function attachSharedPoolErrorHandler(p) {
+  if (!p || p.__rbSharedPoolErrorHook) return;
+  p.__rbSharedPoolErrorHook = true;
+  p.on('error', (err) => {
+    console.error('[DB] Pool error — resetting pool:', err?.message || err);
+    if (pool === p) pool = null;
+  });
+}
+
+async function resetPool() {
+  const p = pool;
+  pool = null;
+  connecting = null;
+  if (p) {
     try {
-      pool = await sql.connect(config);
-      console.log('[DB] Connected to SQL Server');
-    } catch (error) {
-      console.error('[DB] Connection error:', error);
-      throw error;
+      await p.close();
+    } catch (_) {
+      /* ignore */
     }
   }
-  return pool;
+}
+
+async function connectPool() {
+  const p = new sql.ConnectionPool(config);
+  await p.connect();
+  attachSharedPoolErrorHandler(p);
+  return p;
+}
+
+async function getPool() {
+  if (pool && pool.connected) {
+    return pool;
+  }
+  if (pool && !pool.connected) {
+    await resetPool();
+  }
+  if (!connecting) {
+    connecting = (async () => {
+      try {
+        pool = await connectPool();
+        console.log('[DB] Connected to SQL Server');
+        return pool;
+      } finally {
+        connecting = null;
+      }
+    })();
+  }
+  return connecting;
+}
+
+/** Dedicated pool for long sync — must not use sql.connect() (global singleton; close() kills API pool). */
+async function createIsolatedPool() {
+  const p = new sql.ConnectionPool(config);
+  await p.connect();
+  p.on('error', (err) => {
+    console.error('[DB] Isolated sync pool error:', err?.message || err);
+  });
+  return p;
 }
 
 async function closePool() {
-  if (pool) {
-    try {
-      await pool.close();
-      pool = null;
-      console.log('[DB] Connection pool closed');
-    } catch (error) {
-      console.error('[DB] Error closing pool:', error);
-    }
+  await resetPool();
+}
+
+/**
+ * Run fn(pool); on connection errors reset the shared pool and retry once.
+ */
+async function withPoolRetry(fn) {
+  try {
+    const p = await getPool();
+    return await fn(p);
+  } catch (err) {
+    if (!isConnectionError(err)) throw err;
+    console.warn('[DB] Connection error — reconnecting and retrying once:', err.message);
+    await resetPool();
+    const p = await getPool();
+    return await fn(p);
   }
 }
 
 module.exports = {
   getPool,
+  createIsolatedPool,
   closePool,
+  resetPool,
+  withPoolRetry,
+  isConnectionError,
   sql,
+  dbConfig: config,
 };
-

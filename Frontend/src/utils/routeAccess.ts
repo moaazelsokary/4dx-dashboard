@@ -1,5 +1,6 @@
 import type { User } from '@/services/authService';
 import { hasPowerBINavigationAccess } from '@/config/powerbi';
+import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
 
 /** Paths that never require the route-override check (handled separately). */
 export const PUBLIC_PATHS = new Set(['/', '/privacy-policy', '/terms-of-service']);
@@ -9,8 +10,15 @@ export const PUBLIC_PATHS = new Set(['/', '/privacy-policy', '/terms-of-service'
  */
 export function getInheritedRoutesForUser(user: User): Set<string> {
   const paths = new Set<string>();
-  paths.add('/dashboard');
   paths.add('/settings');
+
+  if (isCaseWorkerRole(user.role)) {
+    paths.add(REFUGEES_CASE_STORY_PATH);
+    paths.add('/access-denied');
+    return paths;
+  }
+
+  paths.add('/dashboard');
 
   const role = user.role;
   const depts = user.departments || [];
@@ -24,6 +32,7 @@ export function getInheritedRoutesForUser(user: User): Set<string> {
     paths.add('/main-plan');
     paths.add('/main-plan/volunteers');
     paths.add('/main-plan/refugees');
+    paths.add(REFUGEES_CASE_STORY_PATH);
     paths.add('/main-plan/returnees');
     paths.add('/main-plan/relief');
     paths.add('/main-plan/awareness');

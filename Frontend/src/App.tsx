@@ -30,6 +30,7 @@ const Configuration = lazy(() => import("./pages/admin/Configuration"));
 const PMSOdooMetrics = lazy(() => import("./pages/PMSOdooMetrics"));
 const VolunteersPage = lazy(() => import("./pages/strategic-topics/VolunteersPage"));
 const RefugeesPage = lazy(() => import("./pages/strategic-topics/RefugeesPage"));
+const RefugeesCaseStoryPage = lazy(() => import("./pages/strategic-topics/RefugeesCaseStoryPage"));
 const ReturneesPage = lazy(() => import("./pages/strategic-topics/ReturneesPage"));
 const ReliefPage = lazy(() => import("./pages/strategic-topics/ReliefPage"));
 const AwarenessPage = lazy(() => import("./pages/strategic-topics/AwarenessPage"));
@@ -93,6 +94,7 @@ const App = () => (
               <Route path="/main-plan" element={<GuardedRoute><MainPlanObjectives /></GuardedRoute>} />
               <Route path="/main-plan/volunteers" element={<GuardedRoute><VolunteersPage /></GuardedRoute>} />
               <Route path="/main-plan/refugees" element={<GuardedRoute><RefugeesPage /></GuardedRoute>} />
+              <Route path="/main-plan/refugees/case-story" element={<GuardedRoute><RefugeesCaseStoryPage /></GuardedRoute>} />
               <Route path="/main-plan/returnees" element={<GuardedRoute><ReturneesPage /></GuardedRoute>} />
               <Route path="/main-plan/relief" element={<GuardedRoute><ReliefPage /></GuardedRoute>} />
               <Route path="/main-plan/awareness" element={<GuardedRoute><AwarenessPage /></GuardedRoute>} />

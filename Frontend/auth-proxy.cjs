@@ -12,6 +12,9 @@ const {
   fillDepartmentObjectiveMonthlyFromCache,
 } = require('./netlify/functions/utils/monthly-fill-from-cache.cjs');
 
+/** CJS: `netlify/functions/package.json` sets "type":"commonjs" (root package is "module"). */
+const { handler: beneficiariesApiHandler } = require('./netlify/functions/beneficiaries-api.js');
+
 const app = express();
 const PORT = 3000;
 
@@ -38,8 +41,30 @@ app.use(express.json());
 // Database connection pool
 let pool = null;
 
+function isDbConnectionError(err) {
+  if (!err) return false;
+  const msg = String(err.message || err);
+  const code = err.code || err.originalError?.code;
+  return (
+    code === 'ESOCKET' ||
+    code === 'ECONNRESET' ||
+    msg.includes('Connection lost') ||
+    msg.includes('Connection is closed') ||
+    msg.includes('Final state') ||
+    msg.includes('LoggedIn state')
+  );
+}
+
 async function getDbPool() {
-  if (pool) return pool;
+  if (pool && pool.connected) return pool;
+  if (pool && !pool.connected) {
+    try {
+      await pool.close();
+    } catch (_) {
+      /* ignore */
+    }
+    pool = null;
+  }
 
   const serverValue = process.env.SERVER || process.env.VITE_SERVER || '';
   let server, port;
@@ -106,7 +131,13 @@ async function getDbPool() {
   console.log(`- User: ${config.user}`);
 
   try {
-    pool = await sql.connect(config);
+    const next = new sql.ConnectionPool(config);
+    await next.connect();
+    next.on('error', (err) => {
+      console.error('[Auth Proxy] DB pool error — resetting:', err?.message || err);
+      if (pool === next) pool = null;
+    });
+    pool = next;
     console.log('[Auth Proxy] Database connection established');
     return pool;
   } catch (error) {
@@ -159,7 +190,8 @@ app.post('/api/auth/signin', async (req, res) => {
         default_route,
         allowed_routes,
         powerbi_dashboard_ids,
-        editable_strategic_topic
+        editable_strategic_topic,
+        avatar_key
       FROM users
       WHERE username = @username
     `);
@@ -239,6 +271,11 @@ app.post('/api/auth/signin', async (req, res) => {
         ? 'topic'
         : String(user.role || '').trim();
 
+    const avatarKey =
+      user.avatar_key != null && String(user.avatar_key).trim() !== ''
+        ? String(user.avatar_key).trim()
+        : null;
+
     const jwtPayload = {
       userId: user.id,
       username: user.username,
@@ -247,6 +284,7 @@ app.post('/api/auth/signin', async (req, res) => {
       defaultRoute: defaultRoute || undefined,
       allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
       powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
+      avatarKey: avatarKey || undefined,
     };
     if (authRole === 'topic') {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
@@ -264,6 +302,7 @@ app.post('/api/auth/signin', async (req, res) => {
       allowedRoutes,
       powerbiDashboardIds,
       editableStrategicTopic,
+      avatarKey,
     };
 
     console.log('[Auth Proxy] User signed in successfully:', user.username, 'Role:', authRole);
@@ -377,6 +416,12 @@ function getUserFromRequest(req) {
   } catch {
     return null;
   }
+}
+
+function canReadBeneficiaries(user) {
+  if (!user || !user.role) return false;
+  const r = String(user.role).trim().toLowerCase();
+  return ['ceo', 'admin', 'department', 'topic', 'editor', 'viewer'].includes(r);
 }
 
 // ---- Metrics API (local dev - same as Netlify metrics-api) ----
@@ -572,6 +617,16 @@ async function syncPmsOdoo() {
   }
   return { pmsRows: pmsData.length, odooRows: odooData.length };
 }
+
+function requireAdminOrCeo(req, res, next) {
+  const user = getUserFromRequest(req);
+  if (!user || !['Admin', 'CEO'].includes(user.role)) {
+    return res.status(403).json({ success: false, error: 'Unauthorized - Admin or CEO role required' });
+  }
+  req.derivedUser = user;
+  next();
+}
+
 app.post('/.netlify/functions/metrics-api/refresh', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -584,16 +639,65 @@ app.post('/.netlify/functions/metrics-api/refresh', async (req, res) => {
   }
 });
 
-// Derived metrics CRUD (Admin/CEO only)
-function requireAdminOrCeo(req, res, next) {
-  const user = getUserFromRequest(req);
-  if (!user || !['Admin', 'CEO'].includes(user.role)) {
-    return res.status(403).json({ success: false, error: 'Unauthorized - Admin or CEO role required' });
+// ---- Beneficiaries API (local dev — same Netlify handler as production) ----
+// Express 5 / path-to-regexp: do not use `*` or RegExp paths here (crashes process at load).
+const beneficiariesApiRouter = express.Router();
+beneficiariesApiRouter.use(async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    return res.sendStatus(200);
   }
-  req.derivedUser = user;
-  next();
-}
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const sub = (req.url || '/').split('?')[0];
+    const path = `/.netlify/functions/beneficiaries-api${sub === '/' ? '' : sub}`;
+    const out = await beneficiariesApiHandler({
+      httpMethod: req.method,
+      path,
+      headers: req.headers,
+      queryStringParameters: req.query && typeof req.query === 'object' ? req.query : {},
+    });
+    const sc = out.statusCode || 200;
+    res.status(sc);
+    if (out.headers && typeof out.headers === 'object') {
+      for (const [k, v] of Object.entries(out.headers)) {
+        if (v != null) res.setHeader(k, v);
+      }
+    }
+    const body = out.body != null ? out.body : '';
+    res.send(body);
 
+    /* Local dev: Netlify cron does not run — process queued sync jobs after 202 is sent. */
+    if (
+      req.method === 'POST' &&
+      sub.includes('/sync') &&
+      !sub.includes('sync/') &&
+      sc === 202
+    ) {
+      res.on('finish', () => {
+        void (async () => {
+          try {
+            const p = await getDbPool();
+            const { processPendingBeneficiarySyncJobs } = require('./netlify/functions/utils/refugees-beneficiaries-sync-pipeline.cjs');
+            const r = await processPendingBeneficiarySyncJobs(p, console, { maxJobs: 10 });
+            console.log('[Auth Proxy] beneficiaries sync queue drain', r);
+          } catch (e) {
+            console.error('[Auth Proxy] beneficiaries sync queue drain failed:', e.message);
+          }
+        })();
+      });
+    }
+  } catch (err) {
+    console.error('[Auth Proxy] beneficiaries-api error:', err.message);
+    res.status(500).json({ ok: false, error: err.message || 'error' });
+  }
+});
+app.use('/.netlify/functions/beneficiaries-api', beneficiariesApiRouter);
+
+// Derived metrics CRUD (Admin/CEO only)
 app.post('/.netlify/functions/metrics-api/derived', requireAdminOrCeo, async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1448,8 +1552,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Auth proxy server is running', port: PORT });
 });
 
-app.listen(PORT, () => {
-  console.log(`🔐 Auth proxy server running on http://localhost:${PORT}`);
-  console.log(`📡 Handling authentication requests`);
+const LISTEN_HOST = '127.0.0.1';
+app.listen(PORT, LISTEN_HOST, () => {
+  console.log(`🔐 Auth proxy server running on http://${LISTEN_HOST}:${PORT}`);
+  console.log(`📡 Handling authentication requests (Vite dev proxies here)`);
   console.log(`💡 Make sure database credentials are set in .env.local`);
 });

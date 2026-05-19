@@ -70,3 +70,11 @@
 # Scheduled Functions
 [functions."sync-pms-odoo"]
 schedule = "*/10 * * * *"
+
+# Refugees beneficiaries: Odoo → SQL snapshot once per day (UTC)
+[functions."sync-refugees-beneficiaries"]
+schedule = "15 2 * * *"
+
+# Process queued admin beneficiaries sync jobs (POST /sync → 202)
+[functions."sync-beneficiary-queue"]
+schedule = "*/3 * * * *"

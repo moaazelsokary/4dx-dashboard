@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { RbSyncFreshnessBadge } from '@/components/strategic-topics/RbSyncFreshnessBadge';
+import { fetchDashboardSummary } from '@/services/beneficiariesService';
 import { fetchAuthSession, getCurrentUser, mergeSessionIntoStoredUser } from '@/services/authService';
 import type { User } from '@/services/authService';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -9,11 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Department, MainPlanObjective, StrategicTopicCode, StrategicTopicKpiRow } from '@/types/wig';
 import { getDepartments, getMainObjectives, getStrategicTopicKpiRows } from '@/services/wigService';
 import { toast } from '@/hooks/use-toast';
-import { LayoutDashboard, Table2, SquareChartGantt, FolderOpen } from 'lucide-react';
+import { LayoutDashboard, Table2, SquareChartGantt, FolderOpen, Fingerprint } from 'lucide-react';
 import StrategicTopicDashboard from './StrategicTopicDashboard';
 import StrategicTopicKpiTable from './StrategicTopicKpiTable';
 import StrategicTopicGantt from './StrategicTopicGantt';
 import StrategicTopicContentFolder from './StrategicTopicContentFolder';
+import RefugeesBeneficiariesDashboard from './RefugeesBeneficiariesDashboard';
 import { STRATEGIC_TOPIC_LABELS, parsePipeList } from './strategicTopicKpiUtils';
 
 type StrategicTopicTemplateProps = {
@@ -21,11 +25,16 @@ type StrategicTopicTemplateProps = {
   strategicTopicCode: StrategicTopicCode;
 };
 
-const TAB_VALUES = ['dashboard', 'table', 'gantt', 'content'] as const;
-type TabValue = (typeof TAB_VALUES)[number];
+type TabValue = 'table' | 'dashboard' | 'beneficiaries' | 'gantt' | 'content';
 
-function isTabValue(v: string | null): v is TabValue {
-  return v === 'dashboard' || v === 'table' || v === 'gantt' || v === 'content';
+function tabSetForTopic(code: StrategicTopicCode): Set<TabValue> {
+  const base = new Set<TabValue>(['table', 'dashboard', 'gantt', 'content']);
+  if (code === 'refugees') base.add('beneficiaries');
+  return base;
+}
+
+function isTabValue(v: string | null, code: StrategicTopicCode): v is TabValue {
+  return v != null && tabSetForTopic(code).has(v as TabValue);
 }
 
 export default function StrategicTopicTemplate({ title, strategicTopicCode }: StrategicTopicTemplateProps) {
@@ -35,8 +44,21 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
 
   const activeTab: TabValue = useMemo(() => {
     const t = searchParams.get('tab');
-    return isTabValue(t) ? t : 'table';
-  }, [searchParams]);
+    return isTabValue(t, strategicTopicCode) ? t : 'table';
+  }, [searchParams, strategicTopicCode]);
+
+  const rbSummaryQuery = useQuery({
+    queryKey: ['rb', 'summary'],
+    queryFn: fetchDashboardSummary,
+    enabled: strategicTopicCode === 'refugees',
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const headerSyncBadge =
+    strategicTopicCode === 'refugees' && activeTab === 'beneficiaries' ? (
+      <RbSyncFreshnessBadge at={rbSummaryQuery.data?.meta?.lastSyncAt} />
+    ) : undefined;
 
   const [rows, setRows] = useState<StrategicTopicKpiRow[]>([]);
   const [mainPlanObjectives, setMainPlanObjectives] = useState<MainPlanObjective[]>([]);
@@ -191,7 +213,7 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
     <TabsList className="w-max max-w-[min(100%,72rem)] flex flex-wrap sm:flex-nowrap h-auto min-h-7 gap-0.5 rounded-lg border border-border/80 bg-muted/60 p-0.5 shadow-sm justify-start">
       <TabsTrigger value="table" className={topicTabTriggerClass}>
         <Table2 className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
-        Table KPI
+        KPI Table
       </TabsTrigger>
       <TabsTrigger value="dashboard" className={topicTabTriggerClass}>
         <LayoutDashboard className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
@@ -201,6 +223,12 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
         <SquareChartGantt className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         Gantt
       </TabsTrigger>
+      {strategicTopicCode === 'refugees' && (
+        <TabsTrigger value="beneficiaries" className={topicTabTriggerClass}>
+          <Fingerprint className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+          Beneficiaries
+        </TabsTrigger>
+      )}
       <TabsTrigger value="content" className={topicTabTriggerClass}>
         <FolderOpen className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         Content folder
@@ -215,6 +243,7 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
         headerTitle={title}
         headerSubtitle={`${topicLabel} Dashboard`}
         headerToolbar={topicTabList}
+        badge={headerSyncBadge}
         onSignOut={handleSignOut}
         onRefresh={() => void loadAll()}
       >
@@ -258,6 +287,12 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
             />
           )}
         </TabsContent>
+
+        {strategicTopicCode === 'refugees' && (
+          <TabsContent value="beneficiaries" className="mt-4 sm:mt-4 focus-visible:outline-none">
+            <RefugeesBeneficiariesDashboard user={user} />
+          </TabsContent>
+        )}
 
         <TabsContent value="content" className="mt-4 focus-visible:outline-none">
           <StrategicTopicContentFolder strategicTopicCode={strategicTopicCode} user={user} />

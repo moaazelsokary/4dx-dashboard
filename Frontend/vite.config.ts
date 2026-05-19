@@ -18,7 +18,7 @@ function devProxyToAuthBackend(): ProxyOptions {
       proxy.on("error", (err, _req, res) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(
-          `[Vite proxy] Cannot reach auth-proxy at :3000 (${msg}). From the Frontend folder run: npm run auth-proxy  — or use: npm run dev (starts Vite + all local proxies).`
+          `[Vite proxy] Cannot reach auth-proxy at 127.0.0.1:3000 (${msg}). Start proxies first: \`npm run proxies\` (or \`npm run auth-proxy\`), then \`npm run dev\` for Vite. One-liner: \`npm run dev:all\`.`
         );
         const r = res as { headersSent?: boolean; writeHead?: (c: number, h: Record<string, string>) => void; end?: (b: string) => void };
         if (r && !r.headersSent && typeof r.writeHead === "function") {
@@ -27,7 +27,7 @@ function devProxyToAuthBackend(): ProxyOptions {
             JSON.stringify({
               success: false,
               error:
-                "Development: auth-proxy is not running on port 3000. From the Frontend folder run `npm run auth-proxy`, or use `npm run dev` (starts Vite and all proxies including auth-proxy).",
+                "Development: auth-proxy is not listening on 127.0.0.1:3000. In the Frontend folder run `npm run proxies` in one terminal, then `npm run dev` in another (or `npm run dev:all` in a single terminal).",
             })
           );
         }
@@ -60,6 +60,7 @@ export default defineConfig(({ mode }) => {
         "/.netlify/functions/auth-session": devProxyToAuthBackend(),
         "/.netlify/functions/config-api": devProxyToAuthBackend(),
         "/.netlify/functions/metrics-api": devProxyToAuthBackend(),
+        "/.netlify/functions/beneficiaries-api": devProxyToAuthBackend(),
         // RASCI summary served by auth-proxy (3000)
         "/api/wig/rasci/summary-by-department": devProxyToAuthBackend(),
         // Other wig APIs from wig-proxy (3003)

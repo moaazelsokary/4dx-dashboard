@@ -7,6 +7,8 @@ const bcrypt = require('bcryptjs');
 const { getValidPowerbiDashboardIdSet } = require('./powerbi-dashboards-crud.cjs');
 
 /** Strategic topic code for role `topic` (must match wig strategic_topic_kpi_rows topics). */
+const VALID_AVATAR_KEYS = new Set(['hairWoman', 'woman', 'man']);
+
 const EDITABLE_STRATEGIC_TOPIC_CODES = new Set([
   'volunteers',
   'refugees',
@@ -27,6 +29,7 @@ const ALLOWED_APP_PATHS = new Set([
   '/main-plan',
   '/main-plan/volunteers',
   '/main-plan/refugees',
+  '/main-plan/refugees/case-story',
   '/main-plan/returnees',
   '/main-plan/relief',
   '/main-plan/awareness',
@@ -135,9 +138,20 @@ function mapUserAccountRow(row) {
     allowed_routes: parseJsonArrayOrNull(row.allowed_routes),
     powerbi_dashboard_ids: parseJsonArrayOrNull(row.powerbi_dashboard_ids),
     editable_strategic_topic: etOut,
+    avatar_key:
+      row.avatar_key != null && String(row.avatar_key).trim() !== ''
+        ? String(row.avatar_key).trim()
+        : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+function normalizeAvatarKey(raw) {
+  if (raw == null || String(raw).trim() === '') return null;
+  const k = String(raw).trim();
+  if (!VALID_AVATAR_KEYS.has(k)) return `Invalid avatar_key (use hairWoman, woman, or man)`;
+  return k;
 }
 
 /**
@@ -155,7 +169,7 @@ async function handleAccountsCrud(opts) {
   if (method === 'GET' && !accountId) {
     const result = await pool.request().query(`
       SELECT id, username, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids,
-        editable_strategic_topic, created_at, updated_at
+        editable_strategic_topic, avatar_key, created_at, updated_at
       FROM users
       ORDER BY username
     `);
@@ -173,6 +187,7 @@ async function handleAccountsCrud(opts) {
       default_route,
       allowed_routes,
       powerbi_dashboard_ids,
+      avatar_key,
     } = body;
 
     if (!username || !String(username).trim()) {
@@ -236,6 +251,14 @@ async function handleAccountsCrud(opts) {
       }
     }
 
+    const avatarErr = normalizeAvatarKey(avatar_key);
+    if (typeof avatarErr === 'string' && avatarErr.startsWith('Invalid')) {
+      return { statusCode: 400, json: { success: false, error: avatarErr } };
+    }
+    if (!avatarErr) {
+      return { statusCode: 400, json: { success: false, error: 'avatar_key is required for new users' } };
+    }
+
     const password_hash = await bcrypt.hash(String(password), 10);
     const deptStr = JSON.stringify(Array.isArray(departments) ? departments : []);
 
@@ -256,11 +279,12 @@ async function handleAccountsCrud(opts) {
     ins.input('allowed_routes', sql.NVarChar(sql.MAX), routesJson);
     ins.input('powerbi_dashboard_ids', sql.NVarChar(sql.MAX), pbiJson);
     ins.input('editable_strategic_topic', sql.NVarChar(50), editableStrategicTopicVal);
+    ins.input('avatar_key', sql.NVarChar(32), avatarErr);
 
     const insertResult = await ins.query(`
-      INSERT INTO users (username, password_hash, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic)
-      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.created_at, INSERTED.updated_at
-      VALUES (@username, @password_hash, @role, @departments, @is_active, @default_route, @allowed_routes, @powerbi_dashboard_ids, @editable_strategic_topic)
+      INSERT INTO users (username, password_hash, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, avatar_key)
+      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
+      VALUES (@username, @password_hash, @role, @departments, @is_active, @default_route, @allowed_routes, @powerbi_dashboard_ids, @editable_strategic_topic, @avatar_key)
     `);
 
     const row = insertResult.recordset[0];
@@ -278,6 +302,7 @@ async function handleAccountsCrud(opts) {
       allowed_routes,
       powerbi_dashboard_ids,
       editable_strategic_topic,
+      avatar_key,
     } = body;
 
     const existingReq = pool.request();
@@ -409,6 +434,14 @@ async function handleAccountsCrud(opts) {
       upd.input('editable_strategic_topic', sql.NVarChar(50), nextEditableTopicSql);
       sets.push('editable_strategic_topic = @editable_strategic_topic');
     }
+    if (avatar_key !== undefined) {
+      const avatarVal = normalizeAvatarKey(avatar_key);
+      if (typeof avatarVal === 'string' && avatarVal.startsWith('Invalid')) {
+        return { statusCode: 400, json: { success: false, error: avatarVal } };
+      }
+      upd.input('avatar_key', sql.NVarChar(32), avatarVal);
+      sets.push('avatar_key = @avatar_key');
+    }
 
     if (sets.length === 0) {
       return { statusCode: 400, json: { success: false, error: 'No fields to update' } };
@@ -418,7 +451,7 @@ async function handleAccountsCrud(opts) {
 
     const updateResult = await upd.query(`
       UPDATE users SET ${sets.join(', ')}
-      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.created_at, INSERTED.updated_at
+      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
       WHERE id = @id
     `);
 

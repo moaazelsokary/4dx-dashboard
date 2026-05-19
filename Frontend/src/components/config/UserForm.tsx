@@ -29,8 +29,11 @@ import type { AccountUser, AccountPayload } from '@/types/config';
 import { getDepartments } from '@/services/wigService';
 import type { Department, StrategicTopicCode } from '@/types/wig';
 import { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS } from '@/pages/strategic-topics/strategicTopicKpiUtils';
+import { AVATAR_OPTIONS, type AvatarKey, isAvatarKey } from '@/config/avatars';
+import { Avatar, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
 
-const ROLE_OPTIONS = ['CEO', 'Admin', 'department', 'topic', 'project', 'Viewer'] as const;
+const ROLE_OPTIONS = ['CEO', 'Admin', 'department', 'topic', 'project', 'Viewer', 'case worker'] as const;
 
 const TOPIC_SELECT_NONE = '__none__';
 
@@ -74,6 +77,7 @@ export default function UserForm({
   const [selectedPbi, setSelectedPbi] = useState<string[]>([]);
   /** Role `topic`: pillar this user may edit (required when role is topic). */
   const [editableTopicCode, setEditableTopicCode] = useState<string>(TOPIC_SELECT_NONE);
+  const [avatarKey, setAvatarKey] = useState<AvatarKey>('man');
   const [submitting, setSubmitting] = useState(false);
 
   const { data: departments = [], isLoading: departmentsLoading } = useQuery({
@@ -128,6 +132,8 @@ export default function UserForm({
       } else {
         setEditableTopicCode(TOPIC_SELECT_NONE);
       }
+      const ak = account.avatar_key;
+      setAvatarKey(isAvatarKey(ak) ? ak : 'man');
     } else {
       setUsername('');
       setPassword('');
@@ -140,6 +146,7 @@ export default function UserForm({
       setPbiInherit(true);
       setSelectedPbi([]);
       setEditableTopicCode(TOPIC_SELECT_NONE);
+      setAvatarKey('man');
     }
     // Re-sync when server-backed fields change. Omit `departments` (query) from deps — it would reset the form mid-edit.
   }, [
@@ -154,6 +161,7 @@ export default function UserForm({
     account?.allowed_routes,
     account?.powerbi_dashboard_ids,
     account?.departments,
+    account?.avatar_key,
   ]);
 
   function departmentsPayload(): string[] {
@@ -212,6 +220,7 @@ export default function UserForm({
           String(role).toLowerCase() === 'topic' && editableTopicCode !== TOPIC_SELECT_NONE
             ? editableTopicCode
             : null,
+        avatar_key: avatarKey,
       };
 
       if (isEdit && account) {
@@ -294,6 +303,9 @@ export default function UserForm({
                     } else {
                       setEditableTopicCode(TOPIC_SELECT_NONE);
                     }
+                    if (String(v).toLowerCase() === 'case worker') {
+                      setDefaultRoute('/main-plan/refugees/case-story');
+                    }
                   }}
                 >
                   <SelectTrigger className="min-h-11">
@@ -307,6 +319,32 @@ export default function UserForm({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Profile avatar</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {AVATAR_OPTIONS.map((opt) => {
+                    const selected = avatarKey === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setAvatarKey(opt.key)}
+                        className={cn(
+                          'flex flex-col items-center gap-2 rounded-lg border p-2 transition-colors',
+                          selected
+                            ? 'border-primary bg-primary/5 ring-2 ring-primary/30'
+                            : 'border-border hover:bg-muted/50'
+                        )}
+                      >
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src={opt.path} alt={opt.label} />
+                        </Avatar>
+                        <span className="text-[10px] text-muted-foreground">{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {String(role).toLowerCase() === 'topic' ? (
                 <div className="space-y-2">
