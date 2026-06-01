@@ -27,6 +27,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -310,6 +311,21 @@ export default function StrategicTopicKpiTable({
     setNotes('');
   };
 
+  const openCreate = () => {
+    resetForm();
+    const mine = userDepartmentCodes(user);
+    if (user?.role === 'department' && mine.length > 0) {
+      setSelectedDeptCodes(
+        mine.filter((c) => departments.some((d) => String(d.code).toLowerCase() === c))
+      );
+    } else {
+      const defaults = pickDefaultDeptCodesForNewRow(user, departments);
+      if (defaults.length > 0) setSelectedDeptCodes(defaults);
+    }
+    setSelectedTopicCodes([strategicTopicCode]);
+    setOpen(true);
+  };
+
   const openEdit = (row: StrategicTopicKpiRow) => {
     setEditing(row);
     setMainPlanObjectiveId(row.main_objective_id ?? null);
@@ -363,7 +379,6 @@ export default function StrategicTopicKpiTable({
   };
 
   const handleSave = async () => {
-    if (!editing) return;
     if (!activity.trim()) {
       toast({ title: 'Activity required', variant: 'destructive' });
       return;
@@ -391,8 +406,24 @@ export default function StrategicTopicKpiTable({
         status,
         notes: notes.trim() || null,
       };
-      await updateStrategicTopicKpiRow(editing.id, payload);
-      toast({ title: 'Saved' });
+      if (editing) {
+        await updateStrategicTopicKpiRow(editing.id, payload);
+        toast({ title: 'Saved' });
+      } else {
+        const created = await createStrategicTopicKpiRow(
+          payload as Omit<
+            StrategicTopicKpiRow,
+            'id' | 'created_at' | 'updated_at' | 'main_kpi' | 'main_objective' | 'main_pillar'
+          >
+        );
+        mergeRows((prev) => {
+          if (prev.some((r) => r.id === created.id)) {
+            return sortRowsForDisplay(prev.map((r) => (r.id === created.id ? created : r)));
+          }
+          return sortRowsForDisplay([...prev, created]);
+        });
+        toast({ title: 'KPI added' });
+      }
       setOpen(false);
       resetForm();
       onRefresh();
@@ -783,6 +814,19 @@ export default function StrategicTopicKpiTable({
                   Reset
                 </Button>
               </div>
+              {canCreateStrategicTopicRow(user, strategicTopicCode) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={openCreate}
+                  disabled={departments.length === 0}
+                  title="Add a KPI with the full form"
+                  className="h-11 shrink-0 gap-1.5 px-3 text-xs sm:h-8 sm:px-2.5"
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                  Add KPI
+                </Button>
+              )}
               {hasActiveFilters && (
                 <Button
                   type="button"
@@ -1427,7 +1471,12 @@ export default function StrategicTopicKpiTable({
       <Dialog open={open} onOpenChange={(v) => { if (!v) { setOpen(false); resetForm(); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit row</DialogTitle>
+            <DialogTitle>{editing ? 'Edit row' : 'Add KPI'}</DialogTitle>
+            <DialogDescription>
+              {editing
+                ? 'Update this strategic topic KPI row.'
+                : 'Create a new KPI row for this topic. Use the + row at the bottom of the table for a quick blank row.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -1523,7 +1572,7 @@ export default function StrategicTopicKpiTable({
             </Button>
             <Button onClick={() => void handleSave()} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save
+              {editing ? 'Save' : 'Add KPI'}
             </Button>
           </DialogFooter>
         </DialogContent>

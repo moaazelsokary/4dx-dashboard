@@ -34,6 +34,10 @@ const RefugeesCaseStoryPage = lazy(() => import("./pages/strategic-topics/Refuge
 const ReturneesPage = lazy(() => import("./pages/strategic-topics/ReturneesPage"));
 const ReliefPage = lazy(() => import("./pages/strategic-topics/ReliefPage"));
 const AwarenessPage = lazy(() => import("./pages/strategic-topics/AwarenessPage"));
+const PwdPage = lazy(() => import("./pages/strategic-topics/PwdPage"));
+const FundingPage = lazy(() => import("./pages/strategic-topics/FundingPage"));
+const CommunityPage = lazy(() => import("./pages/strategic-topics/CommunityPage"));
+const MealPage = lazy(() => import("./pages/meal/MealPage"));
 
 const queryClient = new QueryClient();
 
@@ -98,6 +102,9 @@ const App = () => (
               <Route path="/main-plan/returnees" element={<GuardedRoute><ReturneesPage /></GuardedRoute>} />
               <Route path="/main-plan/relief" element={<GuardedRoute><ReliefPage /></GuardedRoute>} />
               <Route path="/main-plan/awareness" element={<GuardedRoute><AwarenessPage /></GuardedRoute>} />
+              <Route path="/main-plan/pwd" element={<GuardedRoute><PwdPage /></GuardedRoute>} />
+              <Route path="/main-plan/funding" element={<GuardedRoute><FundingPage /></GuardedRoute>} />
+              <Route path="/main-plan/community" element={<GuardedRoute><CommunityPage /></GuardedRoute>} />
               <Route path="/department-objectives" element={<GuardedRoute><DepartmentObjectives /></GuardedRoute>} />
               <Route path="/test" element={<GuardedRoute><TestConnection /></GuardedRoute>} />
               <Route path="/summary" element={<GuardedRoute><Summary /></GuardedRoute>} />
@@ -106,6 +113,7 @@ const App = () => (
               <Route path="/settings" element={<GuardedRoute><Settings /></GuardedRoute>} />
               <Route path="/admin/configuration" element={<GuardedRoute><Configuration /></GuardedRoute>} />
               <Route path="/pms-odoo-metrics" element={<GuardedRoute><PMSOdooMetrics /></GuardedRoute>} />
+              <Route path="/meal" element={<GuardedRoute><MealPage /></GuardedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

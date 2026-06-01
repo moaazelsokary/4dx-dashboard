@@ -9,13 +9,10 @@ const { getValidPowerbiDashboardIdSet } = require('./powerbi-dashboards-crud.cjs
 /** Strategic topic code for role `topic` (must match wig strategic_topic_kpi_rows topics). */
 const VALID_AVATAR_KEYS = new Set(['hairWoman', 'woman', 'man']);
 
-const EDITABLE_STRATEGIC_TOPIC_CODES = new Set([
-  'volunteers',
-  'refugees',
-  'returnees',
-  'relief',
-  'awareness',
-]);
+const {
+  EDITABLE_STRATEGIC_TOPIC_CODES,
+  TOPIC_CODES_LIST,
+} = require('./strategic-topics.cjs');
 
 /** Persist role as lowercase `topic` so JWT and route checks stay consistent. */
 function normalizeRoleForStorage(role) {
@@ -33,6 +30,9 @@ const ALLOWED_APP_PATHS = new Set([
   '/main-plan/returnees',
   '/main-plan/relief',
   '/main-plan/awareness',
+  '/main-plan/pwd',
+  '/main-plan/funding',
+  '/main-plan/community',
   '/department-objectives',
   '/test',
   '/summary',
@@ -41,6 +41,7 @@ const ALLOWED_APP_PATHS = new Set([
   '/settings',
   '/admin/configuration',
   '/pms-odoo-metrics',
+  '/meal',
   '/access-denied',
 ]);
 
@@ -241,7 +242,7 @@ async function handleAccountsCrud(opts) {
           json: {
             success: false,
             error:
-              'Role "topic" requires editable_strategic_topic (volunteers | refugees | returnees | relief | awareness)',
+              `Role "topic" requires editable_strategic_topic (${TOPIC_CODES_LIST})`,
           },
         };
       }
@@ -386,7 +387,7 @@ async function handleAccountsCrud(opts) {
           json: {
             success: false,
             error:
-              'Topic role requires editable_strategic_topic (volunteers | refugees | returnees | relief | awareness)',
+              `Topic role requires editable_strategic_topic (${TOPIC_CODES_LIST})`,
           },
         };
       } else {

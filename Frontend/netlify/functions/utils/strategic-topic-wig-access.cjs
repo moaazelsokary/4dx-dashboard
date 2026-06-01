@@ -2,15 +2,7 @@
  * WIG strategic-topic API access — aligns with frontend route overrides (Viewer, case worker).
  */
 
-const STRATEGIC_TOPIC_CODES = ['volunteers', 'refugees', 'returnees', 'relief', 'awareness'];
-
-const TOPIC_BASE_PATH = {
-  volunteers: '/main-plan/volunteers',
-  refugees: '/main-plan/refugees',
-  returnees: '/main-plan/returnees',
-  relief: '/main-plan/relief',
-  awareness: '/main-plan/awareness',
-};
+const { STRATEGIC_TOPIC_CODES, TOPIC_BASE_PATH } = require('./strategic-topics.cjs');
 
 const REFUGEES_CASE_STORY_PATH = '/main-plan/refugees/case-story';
 

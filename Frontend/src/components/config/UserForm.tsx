@@ -33,7 +33,7 @@ import { AVATAR_OPTIONS, type AvatarKey, isAvatarKey } from '@/config/avatars';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 
-const ROLE_OPTIONS = ['CEO', 'Admin', 'department', 'topic', 'project', 'Viewer', 'case worker'] as const;
+const ROLE_OPTIONS = ['CEO', 'Admin', 'M&E', 'department', 'topic', 'project', 'Viewer', 'case worker'] as const;
 
 const TOPIC_SELECT_NONE = '__none__';
 
@@ -101,6 +101,11 @@ export default function UserForm({
     return getPowerbiRoutingCatalog();
   }, [pbiRows]);
 
+  /** Re-sync form only when opening or when this account row changes on the server — not on every accounts poll (array refs). */
+  const accountSyncKey = account
+    ? `${account.id}:${account.updated_at ?? ''}`
+    : 'new';
+
   useEffect(() => {
     if (!open) return;
     if (account) {
@@ -148,21 +153,7 @@ export default function UserForm({
       setEditableTopicCode(TOPIC_SELECT_NONE);
       setAvatarKey('man');
     }
-    // Re-sync when server-backed fields change. Omit `departments` (query) from deps — it would reset the form mid-edit.
-  }, [
-    open,
-    account?.id,
-    account?.updated_at,
-    account?.username,
-    account?.role,
-    account?.editable_strategic_topic,
-    account?.is_active,
-    account?.default_route,
-    account?.allowed_routes,
-    account?.powerbi_dashboard_ids,
-    account?.departments,
-    account?.avatar_key,
-  ]);
+  }, [open, accountSyncKey]);
 
   function departmentsPayload(): string[] {
     if (String(role).toLowerCase() === 'topic') return [];

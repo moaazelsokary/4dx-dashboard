@@ -1,21 +1,14 @@
-import type { Department, StrategicTopicCode, StrategicTopicKpiRow, StrategicTopicKpiStatus } from '@/types/wig';
+import type { Department, StrategicTopicKpiRow, StrategicTopicKpiStatus } from '@/types/wig';
 import type { User } from '@/services/authService';
+import {
+  STRATEGIC_TOPIC_CODES,
+  STRATEGIC_TOPIC_LABELS,
+  type StrategicTopicCode,
+  isStrategicTopicCode,
+} from '@/config/strategicTopics';
 
-export const STRATEGIC_TOPIC_CODES: StrategicTopicCode[] = [
-  'volunteers',
-  'refugees',
-  'returnees',
-  'relief',
-  'awareness',
-];
-
-export const STRATEGIC_TOPIC_LABELS: Record<StrategicTopicCode, string> = {
-  volunteers: 'Volunteers',
-  refugees: 'Refugees',
-  returnees: 'Returnees',
-  relief: 'Relief',
-  awareness: 'Awareness',
-};
+export type { StrategicTopicCode };
+export { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS, isStrategicTopicCode };
 
 export const STRATEGIC_TOPIC_STATUSES: StrategicTopicKpiStatus[] = ['Completed', 'In Progress', 'On Hold'];
 

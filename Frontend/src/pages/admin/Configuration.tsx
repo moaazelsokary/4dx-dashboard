@@ -8,7 +8,7 @@ import PermissionList from '@/components/config/PermissionList';
 import DataSourceMappingList from '@/components/config/DataSourceMappingList';
 import UserList from '@/components/config/UserList';
 import PowerbiDashboardList from '@/components/config/PowerbiDashboardList';
-import type { User } from '@/services/authService';
+import { getCurrentUser, type User } from '@/services/authService';
 
 const CONFIG_TABS = ['locks', 'logs', 'permissions', 'mappings', 'users', 'powerbi-dashboards'] as const;
 
@@ -24,20 +24,22 @@ export default function Configuration() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      navigate('/');
-      return;
-    }
+    const syncUser = () => {
+      const userObj = getCurrentUser();
+      if (!userObj) {
+        navigate('/');
+        return;
+      }
+      if (!['Admin', 'CEO'].includes(userObj.role)) {
+        navigate('/access-denied');
+        return;
+      }
+      setUser(userObj);
+    };
 
-    const userObj = JSON.parse(userData);
-    // Only Admin and CEO can access Configuration
-    if (!['Admin', 'CEO'].includes(userObj.role)) {
-      navigate('/access-denied');
-      return;
-    }
-
-    setUser(userObj as User);
+    syncUser();
+    window.addEventListener('auth-user-updated', syncUser);
+    return () => window.removeEventListener('auth-user-updated', syncUser);
   }, [navigate]);
 
   if (!user) {

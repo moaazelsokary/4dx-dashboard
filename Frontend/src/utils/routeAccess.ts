@@ -1,6 +1,8 @@
 import type { User } from '@/services/authService';
 import { hasPowerBINavigationAccess } from '@/config/powerbi';
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
+import { isMealRole, MEAL_PATH } from '@/config/mealAccess';
+import { STRATEGIC_TOPIC_PATHS } from '@/config/strategicTopics';
 
 /** Paths that never require the route-override check (handled separately). */
 export const PUBLIC_PATHS = new Set(['/', '/privacy-policy', '/terms-of-service']);
@@ -30,12 +32,8 @@ export function getInheritedRoutesForUser(user: User): Set<string> {
 
   if (isCEO || isDept || isTopic) {
     paths.add('/main-plan');
-    paths.add('/main-plan/volunteers');
-    paths.add('/main-plan/refugees');
+    for (const p of STRATEGIC_TOPIC_PATHS) paths.add(p);
     paths.add(REFUGEES_CASE_STORY_PATH);
-    paths.add('/main-plan/returnees');
-    paths.add('/main-plan/relief');
-    paths.add('/main-plan/awareness');
   }
   if (isCEO || isDept) {
     paths.add('/wig-plan-2025');
@@ -54,6 +52,10 @@ export function getInheritedRoutesForUser(user: User): Set<string> {
     paths.add('/admin/configuration');
     paths.add('/pms-odoo-metrics');
     paths.add('/test');
+  }
+
+  if (isCEO || isAdmin || isMealRole(role)) {
+    paths.add(MEAL_PATH);
   }
 
   paths.add('/access-denied');

@@ -224,7 +224,10 @@ BEGIN
     CREATE TABLE [dbo].[strategic_topic_kpi_rows] (
         [id] INT IDENTITY(1,1) PRIMARY KEY,
         [strategic_topic] NVARCHAR(50) NOT NULL
-            CHECK ([strategic_topic] IN (N'volunteers', N'refugees', N'returnees', N'relief', N'awareness')),
+            CHECK ([strategic_topic] IN (
+              N'volunteers', N'refugees', N'returnees', N'relief', N'awareness',
+              N'pwd', N'funding', N'community'
+            )),
         [main_objective_id] INT NULL,
         [objective_text] NVARCHAR(500) NULL,
         [activity] NVARCHAR(1000) NOT NULL,
@@ -336,7 +339,10 @@ BEGIN
     CREATE TABLE [dbo].[strategic_topic_content_files] (
         [id] INT IDENTITY(1,1) PRIMARY KEY,
         [strategic_topic] NVARCHAR(50) NOT NULL
-            CHECK ([strategic_topic] IN (N'volunteers', N'refugees', N'returnees', N'relief', N'awareness')),
+            CHECK ([strategic_topic] IN (
+              N'volunteers', N'refugees', N'returnees', N'relief', N'awareness',
+              N'pwd', N'funding', N'community'
+            )),
         [display_name] NVARCHAR(500) NOT NULL,
         [description] NVARCHAR(MAX) NULL,
         [original_file_name] NVARCHAR(500) NOT NULL,

@@ -228,7 +228,14 @@ function hydrateUserFromStorageBlob(u: User): User {
       if (String(payload.role || '').trim().toLowerCase() === 'topic') {
         out.role = 'topic';
       }
+      const jwtAvatar = payload.avatarKey;
+      if (jwtAvatar != null && String(jwtAvatar).trim() !== '') {
+        out.avatarKey = String(jwtAvatar).trim();
+      }
     }
+  }
+  if (out.avatarKey == null && out.avatar_key != null && String(out.avatar_key).trim() !== '') {
+    out.avatarKey = String(out.avatar_key).trim();
   }
   return out;
 }
@@ -259,6 +266,7 @@ export interface AuthSessionUserPayload {
   allowedRoutes: string[] | null;
   powerbiDashboardIds: string[] | null;
   editableStrategicTopic?: string | null;
+  avatarKey?: string | null;
 }
 
 /**
@@ -314,7 +322,33 @@ export function mergeSessionIntoStoredUser(session: AuthSessionUserPayload): Use
   if ('editableStrategicTopic' in session) {
     next.editableStrategicTopic = session.editableStrategicTopic ?? null;
   }
+  if ('avatarKey' in session) {
+    next.avatarKey = session.avatarKey ?? null;
+    next.avatar_key = session.avatarKey ?? null;
+  }
   localStorage.setItem(USER_KEY, JSON.stringify(next));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-user-updated'));
+  }
+  return next;
+}
+
+/** Merge account fields into localStorage for the signed-in user (e.g. after admin self-edit). */
+export function patchStoredUserForUsername(
+  username: string,
+  patch: Pick<User, 'avatarKey' | 'avatar_key' | 'defaultRoute' | 'allowedRoutes' | 'powerbiDashboardIds' | 'editableStrategicTopic'>
+): User | null {
+  const cur = getCurrentUser();
+  if (!cur || cur.username !== username) return null;
+  const next: User = { ...cur, ...patch };
+  if (patch.avatarKey !== undefined) {
+    next.avatarKey = patch.avatarKey;
+    next.avatar_key = patch.avatarKey;
+  }
+  localStorage.setItem(USER_KEY, JSON.stringify(next));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-user-updated'));
+  }
   return next;
 }
 

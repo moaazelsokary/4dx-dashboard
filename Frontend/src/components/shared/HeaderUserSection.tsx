@@ -109,7 +109,7 @@ export function HeaderUserSection({
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Avatar className="w-9 h-9 sm:w-10 sm:h-10 shrink-0">
+            <Avatar className="w-9 h-9 sm:w-10 sm:h-10 shrink-0" key={user.avatarKey ?? user.avatar_key ?? 'default'}>
               <AvatarImage
                 src={resolveAvatarSrc(user)}
                 alt={user.username}

@@ -14,6 +14,8 @@ const {
 
 /** CJS: `netlify/functions/package.json` sets "type":"commonjs" (root package is "module"). */
 const { handler: beneficiariesApiHandler } = require('./netlify/functions/beneficiaries-api.js');
+const { canAccessMeal } = require('./netlify/functions/utils/meal-access.cjs');
+const Busboy = require('busboy');
 
 const app = express();
 const PORT = 3000;
@@ -365,7 +367,7 @@ async function handleAuthSession(req, res) {
       .request()
       .input('id', sql.Int, userId)
       .query(`
-        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic
+        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, avatar_key
         FROM users
         WHERE id = @id
       `);
@@ -381,6 +383,10 @@ async function handleAuthSession(req, res) {
       row.editable_strategic_topic != null && String(row.editable_strategic_topic).trim()
         ? String(row.editable_strategic_topic).trim().toLowerCase()
         : null;
+    const avatarKey =
+      row.avatar_key != null && String(row.avatar_key).trim() !== ''
+        ? String(row.avatar_key).trim()
+        : null;
     return res.json({
       success: true,
       user: {
@@ -388,6 +394,7 @@ async function handleAuthSession(req, res) {
         allowedRoutes: parseJsonArrayColumnSession(row.allowed_routes),
         powerbiDashboardIds: parseJsonArrayColumnSession(row.powerbi_dashboard_ids),
         editableStrategicTopic,
+        avatarKey,
       },
     });
   } catch (e) {
@@ -696,6 +703,126 @@ beneficiariesApiRouter.use(async (req, res) => {
   }
 });
 app.use('/.netlify/functions/beneficiaries-api', beneficiariesApiRouter);
+
+// ---- MEAL validation API (local dev — proxies to Python FastAPI) ----
+/** Local dev default when .env.local omits MEAL_VALIDATION_API_URL (auth-proxy only). */
+const MEAL_UPSTREAM = (
+  process.env.MEAL_VALIDATION_API_URL || 'http://127.0.0.1:8090'
+).replace(/\/$/, '');
+const MEAL_API_KEY = (process.env.MEAL_VALIDATION_API_KEY || 'dev-local-key').trim();
+const MEAL_MAX_BYTES = Number(process.env.MEAL_MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
+
+function parseMealMultipartReq(req) {
+  return new Promise((resolve, reject) => {
+    const bb = Busboy({ headers: req.headers });
+    const fields = {};
+    let fileBuffer = null;
+    let fileName = 'upload.xlsx';
+    let fileMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    bb.on('file', (fieldname, file, info) => {
+      if (fieldname !== 'file') {
+        file.resume();
+        return;
+      }
+      fileName = info.filename || fileName;
+      fileMime = info.mimeType || fileMime;
+      const chunks = [];
+      file.on('data', (d) => chunks.push(d));
+      file.on('end', () => {
+        fileBuffer = Buffer.concat(chunks);
+      });
+    });
+    bb.on('field', (name, val) => {
+      fields[name] = val;
+    });
+    bb.on('error', reject);
+    bb.on('finish', () => {
+      if (!fileBuffer || fileBuffer.length === 0) {
+        reject(new Error('No file uploaded'));
+        return;
+      }
+      resolve({
+        fileBuffer,
+        fileName,
+        fileMime,
+        sheetName: fields.sheet_name || fields.sheetName || null,
+        validateMode: fields.validate_mode || fields.validateMode || 'both',
+      });
+    });
+    req.pipe(bb);
+  });
+}
+
+async function forwardMealValidateToPython(parsed) {
+  if (!MEAL_UPSTREAM) {
+    return {
+      status: 503,
+      body: JSON.stringify({ ok: false, error: 'MEAL_VALIDATION_API_URL is not configured' }),
+    };
+  }
+  const boundary = `----meal${Date.now()}${Math.random().toString(36).slice(2)}`;
+  const headerPart = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${String(parsed.fileName).replace(/"/g, '')}"\r\nContent-Type: ${parsed.fileMime}\r\n\r\n`,
+    'utf8'
+  );
+  const mode = String(parsed.validateMode || 'both').trim() || 'both';
+  let footer = `\r\n--${boundary}\r\nContent-Disposition: form-data; name="validate_mode"\r\n\r\n${mode}\r\n`;
+  if (parsed.sheetName) {
+    footer += `--${boundary}\r\nContent-Disposition: form-data; name="sheet_name"\r\n\r\n${parsed.sheetName}\r\n`;
+  }
+  footer += `--${boundary}--\r\n`;
+  const body = Buffer.concat([headerPart, parsed.fileBuffer, Buffer.from(footer, 'utf8')]);
+  const headers = {
+    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    'Content-Length': String(body.length),
+  };
+  if (MEAL_API_KEY) headers['X-Meal-Api-Key'] = MEAL_API_KEY;
+  const res = await fetch(`${MEAL_UPSTREAM}/api/meal/validate`, { method: 'POST', headers, body });
+  return { status: res.status, body: await res.text() };
+}
+
+const mealValidateApiRouter = express.Router();
+mealValidateApiRouter.options('/validate', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.sendStatus(200);
+});
+mealValidateApiRouter.post('/validate', async (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const user = getUserFromRequest(req);
+  if (!user) {
+    return res.status(401).json({ ok: false, error: 'Authentication required' });
+  }
+  if (!canAccessMeal(user)) {
+    return res.status(403).json({ ok: false, error: 'MEAL access required (CEO, Admin, or M&E role)' });
+  }
+  try {
+    const parsed = await parseMealMultipartReq(req);
+    if (parsed.fileBuffer.length > MEAL_MAX_BYTES) {
+      return res.status(413).json({
+        ok: false,
+        error: `File exceeds ${Math.floor(MEAL_MAX_BYTES / (1024 * 1024))} MB limit`,
+      });
+    }
+    const lower = (parsed.fileName || '').toLowerCase();
+    if (!lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
+      return res.status(422).json({ ok: false, error: 'Only .xlsx or .xls files are supported' });
+    }
+    console.log('[Auth Proxy] MEAL validate', {
+      user: user.username,
+      fileName: parsed.fileName,
+      bytes: parsed.fileBuffer.length,
+    });
+    const out = await forwardMealValidateToPython(parsed);
+    res.status(out.status).send(out.body);
+  } catch (err) {
+    console.error('[Auth Proxy] MEAL validate error:', err.message);
+    res.status(400).json({ ok: false, error: err.message || 'Invalid upload' });
+  }
+});
+app.use('/.netlify/functions/meal-validate-api', mealValidateApiRouter);
 
 // Derived metrics CRUD (Admin/CEO only)
 app.post('/.netlify/functions/metrics-api/derived', requireAdminOrCeo, async (req, res) => {

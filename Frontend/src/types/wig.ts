@@ -187,8 +187,8 @@ export interface DepartmentBreakdown {
 
 export type KPIBreakdownSource = 'bau' | 'strategic' | 'both';
 
-/** Strategic Topics pages (Volunteers, Refugees, …) */
-export type StrategicTopicCode = 'volunteers' | 'refugees' | 'returnees' | 'relief' | 'awareness';
+/** Strategic Topics pages (Volunteers, Refugees, …) — see config/strategicTopics.ts */
+export type { StrategicTopicCode } from '@/config/strategicTopics';
 
 export type StrategicTopicKpiStatus = 'Completed' | 'In Progress' | 'On Hold';
 

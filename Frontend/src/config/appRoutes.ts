@@ -11,6 +11,9 @@ export const APP_ROUTE_OPTIONS: { path: string; label: string }[] = [
   { path: '/main-plan/returnees', label: 'Strategic Topics - Returnees' },
   { path: '/main-plan/relief', label: 'Strategic Topics - Relief' },
   { path: '/main-plan/awareness', label: 'Strategic Topics - Awareness' },
+  { path: '/main-plan/pwd', label: 'Strategic Topics - PWD' },
+  { path: '/main-plan/funding', label: 'Strategic Topics - Funding' },
+  { path: '/main-plan/community', label: 'Strategic Topics - Community' },
   { path: '/department-objectives', label: 'Department objectives' },
   { path: '/test', label: 'Test connection' },
   { path: '/summary', label: 'Projects summary' },
@@ -19,6 +22,7 @@ export const APP_ROUTE_OPTIONS: { path: string; label: string }[] = [
   { path: '/settings', label: 'Settings' },
   { path: '/admin/configuration', label: 'Configuration' },
   { path: '/pms-odoo-metrics', label: 'PMS & Odoo metrics' },
+  { path: '/meal', label: 'MEAL' },
   { path: '/access-denied', label: 'Access denied' },
 ];
 

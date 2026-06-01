@@ -61,6 +61,7 @@ export default defineConfig(({ mode }) => {
         "/.netlify/functions/config-api": devProxyToAuthBackend(),
         "/.netlify/functions/metrics-api": devProxyToAuthBackend(),
         "/.netlify/functions/beneficiaries-api": devProxyToAuthBackend(),
+        "/.netlify/functions/meal-validate-api": devProxyToAuthBackend(),
         // RASCI summary served by auth-proxy (3000)
         "/api/wig/rasci/summary-by-department": devProxyToAuthBackend(),
         // Other wig APIs from wig-proxy (3003)

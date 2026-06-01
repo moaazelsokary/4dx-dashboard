@@ -147,6 +147,11 @@ function hasPermission(user, resource, action) {
     return action === 'read';
   }
 
+  /** M&E staff: read-only WIG/MEAL APIs (validation proxy uses action read). */
+  if (roleNorm === 'm&e') {
+    return action === 'read';
+  }
+
   return false;
 }
 

@@ -8,7 +8,7 @@
 const sql = require('mssql');
 const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
 
-const STRATEGIC_TOPICS = ['volunteers', 'refugees', 'returnees', 'relief', 'awareness'];
+const { STRATEGIC_TOPICS } = require('./utils/strategic-topics.cjs');
 const ALLOWED_STATUS = ['Completed', 'In Progress', 'On Hold'];
 const DELIM = '||';
 

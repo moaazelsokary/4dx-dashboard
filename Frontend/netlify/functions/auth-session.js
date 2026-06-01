@@ -157,7 +157,7 @@ exports.handler = async (event) => {
       .request()
       .input('id', sql.Int, userId)
       .query(`
-        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic
+        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, avatar_key
         FROM users
         WHERE id = @id
       `);
@@ -180,6 +180,10 @@ exports.handler = async (event) => {
       row.editable_strategic_topic != null && String(row.editable_strategic_topic).trim()
         ? String(row.editable_strategic_topic).trim().toLowerCase()
         : null;
+    const avatarKey =
+      row.avatar_key != null && String(row.avatar_key).trim() !== ''
+        ? String(row.avatar_key).trim()
+        : null;
     const body = {
       success: true,
       user: {
@@ -187,6 +191,7 @@ exports.handler = async (event) => {
         allowedRoutes: parseJsonArrayColumn(row.allowed_routes),
         powerbiDashboardIds: parseJsonArrayColumn(row.powerbi_dashboard_ids),
         editableStrategicTopic,
+        avatarKey,
       },
     };
 

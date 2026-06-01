@@ -26,6 +26,8 @@ import {
 } from '@/config/powerbi';
 import { APP_ROUTE_OPTIONS } from '@/config/appRoutes';
 import UserForm from './UserForm';
+import { getCurrentUser, patchStoredUserForUsername } from '@/services/authService';
+import { isAvatarKey } from '@/config/avatars';
 
 function routeLabel(path: string): string {
   return APP_ROUTE_OPTIONS.find((o) => o.path === path)?.label || path;
@@ -141,6 +143,11 @@ export default function UserList() {
         const list = old ?? [];
         return list.map((u) => (u.id === updated.id ? updated : u));
       });
+      const me = getCurrentUser();
+      if (me && me.username === updated.username) {
+        const ak = updated.avatar_key && isAvatarKey(updated.avatar_key) ? updated.avatar_key : null;
+        patchStoredUserForUsername(updated.username, { avatarKey: ak, avatar_key: ak });
+      }
       void queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: 'User updated' });
     },

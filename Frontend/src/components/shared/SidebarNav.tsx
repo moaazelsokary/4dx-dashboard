@@ -1,6 +1,6 @@
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
-import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet, BookOpen } from 'lucide-react';
+import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet, BookOpen, ClipboardCheck } from 'lucide-react';
 import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
 import { OdooIcon } from '@/components/icons/OdooIcon';
 import { RASCIIcon } from '@/components/icons/RASCIIcon';
@@ -9,28 +9,16 @@ import { AppLogo } from '@/components/shared/AppLogo';
 import type { User } from '@/services/authService';
 import { canAccessAppPath } from '@/utils/routeAccess';
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
+import { MEAL_PATH } from '@/config/mealAccess';
+import { STRATEGIC_TOPIC_NAV_ITEMS } from '@/config/strategicTopics';
 
-const STRATEGIC_TOPIC_NAV = [
-  { key: 'main-volunteers', path: '/main-plan/volunteers', label: 'Volunteers', iconSrc: '/volunteers.png' as const },
-  { key: 'main-refugees', path: '/main-plan/refugees', label: 'Refugees', iconSrc: '/Refugees.png' as const },
-  {
-    key: 'main-returnees',
-    path: '/main-plan/returnees',
-    label: 'Returnees',
-    iconSrc: '/Returnees.png' as const,
-    iconClassName:
-      '[filter:brightness(0)_saturate(100%)_invert(52%)_sepia(61%)_saturate(654%)_hue-rotate(120deg)_brightness(92%)_contrast(97%)]',
-  },
-  { key: 'main-relief', path: '/main-plan/relief', label: 'Relief', iconSrc: '/Relief.png' as const },
-  {
-    key: 'main-awareness',
-    path: '/main-plan/awareness',
-    label: 'Awareness',
-    iconSrc: '/Awareness.png' as const,
-    iconClassName:
-      '[filter:brightness(0)_saturate(100%)_invert(52%)_sepia(61%)_saturate(654%)_hue-rotate(120deg)_brightness(92%)_contrast(97%)]',
-  },
-] as const;
+const STRATEGIC_TOPIC_NAV = STRATEGIC_TOPIC_NAV_ITEMS.map((t) => ({
+  key: `main-${t.code}`,
+  path: t.path,
+  label: t.label,
+  iconSrc: t.iconSrc,
+  ...('iconClassName' in t && t.iconClassName ? { iconClassName: t.iconClassName } : {}),
+}));
 
 interface SidebarNavProps {
   user: User | null;
@@ -70,15 +58,12 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     setExpandedSections((prev) => {
       const next = new Set(prev);
       if (location.pathname === '/main-plan' || location.pathname.startsWith('/main-plan')) next.add('main-plan');
-      if (location.pathname.startsWith('/main-plan/volunteers')
-        || location.pathname.startsWith('/main-plan/refugees')
-        || location.pathname.startsWith('/main-plan/returnees')
-        || location.pathname.startsWith('/main-plan/relief')
-        || location.pathname.startsWith('/main-plan/awareness')) {
+      if (STRATEGIC_TOPIC_NAV_ITEMS.some((t) => location.pathname.startsWith(t.path))) {
         next.add('strategic-topics');
       }
       if (location.pathname === '/department-objectives' || location.pathname.startsWith('/department-objectives')) next.add('department-objectives');
       if (location.pathname.startsWith('/admin/configuration')) next.add('configuration');
+      if (location.pathname.startsWith('/meal')) next.add('meal');
       return next;
     });
   }, [location.pathname]);
@@ -221,6 +206,8 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
             src={iconSrc}
             alt=""
             aria-hidden="true"
+            loading="lazy"
+            decoding="async"
             className={cn('h-6 w-6 shrink-0 object-contain', iconClassName)}
           />
         ) : (
@@ -252,13 +239,7 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
       location.pathname === path
       || (key === 'configuration' && location.pathname.startsWith('/admin/configuration'))
       || (key === 'strategic-topics'
-        && (
-          location.pathname.startsWith('/main-plan/volunteers')
-          || location.pathname.startsWith('/main-plan/refugees')
-          || location.pathname.startsWith('/main-plan/returnees')
-          || location.pathname.startsWith('/main-plan/relief')
-          || location.pathname.startsWith('/main-plan/awareness')
-        ));
+        && STRATEGIC_TOPIC_NAV_ITEMS.some((t) => location.pathname.startsWith(t.path)));
     const isExpanded = expandedSections.has(key) || isParentActive;
     const handleClick = () => {
       setExpandedSections((prev) => {
@@ -351,6 +332,9 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
       subNavItem('dept-rasci', '/department-objectives', 'rasci', 'RASCI Metrics', undefined, RASCIIcon),
     ];
     items.push(navItemWithChildren('department-objectives', '/department-objectives', isCEO ? 'Department Objectives' : 'My Objectives', Users, deptSub));
+  }
+  if (!caseWorker && canNav(MEAL_PATH) && shouldShowButton(MEAL_PATH)) {
+    items.push(navItem('meal', MEAL_PATH, 'MEAL', ClipboardCheck));
   }
   if (!caseWorker && canNav('/powerbi') && shouldShowButton('/powerbi')) {
     items.push(navItem('powerbi', '/powerbi', 'Power BI Dashboards', PowerBIIcon));

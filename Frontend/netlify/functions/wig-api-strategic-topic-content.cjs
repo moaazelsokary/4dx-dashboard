@@ -6,7 +6,7 @@
 
 const sql = require('mssql');
 
-const STRATEGIC_TOPICS = ['volunteers', 'refugees', 'returnees', 'relief', 'awareness'];
+const { STRATEGIC_TOPICS } = require('./utils/strategic-topics.cjs');
 const MAX_FILE_BYTES = 24 * 1024 * 1024; // 24 MB (keep below typical proxy limits)
 
 function normalizeRole(user) {
