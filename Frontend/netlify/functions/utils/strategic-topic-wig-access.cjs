@@ -45,9 +45,9 @@ function canReadStrategicTopicApi(user, topic) {
   const r = normalizeRole(user);
   if (r === 'ceo' || r === 'admin' || r === 'department') return true;
 
+  /** Topic role: read all strategic topic pillars; write is limited in row handlers. */
   if (r === 'topic') {
-    const home = editableStrategicTopicFromUser(user);
-    return !home || home === topicNorm;
+    return true;
   }
 
   const base = TOPIC_BASE_PATH[topicNorm];

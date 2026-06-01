@@ -85,16 +85,14 @@ function assertCanReadStrategicTopicContent(user, strategicTopicKey) {
   throw err;
 }
 
+const { userCanWriteStrategicTopic } = require('./utils/editable-strategic-topics.cjs');
+
 function assertCanWriteStrategicTopicContent(user, strategicTopicKey) {
   assertAuthenticated(user);
   if (isCeoOrAdmin(user)) return;
-  const key = String(strategicTopicKey || '').trim().toLowerCase();
   const r = normalizeRole(user);
-  if (r === 'topic') {
-    const home = editableStrategicTopicFromUser(user);
-    if (home && home === key) return;
-  }
-  const err = new Error('You can only modify files for your assigned strategic topic');
+  if (r === 'topic' && userCanWriteStrategicTopic(user, strategicTopicKey)) return;
+  const err = new Error('You can only modify files for your assigned strategic topic(s)');
   err.statusCode = 403;
   throw err;
 }

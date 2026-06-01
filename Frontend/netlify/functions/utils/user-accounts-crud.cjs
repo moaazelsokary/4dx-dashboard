@@ -13,6 +13,7 @@ const {
   EDITABLE_STRATEGIC_TOPIC_CODES,
   TOPIC_CODES_LIST,
 } = require('./strategic-topics.cjs');
+const { normalizeEditableStrategicTopicInput } = require('./editable-strategic-topics.cjs');
 
 /** Persist role as lowercase `topic` so JWT and route checks stay consistent. */
 function normalizeRoleForStorage(role) {
@@ -235,21 +236,20 @@ async function handleAccountsCrud(opts) {
     const roleTrim = String(role).trim();
     let editableStrategicTopicVal = null;
     if (roleTrim.toLowerCase() === 'topic') {
-      const rawEt = body.editable_strategic_topic;
-      if (rawEt == null || String(rawEt).trim() === '') {
+      const norm = normalizeEditableStrategicTopicInput(body);
+      if (norm.error) {
+        return { statusCode: 400, json: { success: false, error: norm.error } };
+      }
+      if (!norm.value) {
         return {
           statusCode: 400,
           json: {
             success: false,
-            error:
-              `Role "topic" requires editable_strategic_topic (${TOPIC_CODES_LIST})`,
+            error: `Role "topic" requires at least one editable topic (${TOPIC_CODES_LIST})`,
           },
         };
       }
-      editableStrategicTopicVal = String(rawEt).trim().toLowerCase();
-      if (!EDITABLE_STRATEGIC_TOPIC_CODES.has(editableStrategicTopicVal)) {
-        return { statusCode: 400, json: { success: false, error: 'Invalid editable_strategic_topic' } };
-      }
+      editableStrategicTopicVal = norm.value;
     }
 
     const avatarErr = normalizeAvatarKey(avatar_key);
@@ -279,7 +279,7 @@ async function handleAccountsCrud(opts) {
     ins.input('default_route', sql.NVarChar(sql.MAX), defaultRouteVal);
     ins.input('allowed_routes', sql.NVarChar(sql.MAX), routesJson);
     ins.input('powerbi_dashboard_ids', sql.NVarChar(sql.MAX), pbiJson);
-    ins.input('editable_strategic_topic', sql.NVarChar(50), editableStrategicTopicVal);
+    ins.input('editable_strategic_topic', sql.NVarChar(sql.MAX), editableStrategicTopicVal);
     ins.input('avatar_key', sql.NVarChar(32), avatarErr);
 
     const insertResult = await ins.query(`
@@ -365,33 +365,55 @@ async function handleAccountsCrud(opts) {
     }
 
     let nextEditableTopicSql = undefined;
-    if (role !== undefined || editable_strategic_topic !== undefined) {
+    if (
+      role !== undefined ||
+      editable_strategic_topic !== undefined ||
+      body.editable_strategic_topics !== undefined
+    ) {
       const nextRole = role !== undefined ? String(role).trim() : String(ex.role || '').trim();
       const isTopicRole = nextRole.toLowerCase() === 'topic';
-      let t;
-      if (editable_strategic_topic !== undefined) {
-        t =
-          editable_strategic_topic == null || String(editable_strategic_topic).trim() === ''
-            ? null
-            : String(editable_strategic_topic).trim().toLowerCase();
-      } else if (ex.editable_strategic_topic != null && String(ex.editable_strategic_topic).trim()) {
-        t = String(ex.editable_strategic_topic).trim().toLowerCase();
-      } else {
-        t = null;
-      }
       if (!isTopicRole) {
         nextEditableTopicSql = null;
-      } else if (!t || !EDITABLE_STRATEGIC_TOPIC_CODES.has(t)) {
+      } else if (
+        editable_strategic_topic !== undefined ||
+        body.editable_strategic_topics !== undefined
+      ) {
+        const norm = normalizeEditableStrategicTopicInput(body);
+        if (norm.error) {
+          return { statusCode: 400, json: { success: false, error: norm.error } };
+        }
+        if (!norm.value) {
+          return {
+            statusCode: 400,
+            json: {
+              success: false,
+              error: `Topic role requires at least one editable topic (${TOPIC_CODES_LIST})`,
+            },
+          };
+        }
+        nextEditableTopicSql = norm.value;
+      } else if (ex.editable_strategic_topic != null && String(ex.editable_strategic_topic).trim()) {
+        const norm = normalizeEditableStrategicTopicInput({
+          editable_strategic_topic: ex.editable_strategic_topic,
+        });
+        if (!norm.value) {
+          return {
+            statusCode: 400,
+            json: {
+              success: false,
+              error: `Topic role requires at least one editable topic (${TOPIC_CODES_LIST})`,
+            },
+          };
+        }
+        nextEditableTopicSql = norm.value;
+      } else {
         return {
           statusCode: 400,
           json: {
             success: false,
-            error:
-              `Topic role requires editable_strategic_topic (${TOPIC_CODES_LIST})`,
+            error: `Topic role requires at least one editable topic (${TOPIC_CODES_LIST})`,
           },
         };
-      } else {
-        nextEditableTopicSql = t;
       }
     }
 
@@ -432,7 +454,7 @@ async function handleAccountsCrud(opts) {
       sets.push('powerbi_dashboard_ids = @powerbi_dashboard_ids');
     }
     if (nextEditableTopicSql !== undefined) {
-      upd.input('editable_strategic_topic', sql.NVarChar(50), nextEditableTopicSql);
+      upd.input('editable_strategic_topic', sql.NVarChar(sql.MAX), nextEditableTopicSql);
       sets.push('editable_strategic_topic = @editable_strategic_topic');
     }
     if (avatar_key !== undefined) {

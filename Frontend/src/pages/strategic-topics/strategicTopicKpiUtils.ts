@@ -36,12 +36,27 @@ export function isCeoOrAdmin(user: User | null): boolean {
   return r === 'CEO' || r === 'Admin';
 }
 
-export function topicRoleEditableCode(user: User | null): StrategicTopicCode | null {
-  if (!user || String(user.role || '').trim().toLowerCase() !== 'topic') return null;
+/** Topic role: pillars this user may edit (`||`-delimited in DB / JWT). */
+export function topicRoleEditableCodes(user: User | null): StrategicTopicCode[] {
+  if (!user || String(user.role || '').trim().toLowerCase() !== 'topic') return [];
   const u = user as User & { editable_strategic_topic?: string | null };
   const raw = user.editableStrategicTopic ?? u.editable_strategic_topic;
-  const t = String(raw ?? '').trim().toLowerCase();
-  return STRATEGIC_TOPIC_CODES.includes(t as StrategicTopicCode) ? (t as StrategicTopicCode) : null;
+  return parsePipeList(raw)
+    .map((c) => c.toLowerCase())
+    .filter((c): c is StrategicTopicCode => isStrategicTopicCode(c));
+}
+
+/** First editable topic (e.g. default landing). */
+export function topicRoleEditableCode(user: User | null): StrategicTopicCode | null {
+  const codes = topicRoleEditableCodes(user);
+  return codes[0] ?? null;
+}
+
+export function topicRoleCanEditTopic(user: User | null, topic: StrategicTopicCode): boolean {
+  if (!user) return false;
+  if (isCeoOrAdmin(user)) return true;
+  if (String(user.role || '').trim().toLowerCase() !== 'topic') return false;
+  return topicRoleEditableCodes(user).includes(topic);
 }
 
 /** Row pillar from API (mssql may vary key casing). */
@@ -63,11 +78,11 @@ export function canEditStrategicTopicRow(
 ): boolean {
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
-  const topicHome = topicRoleEditableCode(user);
-  if (topicHome) {
+  if (String(user.role || '').trim().toLowerCase() === 'topic') {
     const rt = rowStrategicTopicLower(row);
-    if (rt === topicHome) return true;
-    if (pageTopic && topicHome === pageTopic && !rt) return true;
+    const editTopics = topicRoleEditableCodes(user);
+    if (rt && editTopics.includes(rt as StrategicTopicCode)) return true;
+    if (pageTopic && editTopics.includes(pageTopic) && !rt) return true;
     return false;
   }
   if (user.role !== 'department') return false;
@@ -83,8 +98,9 @@ export function canDeleteStrategicTopicRow(user: User | null): boolean {
 export function canCreateStrategicTopicRow(user: User | null, pageTopic: StrategicTopicCode): boolean {
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
-  const topicHome = topicRoleEditableCode(user);
-  if (topicHome) return topicHome === pageTopic;
+  if (String(user.role || '').trim().toLowerCase() === 'topic') {
+    return topicRoleCanEditTopic(user, pageTopic);
+  }
   return user.role === 'department' && userDepartmentCodes(user).length > 0;
 }
 
@@ -92,8 +108,7 @@ export function canCreateStrategicTopicRow(user: User | null, pageTopic: Strateg
 export function canManageStrategicTopicContent(user: User | null, pageTopic: StrategicTopicCode): boolean {
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
-  const topicHome = topicRoleEditableCode(user);
-  return Boolean(topicHome && topicHome === pageTopic);
+  return topicRoleCanEditTopic(user, pageTopic);
 }
 
 /** Default department pipe tokens for an inline-created row (department users: own dept only). */

@@ -27,15 +27,19 @@ import { mergePowerbiCatalogRows, getPowerbiRoutingCatalog } from '@/config/powe
 import { getPowerbiDashboards, POWERBI_DASHBOARDS_QUERY_KEY } from '@/services/configService';
 import type { AccountUser, AccountPayload } from '@/types/config';
 import { getDepartments } from '@/services/wigService';
-import type { Department, StrategicTopicCode } from '@/types/wig';
-import { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS } from '@/pages/strategic-topics/strategicTopicKpiUtils';
+import type { Department } from '@/types/wig';
+import {
+  STRATEGIC_TOPIC_CODES,
+  STRATEGIC_TOPIC_LABELS,
+  parsePipeList,
+  toPipeList,
+  type StrategicTopicCode,
+} from '@/pages/strategic-topics/strategicTopicKpiUtils';
 import { AVATAR_OPTIONS, type AvatarKey, isAvatarKey } from '@/config/avatars';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 
 const ROLE_OPTIONS = ['CEO', 'Admin', 'M&E', 'department', 'topic', 'project', 'Viewer', 'case worker'] as const;
-
-const TOPIC_SELECT_NONE = '__none__';
 
 const DEPT_SELECT_NONE = '__none__';
 const DEPT_SELECT_ALL = 'all';
@@ -75,8 +79,8 @@ export default function UserForm({
   const [selectedRoutes, setSelectedRoutes] = useState<string[]>([]);
   const [pbiInherit, setPbiInherit] = useState(true);
   const [selectedPbi, setSelectedPbi] = useState<string[]>([]);
-  /** Role `topic`: pillar this user may edit (required when role is topic). */
-  const [editableTopicCode, setEditableTopicCode] = useState<string>(TOPIC_SELECT_NONE);
+  /** Role `topic`: pillars this user may edit (stored as `||`-delimited codes). */
+  const [selectedEditableTopics, setSelectedEditableTopics] = useState<StrategicTopicCode[]>([]);
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('man');
   const [submitting, setSubmitting] = useState(false);
 
@@ -129,13 +133,12 @@ export default function UserForm({
       setPbiInherit(pbi === null || pbi === undefined);
       setSelectedPbi(pbi && Array.isArray(pbi) ? [...pbi] : []);
       if (String(account.role || '').toLowerCase() === 'topic') {
-        const et = account.editable_strategic_topic;
-        const code = et ? String(et).trim().toLowerCase() : '';
-        setEditableTopicCode(
-          STRATEGIC_TOPIC_CODES.includes(code as StrategicTopicCode) ? code : TOPIC_SELECT_NONE
+        const codes = parsePipeList(account.editable_strategic_topic).filter((c): c is StrategicTopicCode =>
+          STRATEGIC_TOPIC_CODES.includes(c as StrategicTopicCode)
         );
+        setSelectedEditableTopics(codes);
       } else {
-        setEditableTopicCode(TOPIC_SELECT_NONE);
+        setSelectedEditableTopics([]);
       }
       const ak = account.avatar_key;
       setAvatarKey(isAvatarKey(ak) ? ak : 'man');
@@ -150,7 +153,7 @@ export default function UserForm({
       setSelectedRoutes([]);
       setPbiInherit(true);
       setSelectedPbi([]);
-      setEditableTopicCode(TOPIC_SELECT_NONE);
+      setSelectedEditableTopics([]);
       setAvatarKey('man');
     }
   }, [open, accountSyncKey]);
@@ -189,10 +192,10 @@ export default function UserForm({
         setSubmitting(false);
         return;
       }
-      if (String(role).toLowerCase() === 'topic' && editableTopicCode === TOPIC_SELECT_NONE) {
+      if (String(role).toLowerCase() === 'topic' && selectedEditableTopics.length === 0) {
         toast({
-          title: 'Strategic topic required',
-          description: 'Choose which strategic topic this user may edit.',
+          title: 'Strategic topics required',
+          description: 'Choose at least one topic this user may edit.',
           variant: 'destructive',
         });
         setSubmitting(false);
@@ -208,8 +211,8 @@ export default function UserForm({
         allowed_routes: routesInherit ? null : [...selectedRoutes],
         powerbi_dashboard_ids: pbiInherit ? null : [...selectedPbi],
         editable_strategic_topic:
-          String(role).toLowerCase() === 'topic' && editableTopicCode !== TOPIC_SELECT_NONE
-            ? editableTopicCode
+          String(role).toLowerCase() === 'topic' && selectedEditableTopics.length > 0
+            ? toPipeList(selectedEditableTopics)
             : null,
         avatar_key: avatarKey,
       };
@@ -339,26 +342,25 @@ export default function UserForm({
               </div>
               {String(role).toLowerCase() === 'topic' ? (
                 <div className="space-y-2">
-                  <Label>Editable strategic topic</Label>
-                  <Select
-                    key={`topic-pick-${account?.id ?? 'new'}-${editableTopicCode}`}
-                    value={editableTopicCode}
-                    onValueChange={setEditableTopicCode}
-                  >
-                    <SelectTrigger className="min-h-11 w-full">
-                      <SelectValue placeholder="Select topic" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TOPIC_SELECT_NONE}>Select topic…</SelectItem>
-                      {STRATEGIC_TOPIC_CODES.map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {STRATEGIC_TOPIC_LABELS[code]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Editable strategic topics</Label>
+                  <div className="rounded-md border p-3 max-h-48 overflow-y-auto space-y-2">
+                    {STRATEGIC_TOPIC_CODES.map((code) => (
+                      <label key={code} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={selectedEditableTopics.includes(code)}
+                          onCheckedChange={(v) => {
+                            setSelectedEditableTopics((prev) => {
+                              if (v) return prev.includes(code) ? prev : [...prev, code];
+                              return prev.filter((c) => c !== code);
+                            });
+                          }}
+                        />
+                        {STRATEGIC_TOPIC_LABELS[code]}
+                      </label>
+                    ))}
+                  </div>
                   <p className="text-[10px] text-muted-foreground">
-                    This user can view Main Plan and all strategic topic pages; they can edit KPI rows only on the topic you choose here.
+                    This user can view all strategic topic pages. They can edit KPI rows and content only on the topics selected here.
                   </p>
                 </div>
               ) : (

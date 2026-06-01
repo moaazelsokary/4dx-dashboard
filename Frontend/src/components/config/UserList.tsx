@@ -16,7 +16,7 @@ import { Plus, Edit2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AccountUser } from '@/types/config';
 import type { StrategicTopicCode } from '@/types/wig';
-import { STRATEGIC_TOPIC_LABELS } from '@/pages/strategic-topics/strategicTopicKpiUtils';
+import { STRATEGIC_TOPIC_LABELS, parsePipeList } from '@/pages/strategic-topics/strategicTopicKpiUtils';
 import {
   getDashboardFromCatalog,
   getAccessibleDashboards,
@@ -71,10 +71,11 @@ function formatDepartmentCell(row: AccountUser): string {
 
 function formatDeptOrTopicCell(row: AccountUser): string {
   if (String(row.role || '').toLowerCase() === 'topic') {
-    const t = row.editable_strategic_topic;
-    if (t == null || String(t).trim() === '') return '—';
-    const c = String(t).trim().toLowerCase();
-    return STRATEGIC_TOPIC_LABELS[c as StrategicTopicCode] ?? c;
+    const codes = parsePipeList(row.editable_strategic_topic);
+    if (codes.length === 0) return '—';
+    return codes
+      .map((c) => STRATEGIC_TOPIC_LABELS[c as StrategicTopicCode] ?? c)
+      .join(', ');
   }
   return formatDepartmentCell(row);
 }

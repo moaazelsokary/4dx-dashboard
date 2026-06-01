@@ -7,6 +7,7 @@
 
 const sql = require('mssql');
 const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
+const { userCanWriteStrategicTopic } = require('./utils/editable-strategic-topics.cjs');
 
 const { STRATEGIC_TOPICS } = require('./utils/strategic-topics.cjs');
 const ALLOWED_STATUS = ['Completed', 'In Progress', 'On Hold'];
@@ -205,13 +206,10 @@ function editableStrategicTopicFromUser(user) {
 }
 
 function assertTopicUserCanWriteStrategicTopic(user, strategicTopicKey) {
-  const key = String(strategicTopicKey || '').trim().toLowerCase();
-  const home = editableStrategicTopicFromUser(user);
-  if (!home || home !== key) {
-    const err = new Error('You can only modify rows for your assigned strategic topic');
-    err.statusCode = 403;
-    throw err;
-  }
+  if (userCanWriteStrategicTopic(user, strategicTopicKey)) return;
+  const err = new Error('You can only modify rows for your assigned strategic topic(s)');
+  err.statusCode = 403;
+  throw err;
 }
 
 /** JWT may omit pillar (old token); wig-proxy passes userId — load from DB so topic writes succeed. */

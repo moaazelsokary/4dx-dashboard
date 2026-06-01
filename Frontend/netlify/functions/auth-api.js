@@ -261,7 +261,8 @@ const handler = rateLimiter('login')(async (event, context) => {
           default_route,
           allowed_routes,
           powerbi_dashboard_ids,
-          editable_strategic_topic
+          editable_strategic_topic,
+          avatar_key
         FROM users
         WHERE username = @username
       `);
@@ -374,6 +375,11 @@ const handler = rateLimiter('login')(async (event, context) => {
         ? String(user.editable_strategic_topic).trim().toLowerCase()
         : null;
 
+    const avatarKey =
+      user.avatar_key != null && String(user.avatar_key).trim() !== ''
+        ? String(user.avatar_key).trim()
+        : null;
+
     /** Canonical role string so JWT / UI match route checks (`topic` is case-sensitive in the app). */
     const authRole =
       String(user.role || '')
@@ -392,6 +398,7 @@ const handler = rateLimiter('login')(async (event, context) => {
       defaultRoute: defaultRoute || undefined,
       allowedRoutes: allowedRoutes === null ? null : allowedRoutes,
       powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
+      avatarKey: avatarKey || undefined,
     };
     if (authRole === 'topic') {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
@@ -420,6 +427,7 @@ const handler = rateLimiter('login')(async (event, context) => {
       allowedRoutes,
       powerbiDashboardIds,
       editableStrategicTopic,
+      avatarKey,
     };
 
     logger.info('User signed in successfully', { username: user.username, role: authRole });
