@@ -30,6 +30,10 @@ exports.handler = async (event) => {
 
     logger.info('process-beneficiary-sync-background started', { source, jobId });
     const pool = await getPool();
+    if (jobId != null) {
+      const { markSyncJobRunning } = require('./utils/rb-sync-job.cjs');
+      await markSyncJobRunning(pool, jobId);
+    }
     const result = await runReadModelSync(pool, logger, jobId != null ? { jobId } : {});
     logger.info('process-beneficiary-sync-background finished', { source, jobId, result });
   } catch (e) {

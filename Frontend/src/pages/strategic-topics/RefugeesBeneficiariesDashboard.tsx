@@ -176,22 +176,23 @@ export default function RefugeesBeneficiariesDashboard({ user }: Props) {
   const onImmediateSync = useCallback(async () => {
     try {
       setSyncImmediate(true);
-      await refreshBeneficiariesImmediate();
-      await qc.invalidateQueries({ queryKey: ['rb'] });
+      const { jobId } = await refreshBeneficiariesImmediate();
+      setSyncJobId(jobId);
       toast({
-        title: 'Snapshot refreshed',
-        description: 'Odoo data was merged into the read model in this request.',
+        title: 'Sync started',
+        description:
+          'Odoo extract runs in the background (may take several minutes). This page will refresh when the job completes.',
       });
     } catch (e) {
       toast({
-        title: 'Refresh failed',
+        title: 'Could not start sync',
         description: e instanceof Error ? e.message : String(e),
         variant: 'destructive',
       });
     } finally {
       setSyncImmediate(false);
     }
-  }, [qc]);
+  }, []);
 
   const canAdminRefresh = user.role === 'Admin' || user.role === 'CEO';
   const syncBusy = !!syncJobId || syncImmediate;
@@ -210,7 +211,7 @@ export default function RefugeesBeneficiariesDashboard({ user }: Props) {
               Queue Odoo sync
             </Button>
             <Button variant="outline" size="sm" onClick={() => void onImmediateSync()} disabled={syncBusy}>
-              Sync now (wait)
+              Sync now
             </Button>
           </div>
         )}

@@ -5,7 +5,7 @@
 const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 const logger = require('./utils/logger');
-const { getPool, withPoolRetry } = require('./db.cjs');
+const { getPool } = require('./db.cjs');
 const {
   getDashboardSummary,
   getDashboardCharts,
@@ -17,10 +17,11 @@ const {
   getCaseServicesKeyset,
   getCaseTimelineKeyset,
   getSyncJob,
-  invalidateAnalyticsCache,
 } = require('./utils/refugees-beneficiaries-read-api.cjs');
-const { runReadModelSync, enqueueSyncJob } = require('./utils/refugees-beneficiaries-sync-pipeline.cjs');
+const { enqueueSyncJob } = require('./utils/refugees-beneficiaries-sync-pipeline.cjs');
 const { validateBeneficiariesEnv } = require('./utils/refugees-beneficiaries-phase0.cjs');
+const { invokeBeneficiarySyncBackground } = require('./utils/refugees-beneficiaries-background-invoke.cjs');
+const { markSyncJobRunning, requeueSyncJob } = require('./utils/rb-sync-job.cjs');
 
 const searchHitStore = new Map();
 
@@ -209,52 +210,39 @@ const handler = rateLimiter('general')(
           };
         }
         const qs = event.queryStringParameters || {};
-        if (qs.immediate === '1') {
-          try {
-            const syncResult = await runReadModelSync(pool, logger, {});
-            invalidateAnalyticsCache();
-            let meta = null;
-            try {
-              const summary = await withPoolRetry((p) => getDashboardSummary(p));
-              meta = summary.meta;
-            } catch (summaryErr) {
-              logger.warn('beneficiaries_route immediate sync summary failed', {
-                message: summaryErr?.message,
-              });
-            }
-            const body = JSON.stringify({
-              ok: true,
-              mode: 'immediate',
-              meta,
-              sync: syncResult,
-              ...(meta ? {} : { warning: 'Sync completed; refresh the page if KPIs are empty.' }),
-            });
-            logger.info('beneficiaries_route', { route: 'sync-post-immediate', ms: Date.now() - t0, bytes: body.length });
-            return {
-              statusCode: 200,
-              headers,
-              body,
-            };
-          } catch (syncErr) {
-            const msg = String(syncErr?.message || syncErr);
-            const isOdoo = /odoo/i.test(msg);
-            logger.error('beneficiaries_route immediate sync failed', { message: msg });
-            return {
-              statusCode: isOdoo ? 502 : 500,
-              headers,
-              body: JSON.stringify({
-                ok: false,
-                err: msg,
-                hint: isOdoo
-                  ? 'Odoo failed during extract. Wait a minute and use Queue Odoo sync, or retry Sync now.'
-                  : undefined,
-              }),
-            };
-          }
-        }
+        const source = qs.immediate === '1' ? 'immediate' : 'api';
         const jobId = await enqueueSyncJob(pool, user.username);
-        const body = JSON.stringify({ ok: true, jobId: String(jobId) });
-        logger.info('beneficiaries_route', { route: 'sync-post', status: 202, ms: Date.now() - t0, bytes: body.length });
+        await markSyncJobRunning(pool, jobId);
+        try {
+          await invokeBeneficiarySyncBackground({ source, jobId });
+        } catch (invokeErr) {
+          await requeueSyncJob(pool, jobId);
+          const msg = String(invokeErr?.message || invokeErr);
+          logger.error('beneficiaries_route sync invoke failed', { message: msg, jobId });
+          return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({
+              ok: false,
+              err: msg,
+              hint: 'Could not start background sync. Retry in a minute or check Netlify function logs.',
+            }),
+          };
+        }
+        const body = JSON.stringify({
+          ok: true,
+          jobId: String(jobId),
+          mode: 'background',
+          message:
+            'Odoo extract runs in the background (up to 15 minutes). Poll /sync/{jobId} or wait for the page to refresh.',
+        });
+        logger.info('beneficiaries_route', {
+          route: source === 'immediate' ? 'sync-post-immediate' : 'sync-post',
+          status: 202,
+          jobId,
+          ms: Date.now() - t0,
+          bytes: body.length,
+        });
         return {
           statusCode: 202,
           headers,

@@ -157,38 +157,27 @@ export async function enqueueBeneficiariesSync(): Promise<{ ok: boolean; jobId: 
   return { ok: true, jobId: String(body.jobId) };
 }
 
-/** Run sync in-request (large extracts — allow up to 10 minutes). Admin/CEO. */
-export async function refreshBeneficiariesImmediate(): Promise<{ ok: boolean; meta: RbSummaryResponse['meta'] }> {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 600000);
-  try {
-    const res = await fetch(`${API_BASE}/sync?immediate=1`, {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: '{}',
-      signal: controller.signal,
-    });
-    const body = (await res.json()) as {
-      ok?: boolean;
-      meta?: RbSummaryResponse['meta'];
-      err?: string;
-      hint?: string;
-    };
-    if (!res.ok) {
-      const msg = body.err || body.hint || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
-    return body as { ok: boolean; meta: RbSummaryResponse['meta'] };
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      throw new Error(
-        'Sync timed out after 10 minutes. Use Queue Odoo sync — it runs in the background and the page will refresh when done.'
-      );
-    }
-    throw e;
-  } finally {
-    window.clearTimeout(timeoutId);
+/** Start Odoo warehouse sync in Netlify background (202 + jobId). Admin/CEO. */
+export async function refreshBeneficiariesImmediate(): Promise<{ ok: boolean; jobId: string }> {
+  const res = await fetch(`${API_BASE}/sync?immediate=1`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const body = (await res.json()) as {
+    ok?: boolean;
+    jobId?: string;
+    err?: string;
+    hint?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.err || body.hint || body.message || `HTTP ${res.status}`);
   }
+  if (res.status !== 202 || !body.jobId) {
+    throw new Error(body.err || 'Sync was not started (expected HTTP 202 with jobId)');
+  }
+  return { ok: true, jobId: String(body.jobId) };
 }
 
 export async function fetchBeneficiariesSyncJob(jobId: string): Promise<RbSyncJobResponse> {
