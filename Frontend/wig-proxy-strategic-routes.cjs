@@ -283,7 +283,13 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       const user = decodeWigUser(req, jwt);
       const pool = await getPool();
       const id = parseInt(req.params.id, 10);
-      if (user && user.role === 'department' && user.departments && user.departments.length > 0) {
+      const roleL = user ? String(user.role || '').trim().toLowerCase() : '';
+      if (
+        user &&
+        (roleL === 'department' || roleL === 'department-topic') &&
+        user.departments &&
+        user.departments.length > 0
+      ) {
         const checkRequest = pool.request();
         checkRequest.input('id', sql.Int, id);
         const checkResult = await checkRequest.query(`

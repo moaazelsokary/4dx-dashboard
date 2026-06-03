@@ -266,12 +266,14 @@ app.post('/api/auth/signin', async (req, res) => {
         ? String(user.editable_strategic_topic).trim().toLowerCase()
         : null;
 
+    const roleRaw = String(user.role || '').trim();
+    const roleLower = roleRaw.toLowerCase();
     const authRole =
-      String(user.role || '')
-        .trim()
-        .toLowerCase() === 'topic'
+      roleLower === 'topic'
         ? 'topic'
-        : String(user.role || '').trim();
+        : roleLower === 'department-topic'
+          ? 'department-topic'
+          : roleRaw;
 
     const avatarKey =
       user.avatar_key != null && String(user.avatar_key).trim() !== ''
@@ -288,7 +290,7 @@ app.post('/api/auth/signin', async (req, res) => {
       powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
       avatarKey: avatarKey || undefined,
     };
-    if (authRole === 'topic') {
+    if (authRole === 'topic' || authRole === 'department-topic') {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
     } else if (editableStrategicTopic) {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
@@ -428,7 +430,7 @@ function getUserFromRequest(req) {
 function canReadBeneficiaries(user) {
   if (!user || !user.role) return false;
   const r = String(user.role).trim().toLowerCase();
-  return ['ceo', 'admin', 'department', 'topic', 'editor', 'viewer'].includes(r);
+  return ['ceo', 'admin', 'department', 'topic', 'department-topic', 'editor', 'viewer'].includes(r);
 }
 
 // ---- Metrics API (local dev - same as Netlify metrics-api) ----

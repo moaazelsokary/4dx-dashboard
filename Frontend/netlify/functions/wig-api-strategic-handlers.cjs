@@ -202,7 +202,13 @@ async function updateStrategicDepartmentObjective(pool, id, body, userRole) {
 }
 
 async function deleteStrategicDepartmentObjective(pool, id, user) {
-  if (user && user.role === 'department' && user.departments && user.departments.length > 0) {
+  const roleL = user ? String(user.role || '').trim().toLowerCase() : '';
+  if (
+    user &&
+    (roleL === 'department' || roleL === 'department-topic') &&
+    user.departments &&
+    user.departments.length > 0
+  ) {
     const checkRequest = pool.request();
     checkRequest.input('id', sql.Int, id);
     const checkResult = await checkRequest.query(`

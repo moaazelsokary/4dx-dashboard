@@ -8,6 +8,7 @@
 const sql = require('mssql');
 const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
 const { userCanWriteStrategicTopic } = require('./utils/editable-strategic-topics.cjs');
+const { isTopicLikeRole, isDepartmentLikeRole } = require('./utils/user-roles.cjs');
 
 const { STRATEGIC_TOPICS } = require('./utils/strategic-topics.cjs');
 const ALLOWED_STATUS = ['Completed', 'In Progress', 'On Hold'];
@@ -212,10 +213,24 @@ function assertTopicUserCanWriteStrategicTopic(user, strategicTopicKey) {
   throw err;
 }
 
+/** department-topic: edit by assigned topic and/or by department on the row. */
+function assertDeptTopicUserCanMutateRow(user, strategicTopicKey, deptTokens) {
+  if (userCanWriteStrategicTopic(user, strategicTopicKey)) return;
+  try {
+    assertDeptUserCanMutateRow(user, deptTokens);
+  } catch (deptErr) {
+    const err = new Error(
+      'You can only modify rows for your assigned strategic topic(s) or your department'
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
 /** JWT may omit pillar (old token); wig-proxy passes userId — load from DB so topic writes succeed. */
 async function enrichTopicRoleUserFromDb(pool, user) {
   if (!user) return user;
-  if (normalizeRole(user) !== 'topic') return user;
+  if (!isTopicLikeRole(normalizeRole(user))) return user;
   if (editableStrategicTopicFromUser(user)) return user;
   const uid = user.userId ?? user.id ?? user.user_id;
   const idNum = parseInt(String(uid ?? ''), 10);
@@ -262,7 +277,7 @@ async function createStrategicTopicKpiRow(pool, body, user) {
     // full access
   } else if (role === 'department') {
     assertDeptUserCanMutateRow(user, deptTokens);
-  } else if (role === 'topic') {
+  } else if (isTopicLikeRole(role)) {
     assertTopicUserCanWriteStrategicTopic(user, topic);
   } else {
     const err = new Error('Insufficient permissions');
@@ -397,8 +412,8 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
 
   if (role === 'department') {
     assertDeptUserCanMutateRow(user, existingDepts);
-  } else if (role === 'topic') {
-    assertTopicUserCanWriteStrategicTopic(user, existingTopicKey);
+  } else if (isTopicLikeRole(role)) {
+    assertDeptTopicUserCanMutateRow(user, existingTopicKey, existingDepts);
   } else if (!isCeoOrAdmin(user)) {
     const err = new Error('Insufficient permissions');
     err.statusCode = 403;
@@ -587,8 +602,8 @@ async function updateStrategicTopicKpiRowsOrder(pool, body, user) {
       const existingDepts = parseDelimited(existing.associated_departments);
       if (role === 'department') {
         assertDeptUserCanMutateRow(user, existingDepts);
-      } else if (role === 'topic') {
-        assertTopicUserCanWriteStrategicTopic(user, topic);
+      } else if (isTopicLikeRole(role)) {
+        assertDeptTopicUserCanMutateRow(user, topic, existingDepts);
       } else if (!isCeoOrAdmin(user)) {
         const err = new Error('Insufficient permissions');
         err.statusCode = 403;
@@ -628,6 +643,8 @@ async function assertUserCanAccessStrategicTopicKpiRowForMonthly(pool, user, row
     assertDeptUserCanMutateRow(user, existingDepts);
   } else if (role === 'topic') {
     assertTopicUserCanWriteStrategicTopic(user, topicKey);
+  } else if (role === 'department-topic') {
+    assertDeptTopicUserCanMutateRow(user, topicKey, existingDepts);
   } else if (isCeoOrAdmin(user)) {
     /* ok */
   } else if (canReadStrategicTopicApi(user, topicKey)) {

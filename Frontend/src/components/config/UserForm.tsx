@@ -39,7 +39,28 @@ import { AVATAR_OPTIONS, type AvatarKey, isAvatarKey } from '@/config/avatars';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 
-const ROLE_OPTIONS = ['CEO', 'Admin', 'M&E', 'department', 'topic', 'project', 'Viewer', 'case worker'] as const;
+import {
+  ROLE_DEPARTMENT_TOPIC,
+  ROLE_DEPARTMENT_TOPIC_LABEL,
+  roleRequiresDepartment,
+  roleRequiresEditableTopics,
+} from '@/config/userRoles';
+
+const ROLE_OPTIONS = [
+  'CEO',
+  'Admin',
+  'M&E',
+  'department',
+  'topic',
+  ROLE_DEPARTMENT_TOPIC,
+  'project',
+  'Viewer',
+  'case worker',
+] as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  [ROLE_DEPARTMENT_TOPIC]: ROLE_DEPARTMENT_TOPIC_LABEL,
+};
 
 const DEPT_SELECT_NONE = '__none__';
 const DEPT_SELECT_ALL = 'all';
@@ -132,7 +153,7 @@ export default function UserForm({
       const pbi = account.powerbi_dashboard_ids;
       setPbiInherit(pbi === null || pbi === undefined);
       setSelectedPbi(pbi && Array.isArray(pbi) ? [...pbi] : []);
-      if (String(account.role || '').toLowerCase() === 'topic') {
+      if (roleRequiresEditableTopics(account.role)) {
         const codes = parsePipeList(account.editable_strategic_topic).filter((c): c is StrategicTopicCode =>
           STRATEGIC_TOPIC_CODES.includes(c as StrategicTopicCode)
         );
@@ -183,16 +204,16 @@ export default function UserForm({
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (role === 'department' && departmentValue === DEPT_SELECT_NONE) {
+      if (roleRequiresDepartment(role) && departmentValue === DEPT_SELECT_NONE) {
         toast({
           title: 'Department required',
-          description: 'Choose a department for users with the “department” role.',
+          description: 'Choose a department for this role.',
           variant: 'destructive',
         });
         setSubmitting(false);
         return;
       }
-      if (String(role).toLowerCase() === 'topic' && selectedEditableTopics.length === 0) {
+      if (roleRequiresEditableTopics(role) && selectedEditableTopics.length === 0) {
         toast({
           title: 'Strategic topics required',
           description: 'Choose at least one topic this user may edit.',
@@ -211,7 +232,7 @@ export default function UserForm({
         allowed_routes: routesInherit ? null : [...selectedRoutes],
         powerbi_dashboard_ids: pbiInherit ? null : [...selectedPbi],
         editable_strategic_topic:
-          String(role).toLowerCase() === 'topic' && selectedEditableTopics.length > 0
+          roleRequiresEditableTopics(role) && selectedEditableTopics.length > 0
             ? toPipeList(selectedEditableTopics)
             : null,
         avatar_key: avatarKey,
@@ -294,8 +315,8 @@ export default function UserForm({
                     setRole(v);
                     if (v === 'topic') {
                       setDepartmentValue(DEPT_SELECT_NONE);
-                    } else {
-                      setEditableTopicCode(TOPIC_SELECT_NONE);
+                    } else if (v === 'department') {
+                      setSelectedEditableTopics([]);
                     }
                     if (String(v).toLowerCase() === 'case worker') {
                       setDefaultRoute('/main-plan/refugees/case-story');
@@ -308,7 +329,7 @@ export default function UserForm({
                   <SelectContent>
                     {ROLE_OPTIONS.map((r) => (
                       <SelectItem key={r} value={r}>
-                        {r}
+                        {ROLE_LABELS[r] ?? r}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -340,7 +361,7 @@ export default function UserForm({
                   })}
                 </div>
               </div>
-              {String(role).toLowerCase() === 'topic' ? (
+              {roleRequiresEditableTopics(role) && (
                 <div className="space-y-2">
                   <Label>Editable strategic topics</Label>
                   <div className="rounded-md border p-3 max-h-48 overflow-y-auto space-y-2">
@@ -360,10 +381,13 @@ export default function UserForm({
                     ))}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    This user can view all strategic topic pages. They can edit KPI rows and content only on the topics selected here.
+                    {String(role).toLowerCase() === ROLE_DEPARTMENT_TOPIC
+                      ? 'View all strategic topics; edit KPI rows and content on selected topics (and rows tied to their department where applicable).'
+                      : 'View all strategic topic pages; edit KPI rows and content only on the topics selected here.'}
                   </p>
                 </div>
-              ) : (
+              )}
+              {roleRequiresDepartment(role) ? (
                 <div className="space-y-2">
                   <Label>Department</Label>
                   {departmentsLoading ? (
@@ -399,7 +423,7 @@ export default function UserForm({
                     One department per user (stored as a single code). Use “All departments” for org-wide access where needed.
                   </p>
                 </div>
-              )}
+              ) : null}
               <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
                 <Label htmlFor="acc-active" className="cursor-pointer">
                   Active

@@ -60,6 +60,7 @@ import {
   canCreateStrategicTopicRow,
   pickDefaultDeptCodesForNewRow,
 } from './strategicTopicKpiUtils';
+import { isDepartmentLikeRole, isDepartmentRole } from '@/config/userRoles';
 import {
   createStrategicTopicKpiRow,
   deleteStrategicTopicKpiRow,
@@ -314,7 +315,7 @@ export default function StrategicTopicKpiTable({
   const openCreate = () => {
     resetForm();
     const mine = userDepartmentCodes(user);
-    if (user?.role === 'department' && mine.length > 0) {
+    if (isDepartmentLikeRole(user?.role) && mine.length > 0) {
       setSelectedDeptCodes(
         mine.filter((c) => departments.some((d) => String(d.code).toLowerCase() === c))
       );
@@ -361,7 +362,7 @@ export default function StrategicTopicKpiTable({
     const c = code.toLowerCase();
     setSelectedDeptCodes((prev) => {
       if (checked) return prev.includes(c) ? prev : [...prev, c];
-      if (user?.role === 'department') {
+      if (isDepartmentRole(user?.role)) {
         const mine = userDepartmentCodes(user);
         const remaining = prev.filter((x) => x !== c);
         const stillHasMine = remaining.some((x) => mine.includes(x));
@@ -445,7 +446,7 @@ export default function StrategicTopicKpiTable({
       toast({
         title: 'Cannot add row',
         description:
-          user?.role === 'department'
+          isDepartmentRole(user?.role)
             ? 'Your user is not linked to a department in this list.'
             : 'No departments loaded.',
         variant: 'destructive',

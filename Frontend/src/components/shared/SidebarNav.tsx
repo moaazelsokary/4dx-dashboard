@@ -117,13 +117,15 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
   const isAdmin = user.role === 'Admin';
   const isDepartment = user.role === 'department';
   const isTopic = user.role === 'topic';
+  const isDeptTopic = user.role === 'department-topic';
   const isViewer = user.role === 'Viewer';
-  const isOperations = isDepartment && user.departments?.includes('operations');
+  const isOperations =
+    (isDepartment || isDeptTopic) && user.departments?.includes('operations');
   const canAccessAdmin = isCEO || isAdmin;
 
-  const canAccessWIGPlan = isCEO || isDepartment;
-  const canAccessMainPlan = isCEO || isDepartment || isTopic;
-  const canAccessDepartmentObjectives = isCEO || isAdmin || isDepartment;
+  const canAccessWIGPlan = isCEO || isDepartment || isDeptTopic;
+  const canAccessMainPlan = isCEO || isDepartment || isTopic || isDeptTopic;
+  const canAccessDepartmentObjectives = isCEO || isAdmin || isDepartment || isDeptTopic;
   const canAccessSummary = isCEO || isOperations;
 
   const hasExplicitRouteList = user.allowedRoutes != null && Array.isArray(user.allowedRoutes);
@@ -134,7 +136,7 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
 
   const shouldShowButton = (path: string) => {
     if (routeDrivenNav || isCEO || isAdmin) return canNav(path);
-    if (isDepartment && location.pathname === '/department-objectives') return true;
+    if ((isDepartment || isDeptTopic) && location.pathname === '/department-objectives') return true;
     return location.pathname !== path;
   };
 

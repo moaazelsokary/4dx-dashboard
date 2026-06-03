@@ -380,13 +380,15 @@ const handler = rateLimiter('login')(async (event, context) => {
         ? String(user.avatar_key).trim()
         : null;
 
-    /** Canonical role string so JWT / UI match route checks (`topic` is case-sensitive in the app). */
+    const roleRaw = String(user.role || '').trim();
+    const roleLower = roleRaw.toLowerCase();
+    /** Canonical role string so JWT / UI match route checks. */
     const authRole =
-      String(user.role || '')
-        .trim()
-        .toLowerCase() === 'topic'
+      roleLower === 'topic'
         ? 'topic'
-        : String(user.role || '').trim();
+        : roleLower === 'department-topic'
+          ? 'department-topic'
+          : roleRaw;
 
     // JWT payload: role `topic` must always carry `editableStrategicTopic` (even null) so wig-proxy
     // does not omit the claim — otherwise KPI writes fail with "assigned strategic topic" errors.
@@ -400,7 +402,7 @@ const handler = rateLimiter('login')(async (event, context) => {
       powerbiDashboardIds: powerbiDashboardIds === null ? null : powerbiDashboardIds,
       avatarKey: avatarKey || undefined,
     };
-    if (authRole === 'topic') {
+    if (authRole === 'topic' || authRole === 'department-topic') {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
     } else if (editableStrategicTopic) {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;

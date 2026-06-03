@@ -37,7 +37,12 @@ export default function MainPlanObjectives() {
 
     const userObj = JSON.parse(userData);
     // CEO / department / topic (topic: view-only like department)
-    if (userObj.role !== 'CEO' && userObj.role !== 'department' && userObj.role !== 'topic') {
+    if (
+      userObj.role !== 'CEO' &&
+      userObj.role !== 'department' &&
+      userObj.role !== 'topic' &&
+      userObj.role !== 'department-topic'
+    ) {
       navigate('/access-denied');
       return;
     }
@@ -172,7 +177,13 @@ export default function MainPlanObjectives() {
           </TabsContent>
 
           <TabsContent value="rasci" className="mt-0">
-            <RASCIEditor readOnly={user?.role === 'department' || user?.role === 'topic'} />
+            <RASCIEditor
+              readOnly={
+                user?.role === 'department' ||
+                user?.role === 'topic' ||
+                user?.role === 'department-topic'
+              }
+            />
           </TabsContent>
 
           <TabsContent value="table" className="mt-0">
@@ -184,7 +195,11 @@ export default function MainPlanObjectives() {
                 <MainPlanTable 
                   objectives={tableData} 
                   onUpdate={() => loadData(false)} 
-                  readOnly={user?.role === 'department' || user?.role === 'topic'}
+                  readOnly={
+                    user?.role === 'department' ||
+                    user?.role === 'topic' ||
+                    user?.role === 'department-topic'
+                  }
                 />
               </CardContent>
             </Card>

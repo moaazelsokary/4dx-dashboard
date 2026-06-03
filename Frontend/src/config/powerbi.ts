@@ -74,7 +74,8 @@ export const canAccessDashboard = (
   userDepartments: string[]
 ): boolean => {
   /** Topic users inherit only the Volunteers Power BI app unless an admin sets explicit dashboard ids on the user. */
-  if (String(userRole || '').trim().toLowerCase() === 'topic') {
+  const r = String(userRole || '').trim().toLowerCase();
+  if (r === 'topic' || r === 'department-topic') {
     return dashboard.id === TOPIC_ROLE_DEFAULT_POWERBI_ID;
   }
   if (userRole === 'CEO') {

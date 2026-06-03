@@ -3,6 +3,7 @@ import { hasPowerBINavigationAccess } from '@/config/powerbi';
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
 import { isMealRole, MEAL_PATH } from '@/config/mealAccess';
 import { STRATEGIC_TOPIC_PATHS } from '@/config/strategicTopics';
+import { isDepartmentLikeRole, isTopicLikeRole } from '@/config/userRoles';
 
 /** Paths that never require the route-override check (handled separately). */
 export const PUBLIC_PATHS = new Set(['/', '/privacy-policy', '/terms-of-service']);
@@ -26,19 +27,19 @@ export function getInheritedRoutesForUser(user: User): Set<string> {
   const depts = user.departments || [];
   const isCEO = role === 'CEO';
   const isAdmin = role === 'Admin';
-  const isDept = role === 'department';
-  const isTopic = role === 'topic';
-  const isOps = isDept && depts.includes('operations');
+  const isDeptLike = isDepartmentLikeRole(role);
+  const isTopicLike = isTopicLikeRole(role);
+  const isOps = isDeptLike && depts.includes('operations');
 
-  if (isCEO || isDept || isTopic) {
+  if (isCEO || isDeptLike || isTopicLike) {
     paths.add('/main-plan');
     for (const p of STRATEGIC_TOPIC_PATHS) paths.add(p);
     paths.add(REFUGEES_CASE_STORY_PATH);
   }
-  if (isCEO || isDept) {
+  if (isCEO || isDeptLike) {
     paths.add('/wig-plan-2025');
   }
-  if (isCEO || isAdmin || isDept) {
+  if (isCEO || isAdmin || isDeptLike) {
     paths.add('/department-objectives');
   }
   if (isCEO || isOps || role === 'project') {

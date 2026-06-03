@@ -6,6 +6,7 @@ import {
   type StrategicTopicCode,
   isStrategicTopicCode,
 } from '@/config/strategicTopics';
+import { isDepartmentLikeRole, isDepartmentTopicRole, isTopicLikeRole } from '@/config/userRoles';
 
 export type { StrategicTopicCode };
 export { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS, isStrategicTopicCode };
@@ -36,9 +37,9 @@ export function isCeoOrAdmin(user: User | null): boolean {
   return r === 'CEO' || r === 'Admin';
 }
 
-/** Topic role: pillars this user may edit (`||`-delimited in DB / JWT). */
+/** Topic / department-topic role: pillars this user may edit (`||`-delimited in DB / JWT). */
 export function topicRoleEditableCodes(user: User | null): StrategicTopicCode[] {
-  if (!user || String(user.role || '').trim().toLowerCase() !== 'topic') return [];
+  if (!user || !isTopicLikeRole(user.role)) return [];
   const u = user as User & { editable_strategic_topic?: string | null };
   const raw = user.editableStrategicTopic ?? u.editable_strategic_topic;
   return parsePipeList(raw)
@@ -55,7 +56,7 @@ export function topicRoleEditableCode(user: User | null): StrategicTopicCode | n
 export function topicRoleCanEditTopic(user: User | null, topic: StrategicTopicCode): boolean {
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
-  if (String(user.role || '').trim().toLowerCase() !== 'topic') return false;
+  if (!isTopicLikeRole(user.role)) return false;
   return topicRoleEditableCodes(user).includes(topic);
 }
 
@@ -78,14 +79,19 @@ export function canEditStrategicTopicRow(
 ): boolean {
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
-  if (String(user.role || '').trim().toLowerCase() === 'topic') {
+  if (isTopicLikeRole(user.role)) {
     const rt = rowStrategicTopicLower(row);
     const editTopics = topicRoleEditableCodes(user);
     if (rt && editTopics.includes(rt as StrategicTopicCode)) return true;
     if (pageTopic && editTopics.includes(pageTopic) && !rt) return true;
+    if (isDepartmentTopicRole(user.role)) {
+      const rowCodes = parsePipeList(row.associated_departments).map((c) => c.toLowerCase());
+      const mine = userDepartmentCodes(user);
+      if (mine.some((c) => rowCodes.includes(c))) return true;
+    }
     return false;
   }
-  if (user.role !== 'department') return false;
+  if (!isDepartmentRole(user.role)) return false;
   const rowCodes = parsePipeList(row.associated_departments).map((c) => c.toLowerCase());
   const mine = userDepartmentCodes(user);
   return mine.some((c) => rowCodes.includes(c));
@@ -98,10 +104,10 @@ export function canDeleteStrategicTopicRow(user: User | null): boolean {
 export function canCreateStrategicTopicRow(user: User | null, pageTopic: StrategicTopicCode): boolean {
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
-  if (String(user.role || '').trim().toLowerCase() === 'topic') {
+  if (isTopicLikeRole(user.role)) {
     return topicRoleCanEditTopic(user, pageTopic);
   }
-  return user.role === 'department' && userDepartmentCodes(user).length > 0;
+  return isDepartmentRole(user.role) && userDepartmentCodes(user).length > 0;
 }
 
 /** Upload, replace, or delete files in the topic Content Folder (CEO/Admin or topic lead for this pillar). */
@@ -119,12 +125,12 @@ export function pickDefaultDeptCodesForNewRow(user: User | null, departments: De
     .sort((a, b) => a.localeCompare(b));
   if (sorted.length === 0) return [];
   if (!user) return [sorted[0]];
-  if (user.role === 'department') {
+  if (isDepartmentLikeRole(user.role)) {
     const mine = userDepartmentCodes(user);
     const hit = sorted.find((c) => mine.includes(c));
     return hit ? [hit] : [];
   }
-  if (String(user.role || '').trim().toLowerCase() === 'topic') {
+  if (isTopicLikeRole(user.role)) {
     return sorted[0] ? [sorted[0]] : [];
   }
   return [sorted[0]];

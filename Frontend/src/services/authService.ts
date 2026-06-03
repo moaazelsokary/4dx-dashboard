@@ -225,9 +225,9 @@ function hydrateUserFromStorageBlob(u: User): User {
       if (jet != null && String(jet).trim() !== '') {
         out.editableStrategicTopic = String(jet).trim().toLowerCase();
       }
-      if (String(payload.role || '').trim().toLowerCase() === 'topic') {
-        out.role = 'topic';
-      }
+      const pr = String(payload.role || '').trim().toLowerCase();
+      if (pr === 'topic') out.role = 'topic';
+      if (pr === 'department-topic') out.role = 'department-topic';
       const jwtAvatar = payload.avatarKey;
       if (jwtAvatar != null && String(jwtAvatar).trim() !== '') {
         out.avatarKey = String(jwtAvatar).trim();

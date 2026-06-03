@@ -3,6 +3,7 @@
  */
 
 const { STRATEGIC_TOPIC_CODES, TOPIC_BASE_PATH } = require('./strategic-topics.cjs');
+const { isTopicLikeRole, isDepartmentLikeRole } = require('./user-roles.cjs');
 
 const REFUGEES_CASE_STORY_PATH = '/main-plan/refugees/case-story';
 
@@ -45,8 +46,8 @@ function canReadStrategicTopicApi(user, topic) {
   const r = normalizeRole(user);
   if (r === 'ceo' || r === 'admin' || r === 'department') return true;
 
-  /** Topic role: read all strategic topic pillars; write is limited in row handlers. */
-  if (r === 'topic') {
+  /** Topic / department-topic: read all strategic topic pillars; write is limited in row handlers. */
+  if (isTopicLikeRole(r)) {
     return true;
   }
 
@@ -68,7 +69,7 @@ function canReadStrategicTopicApi(user, topic) {
 /** CEO / Admin / department / topic may mutate KPI rows (handlers apply finer rules). */
 function canWriteStrategicTopicKpi(user) {
   const r = normalizeRole(user);
-  return r === 'ceo' || r === 'admin' || r === 'department' || r === 'topic';
+  return r === 'ceo' || r === 'admin' || isDepartmentLikeRole(r) || isTopicLikeRole(r);
 }
 
 module.exports = {

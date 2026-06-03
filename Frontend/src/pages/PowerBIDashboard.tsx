@@ -134,7 +134,8 @@ const PowerBIDashboard: React.FC = () => {
   // Set default selected dashboard when dashboards are loaded (topic role: prefer Volunteers)
   useEffect(() => {
     if (dashboards.length > 0 && !selectedDashboard) {
-      const isTopic = String(user?.role || '').trim().toLowerCase() === 'topic';
+      const roleNorm = String(user?.role || '').trim().toLowerCase();
+      const isTopic = roleNorm === 'topic' || roleNorm === 'department-topic';
       const preferred =
         isTopic && dashboards.some((d) => d.id === 'volunteers')
           ? 'volunteers'

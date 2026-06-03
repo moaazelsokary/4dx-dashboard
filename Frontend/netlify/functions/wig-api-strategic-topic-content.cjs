@@ -7,6 +7,7 @@
 const sql = require('mssql');
 
 const { STRATEGIC_TOPICS } = require('./utils/strategic-topics.cjs');
+const { isTopicLikeRole } = require('./utils/user-roles.cjs');
 const MAX_FILE_BYTES = 24 * 1024 * 1024; // 24 MB (keep below typical proxy limits)
 
 function normalizeRole(user) {
@@ -33,7 +34,7 @@ function editableStrategicTopicFromUser(user) {
 
 async function enrichTopicRoleUserFromDb(pool, user) {
   if (!user) return user;
-  if (normalizeRole(user) !== 'topic') return user;
+  if (!isTopicLikeRole(normalizeRole(user))) return user;
   if (editableStrategicTopicFromUser(user)) return user;
   const uid = user.userId ?? user.id ?? user.user_id;
   const idNum = parseInt(String(uid ?? ''), 10);
@@ -91,7 +92,7 @@ function assertCanWriteStrategicTopicContent(user, strategicTopicKey) {
   assertAuthenticated(user);
   if (isCeoOrAdmin(user)) return;
   const r = normalizeRole(user);
-  if (r === 'topic' && userCanWriteStrategicTopic(user, strategicTopicKey)) return;
+  if (isTopicLikeRole(r) && userCanWriteStrategicTopic(user, strategicTopicKey)) return;
   const err = new Error('You can only modify files for your assigned strategic topic(s)');
   err.statusCode = 403;
   throw err;

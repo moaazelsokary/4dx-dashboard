@@ -13,6 +13,7 @@ import { signIn } from "@/services/authService";
 import { canAccessAppPath } from "@/utils/routeAccess";
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from "@/config/refugeesBeneficiaries";
 import { topicRoleEditableCode } from "@/pages/strategic-topics/strategicTopicKpiUtils";
+import { isDepartmentTopicRole, isTopicRole } from "@/config/userRoles";
 import OptimizedImage from "@/components/ui/OptimizedImage";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
@@ -59,7 +60,9 @@ const SignIn = () => {
           navigate("/main-plan");
         } else if (u.role === "department") {
           navigate("/department-objectives");
-        } else if (u.role === "topic") {
+        } else if (isDepartmentTopicRole(u.role)) {
+          navigate("/department-objectives");
+        } else if (isTopicRole(u.role)) {
           const t = topicRoleEditableCode(u);
           navigate(t ? `/main-plan/${t}` : "/main-plan");
         } else {

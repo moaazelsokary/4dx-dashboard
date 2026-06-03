@@ -267,7 +267,7 @@ const handler = rateLimiter('general')(
         path === '/strategic-topic-content' ||
         /^\/strategic-topic-content\/\d+$/.test(path);
       const writeRoles = pathAllowsTopicWriter
-        ? ['CEO', 'Admin', 'department', 'topic']
+        ? ['CEO', 'Admin', 'department', 'topic', 'department-topic']
         : ['CEO', 'Admin', 'department'];
       if (!writeRoles.some((w) => w.toLowerCase() === userRoleLower)) {
         return {
@@ -1375,7 +1375,13 @@ async function deleteDepartmentObjective(pool, id, user = null) {
   request.input('id', sql.Int, id);
 
   // If user is a department user, verify they can only delete their own department's objectives
-  if (user && user.role === 'department' && user.departments && user.departments.length > 0) {
+  const roleL = user ? String(user.role || '').trim().toLowerCase() : '';
+  if (
+    user &&
+    (roleL === 'department' || roleL === 'department-topic') &&
+    user.departments &&
+    user.departments.length > 0
+  ) {
     // First check if the objective belongs to the user's department
     const checkRequest = pool.request();
     checkRequest.input('id', sql.Int, id);

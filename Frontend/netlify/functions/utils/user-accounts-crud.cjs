@@ -14,11 +14,15 @@ const {
   TOPIC_CODES_LIST,
 } = require('./strategic-topics.cjs');
 const { normalizeEditableStrategicTopicInput } = require('./editable-strategic-topics.cjs');
+const { roleRequiresEditableTopics } = require('./user-roles.cjs');
 
-/** Persist role as lowercase `topic` so JWT and route checks stay consistent. */
+/** Persist canonical lowercase for multi-word roles used in JWT / route checks. */
 function normalizeRoleForStorage(role) {
   const s = String(role ?? '').trim();
-  return s.toLowerCase() === 'topic' ? 'topic' : s;
+  const lower = s.toLowerCase();
+  if (lower === 'topic') return 'topic';
+  if (lower === 'department-topic') return 'department-topic';
+  return s;
 }
 
 const ALLOWED_APP_PATHS = new Set([
@@ -123,7 +127,7 @@ async function validatePowerbiIds(arr, pool) {
 function mapUserAccountRow(row) {
   if (!row) return row;
   const rawRole = row.role != null ? String(row.role).trim() : '';
-  const roleOut = rawRole.toLowerCase() === 'topic' ? 'topic' : rawRole;
+  const roleOut = normalizeRoleForStorage(rawRole);
   const etRaw =
     row.editable_strategic_topic ??
     row.EDITABLE_STRATEGIC_TOPIC ??
@@ -235,7 +239,7 @@ async function handleAccountsCrud(opts) {
 
     const roleTrim = String(role).trim();
     let editableStrategicTopicVal = null;
-    if (roleTrim.toLowerCase() === 'topic') {
+    if (roleRequiresEditableTopics(roleTrim)) {
       const norm = normalizeEditableStrategicTopicInput(body);
       if (norm.error) {
         return { statusCode: 400, json: { success: false, error: norm.error } };
@@ -371,7 +375,7 @@ async function handleAccountsCrud(opts) {
       body.editable_strategic_topics !== undefined
     ) {
       const nextRole = role !== undefined ? String(role).trim() : String(ex.role || '').trim();
-      const isTopicRole = nextRole.toLowerCase() === 'topic';
+      const isTopicRole = roleRequiresEditableTopics(nextRole);
       if (!isTopicRole) {
         nextEditableTopicSql = null;
       } else if (

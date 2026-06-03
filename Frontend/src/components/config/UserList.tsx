@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AccountUser } from '@/types/config';
 import type { StrategicTopicCode } from '@/types/wig';
 import { STRATEGIC_TOPIC_LABELS, parsePipeList } from '@/pages/strategic-topics/strategicTopicKpiUtils';
+import { ROLE_DEPARTMENT_TOPIC_LABEL, isTopicLikeRole, normalizeUserRole } from '@/config/userRoles';
 import {
   getDashboardFromCatalog,
   getAccessibleDashboards,
@@ -70,7 +71,7 @@ function formatDepartmentCell(row: AccountUser): string {
 }
 
 function formatDeptOrTopicCell(row: AccountUser): string {
-  if (String(row.role || '').toLowerCase() === 'topic') {
+  if (isTopicLikeRole(row.role)) {
     const codes = parsePipeList(row.editable_strategic_topic);
     if (codes.length === 0) return '—';
     return codes
@@ -253,7 +254,11 @@ export default function UserList() {
                   return (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.username}</TableCell>
-                    <TableCell>{row.role}</TableCell>
+                    <TableCell>
+                      {normalizeUserRole(row.role) === 'department-topic'
+                        ? ROLE_DEPARTMENT_TOPIC_LABEL
+                        : row.role}
+                    </TableCell>
                     <TableCell className="max-w-[120px] truncate text-sm" title={formatDeptOrTopicCell(row)}>
                       {formatDeptOrTopicCell(row)}
                     </TableCell>

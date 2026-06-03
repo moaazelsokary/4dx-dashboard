@@ -8,6 +8,7 @@ import { Home, Users, BarChart3, History, ArrowUpRight, Settings } from 'lucide-
 import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
 import { OdooIcon } from '@/components/icons/OdooIcon';
 import { hasPowerBINavigationAccess } from '@/config/powerbi';
+import { isDepartmentLikeRole, isTopicLikeRole } from '@/config/userRoles';
 
 interface NavigationBarProps {
   user: {
@@ -27,14 +28,14 @@ export default function NavigationBar({ user, activeTab, onTabChange, showWIGTab
 
   const isCEO = user.role === 'CEO';
   const isAdmin = user.role === 'Admin';
-  const isDepartment = user.role === 'department';
+  const isDepartment = isDepartmentLikeRole(user.role);
   const isOperations = isDepartment && user.departments?.includes('operations');
   const hasPowerBI = hasPowerBINavigationAccess(user);
   const canAccessAdmin = isCEO || isAdmin;
 
   // Determine which pages user can access
   const canAccessWIGPlan = isCEO || isDepartment;
-  const canAccessMainPlan = isCEO || isDepartment; // Department users can view (read-only)
+  const canAccessMainPlan = isCEO || isDepartment || isTopicLikeRole(user.role);
   const canAccessDepartmentObjectives = isCEO || isDepartment;
   const canAccessSummary = isCEO || isOperations;
   const canAccessPowerBI = hasPowerBI;

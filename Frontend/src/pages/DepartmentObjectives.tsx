@@ -497,7 +497,12 @@ export default function DepartmentObjectives() {
     }
 
     const userObj = JSON.parse(userData);
-    if (userObj.role !== 'department' && userObj.role !== 'CEO' && userObj.role !== 'Admin') {
+    if (
+      userObj.role !== 'department' &&
+      userObj.role !== 'department-topic' &&
+      userObj.role !== 'CEO' &&
+      userObj.role !== 'Admin'
+    ) {
       navigate('/access-denied');
       return;
     }
