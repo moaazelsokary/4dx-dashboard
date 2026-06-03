@@ -671,6 +671,7 @@ async function processPendingBeneficiarySyncJobs(pool, logger, opts = {}) {
 module.exports = {
   runReadModelSync,
   enqueueSyncJob,
+  claimNextPendingJob,
   processPendingBeneficiarySyncJobs,
   mapCaseRowsToIndividuals,
 };

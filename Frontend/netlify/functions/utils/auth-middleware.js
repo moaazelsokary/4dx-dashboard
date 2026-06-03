@@ -6,6 +6,7 @@
 const jwt = require('jsonwebtoken');
 const logger = require('./logger');
 const { collectJwtSecrets } = require('./jwt-secrets.cjs');
+const { isDepartmentTopicRole, isDepartmentLikeRole, isTopicLikeRole } = require('./user-roles.cjs');
 
 /**
  * Extract JWT token from Authorization header
@@ -126,7 +127,12 @@ function hasPermission(user, resource, action) {
     return true;
   }
 
-  if (roleNorm === 'department') {
+  if (isDepartmentLikeRole(roleNorm) && !isDepartmentTopicRole(roleNorm)) {
+    return action === 'read' || action === 'update' || action === 'create' || action === 'delete';
+  }
+
+  /** Union of department + topic WIG access (dept objectives + strategic topics). */
+  if (isDepartmentTopicRole(roleNorm)) {
     return action === 'read' || action === 'update' || action === 'create' || action === 'delete';
   }
 
@@ -139,7 +145,7 @@ function hasPermission(user, resource, action) {
   }
 
   /** Strategic-topic owners: read WIG data + create/update on routes the handler allows (not delete). */
-  if (roleNorm === 'topic') {
+  if (isTopicLikeRole(roleNorm) && !isDepartmentTopicRole(roleNorm)) {
     return action === 'read' || action === 'create' || action === 'update';
   }
 

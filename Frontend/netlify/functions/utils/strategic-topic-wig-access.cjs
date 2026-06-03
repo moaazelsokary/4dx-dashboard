@@ -44,7 +44,7 @@ function canReadStrategicTopicApi(user, topic) {
   if (!STRATEGIC_TOPIC_CODES.includes(topicNorm)) return false;
 
   const r = normalizeRole(user);
-  if (r === 'ceo' || r === 'admin' || r === 'department') return true;
+  if (r === 'ceo' || r === 'admin' || isDepartmentLikeRole(r)) return true;
 
   /** Topic / department-topic: read all strategic topic pillars; write is limited in row handlers. */
   if (isTopicLikeRole(r)) {
