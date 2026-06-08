@@ -71,8 +71,7 @@
 [functions."sync-pms-odoo"]
 schedule = "*/10 * * * *"
 
-# Refugees beneficiaries: Odoo → SQL snapshot once per day (UTC).
-# Cron only triggers process-beneficiary-sync-background (scheduled handlers cap ~30s; sync takes minutes).
+# Refugees beneficiaries: enqueue daily sync if stale (UTC 02:15); queue worker runs background extract.
 [functions."sync-refugees-beneficiaries"]
 schedule = "15 2 * * *"
 

@@ -912,7 +912,7 @@ export default function StrategicTopicKpiTable({
                         onConditionChange={(c) => updateColumnFilter('objective', c)}
                         openFilterId={openFilter}
                         onOpenFilterChange={setOpenFilter}
-                        scrollMaxHeight="max-h-64"
+                        scrollMaxHeight="max-h-[11.2rem]"
                       />
                     </div>
                   </TableHead>
@@ -933,7 +933,7 @@ export default function StrategicTopicKpiTable({
                         onConditionChange={(c) => updateColumnFilter('activity', c)}
                         openFilterId={openFilter}
                         onOpenFilterChange={setOpenFilter}
-                        scrollMaxHeight="max-h-64"
+                        scrollMaxHeight="max-h-[11.2rem]"
                       />
                     </div>
                   </TableHead>
@@ -1038,7 +1038,7 @@ export default function StrategicTopicKpiTable({
                         }
                         openFilterId={openFilter}
                         onOpenFilterChange={setOpenFilter}
-                        scrollMaxHeight="max-h-56"
+                        scrollMaxHeight="max-h-[9.8rem]"
                       />
                     </div>
                   </TableHead>
@@ -1079,7 +1079,7 @@ export default function StrategicTopicKpiTable({
                         onConditionChange={(c) => updateColumnFilter('notes', c)}
                         openFilterId={openFilter}
                         onOpenFilterChange={setOpenFilter}
-                        scrollMaxHeight="max-h-48"
+                        scrollMaxHeight="max-h-[8.4rem]"
                       />
                     </div>
                   </TableHead>

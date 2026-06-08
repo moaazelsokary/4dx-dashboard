@@ -78,7 +78,7 @@ export interface ColumnFilterProps {
   onOpenFilterChange: (id: string | null) => void;
   /** Optional: hide condition mode (list only) */
   listOnly?: boolean;
-  /** Scroll area max height */
+  /** @deprecated Layout uses flex; kept for API compat — ignored. */
   scrollMaxHeight?: string;
 }
 
@@ -96,7 +96,7 @@ export function ColumnFilter({
   openFilterId,
   onOpenFilterChange,
   listOnly = false,
-  scrollMaxHeight = 'max-h-[calc(100vh-20rem)]',
+  scrollMaxHeight = '',
 }: ColumnFilterProps) {
   const open = openFilterId === filterId;
   const [tempSelections, setTempSelections] = useState<string[]>(selectedValues);
@@ -201,6 +201,88 @@ export function ColumnFilter({
   const operators = getOperatorsForType(columnType);
   const inputType = columnType === 'date' ? 'date' : columnType === 'number' ? 'number' : 'text';
 
+  const listFooter = (
+    <div className="relative z-10 flex shrink-0 items-center justify-between gap-1.5 border-t bg-popover px-1.5 py-1.5 shadow-[0_-6px_12px_-4px_hsl(var(--background)/0.85)]">
+      <div className="text-[10px] text-muted-foreground tabular-nums">
+        {tempSelections.length} of {uniqueValues.length} selected
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-[11px]"
+          onClick={() => {
+            setTempSelections(selectedValues);
+            setSearchTerm('');
+            handleOpenChange(false);
+          }}
+        >
+          Cancel
+        </Button>
+        <Button size="sm" className="h-6 px-2 text-[11px]" onClick={handleApplyList}>
+          Apply
+        </Button>
+      </div>
+    </div>
+  );
+
+  const listValueRows =
+    filteredValues.length === 0 ? (
+      <div className="text-xs text-muted-foreground py-2 px-1">
+        {searchTerm ? 'No values match your search' : 'No values available'}
+      </div>
+    ) : (
+      filteredValues.map((value) => {
+        const label = getLabel ? getLabel(value) : value;
+        const isChecked = tempSelections.includes(value);
+        return (
+          <div key={value} className="flex w-max min-w-full items-center gap-1.5 py-0.5">
+            <Checkbox
+              id={`filter-${columnKey}-${value}`}
+              checked={isChecked}
+              onCheckedChange={() => handleToggle(value)}
+              className="shrink-0"
+            />
+            <label
+              htmlFor={`filter-${columnKey}-${value}`}
+              className="cursor-pointer whitespace-nowrap pr-2 text-xs"
+              title={label}
+            >
+              {label}
+            </label>
+          </div>
+        );
+      })
+    );
+
+  const listSearchAndSelect = (
+    <>
+      <div className="shrink-0 px-1.5 pb-0.5">
+        <div className="relative">
+          <Search className="absolute left-1.5 top-1 h-2.5 w-2.5 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="h-6 pl-6 text-[11px]"
+          />
+        </div>
+      </div>
+      {filteredValues.length > 0 && (
+        <div className="shrink-0 px-1.5 pb-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-full text-[11px] justify-start"
+            onClick={handleSelectAll}
+          >
+            {allFilteredSelected ? 'Deselect All' : 'Select All'}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
@@ -215,224 +297,88 @@ export function ColumnFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[min(100vw-2rem,22rem)] max-w-[calc(100vw-2rem)] md:!w-[540px] md:!max-w-[540px] max-h-[min(320px,70vh)] overflow-hidden flex flex-col p-0 rounded border bg-popover shadow-lg"
+        className="flex h-[min(336px,49vh)] max-h-[min(336px,49vh)] w-[min(100vw-2rem,15.4rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0 md:!w-[378px] md:!max-w-[378px]"
         align="start"
         side="bottom"
         sideOffset={2}
         collisionPadding={12}
       >
-        <div className="flex flex-col min-h-0 overflow-hidden p-1.5 space-y-0.5 flex-1">
-          <div className="flex items-center justify-between px-1.5 py-0.5 flex-shrink-0">
-            <span className="text-xs font-semibold">Filter by {columnLabel}</span>
-            {hasFilter && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-xs"
-                onClick={handleClearAll}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-          <Separator className="my-0.5" />
+        <div className="flex shrink-0 items-center justify-between px-1.5 py-1">
+          <span className="text-[11px] font-semibold">Filter by {columnLabel}</span>
+          {hasFilter && (
+            <Button variant="ghost" size="sm" className="h-5 px-1.5 text-xs" onClick={handleClearAll}>
+              Clear
+            </Button>
+          )}
+        </div>
+        <Separator className="shrink-0" />
 
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {listOnly ? (
-            <>
-              <div className="px-1.5 pb-0.5 flex-shrink-0">
-                <div className="relative">
-                  <Search className="absolute left-1.5 top-1.5 h-3 w-3 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-7 pl-7 text-xs"
-                  />
-                </div>
-              </div>
-              {filteredValues.length > 0 && (
-                <div className="px-1.5 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-full text-xs justify-start"
-                    onClick={handleSelectAll}
-                  >
-                    {allFilteredSelected ? 'Deselect All' : 'Select All'}
-                  </Button>
-                </div>
-              )}
-              <Separator className="my-0.5" />
+            <div className="flex h-full min-h-0 flex-col overflow-hidden">
+              {listSearchAndSelect}
               <div
-                className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(180px,40vh)] min-h-[56px] overscroll-contain"
+                className="scrollbar-filter-dropdown min-h-0 flex-1 overflow-auto overscroll-contain px-1.5 py-0.5"
                 data-dropdown-scroll
               >
-                <div className="p-1.5 space-y-0.5">
-                  {filteredValues.length === 0 ? (
-                    <div className="text-xs text-muted-foreground py-1.5">
-                      {searchTerm ? 'No values match your search' : 'No values available'}
-                    </div>
-                  ) : (
-                    filteredValues.map((value) => {
-                      const label = getLabel ? getLabel(value) : value;
-                      const isChecked = tempSelections.includes(value);
-                      return (
-                        <div key={value} className="flex items-center space-x-1.5 py-0.5">
-                          <Checkbox
-                            id={`filter-${columnKey}-${value}`}
-                            checked={isChecked}
-                            onCheckedChange={() => handleToggle(value)}
-                          />
-                          <label
-                            htmlFor={`filter-${columnKey}-${value}`}
-                            className="text-xs cursor-pointer flex-1 truncate"
-                            title={label}
-                          >
-                            {label}
-                          </label>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                <div className="w-max min-w-full space-y-0.5">{listValueRows}</div>
               </div>
-              <Separator className="my-0.5" />
-              <div className="flex items-center justify-between px-1.5 py-1.5 flex-shrink-0">
-                <div className="text-[11px] text-muted-foreground">
-                  {tempSelections.length} of {uniqueValues.length} selected
-                </div>
-                <div className="flex gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={() => {
-                      setTempSelections(selectedValues);
-                      setSearchTerm('');
-                      handleOpenChange(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button size="sm" className="h-6 px-2 text-xs" onClick={handleApplyList}>
-                    Apply
-                  </Button>
-                </div>
-              </div>
-            </>
+              {listFooter}
+            </div>
           ) : (
             <Tabs
               value={mode}
               onValueChange={(v) => setMode(v as 'list' | 'condition')}
-              className="w-full"
+              className="flex h-full min-h-0 flex-col overflow-hidden"
             >
-              <TabsList className="grid w-full grid-cols-2 h-7">
-                <TabsTrigger value="list" className="text-xs">
+              <TabsList className="mx-1.5 mt-1 grid h-6 w-[calc(100%-0.75rem)] shrink-0 grid-cols-2">
+                <TabsTrigger value="list" className="py-0 text-[11px]">
                   List
                 </TabsTrigger>
-                <TabsTrigger value="condition" className="text-xs">
+                <TabsTrigger value="condition" className="py-0 text-[11px]">
                   Condition
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="list" className="mt-1.5 space-y-0.5 flex flex-col min-h-0 flex-1">
-                <div className="px-1.5 pb-0.5 flex-shrink-0">
-                  <div className="relative">
-                    <Search className="absolute left-1.5 top-1.5 h-3 w-3 text-muted-foreground" />
-                    <Input
-                      placeholder="Search..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="h-7 pl-7 text-xs"
-                    />
-                  </div>
-                </div>
-                {filteredValues.length > 0 && (
-                  <div className="px-1.5 flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-full text-xs justify-start"
-                      onClick={handleSelectAll}
-                    >
-                      {allFilteredSelected ? 'Deselect All' : 'Select All'}
-                    </Button>
-                  </div>
-                )}
-                <Separator className="my-0.5" />
+              <TabsContent
+                value="list"
+                className="mt-0 flex h-0 min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+              >
+                {listSearchAndSelect}
                 <div
-                  className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 max-h-[min(180px,40vh)] min-h-[56px] overscroll-contain"
+                  className="scrollbar-filter-dropdown min-h-0 flex-1 overflow-auto overscroll-contain px-1.5 py-0.5"
                   data-dropdown-scroll
                 >
-                  <div className="p-1.5 space-y-0.5">
-                    {filteredValues.length === 0 ? (
-                      <div className="text-xs text-muted-foreground py-1.5">
-                        {searchTerm ? 'No values match your search' : 'No values available'}
-                      </div>
-                    ) : (
-                      filteredValues.map((value) => {
-                        const label = getLabel ? getLabel(value) : value;
-                        const isChecked = tempSelections.includes(value);
-                        return (
-                          <div key={value} className="flex items-center space-x-1.5 py-0.5">
-                            <Checkbox
-                              id={`filter-${columnKey}-${value}`}
-                              checked={isChecked}
-                              onCheckedChange={() => handleToggle(value)}
-                            />
-                            <label
-                              htmlFor={`filter-${columnKey}-${value}`}
-                              className="text-xs cursor-pointer flex-1 truncate"
-                              title={label}
-                            >
-                              {label}
-                            </label>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+                  <div className="w-max min-w-full space-y-0.5">{listValueRows}</div>
                 </div>
-                <Separator className="my-0.5" />
-                <div className="flex items-center justify-between px-1.5 py-1.5 flex-shrink-0">
-                  <div className="text-[11px] text-muted-foreground">
-                    {tempSelections.length} of {uniqueValues.length} selected
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => {
-                        setTempSelections(selectedValues);
-                        setSearchTerm('');
-                        handleOpenChange(false);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button size="sm" className="h-6 px-2 text-xs" onClick={handleApplyList}>
-                      Apply
-                    </Button>
-                  </div>
-                </div>
+                {listFooter}
               </TabsContent>
-              <TabsContent value="condition" className="mt-1.5 space-y-1.5">
+              <TabsContent
+                value="condition"
+                className="mt-0 flex h-0 min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+              >
                 {onConditionChange && (
                   <>
-                    <div className="px-1.5">
+                    <div className="scrollbar-filter-dropdown min-h-0 flex-1 overflow-auto overscroll-contain px-1.5 py-1.5 space-y-1.5">
+                    <div>
                       <label className="text-[11px] text-muted-foreground block mb-0.5">Operator</label>
                       <Select
                         value={tempCondition.operator}
-                        onValueChange={(v) =>
-                          setTempCondition((prev) => ({ ...prev, operator: v }))
-                        }
+                        onValueChange={(v) => setTempCondition((prev) => ({ ...prev, operator: v }))}
                       >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-6 text-[11px] px-2 [&>svg]:h-3 [&>svg]:w-3">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent
+                          position="popper"
+                          sideOffset={2}
+                          className="z-[110] max-h-[10.5rem] min-w-0 w-[var(--radix-select-trigger-width)] p-0.5 text-[11px] shadow-md"
+                        >
                           {operators.map((op) => (
-                            <SelectItem key={op.value} value={op.value} className="text-xs">
+                            <SelectItem
+                              key={op.value}
+                              value={op.value}
+                              className="min-h-0 h-6 py-0 pl-6 pr-1.5 text-[11px] [&_svg]:h-3 [&_svg]:w-3"
+                            >
                               {op.label}
                             </SelectItem>
                           ))}
@@ -440,7 +386,7 @@ export function ColumnFilter({
                       </Select>
                     </div>
                     {tempCondition.operator !== 'is_empty' && (
-                      <div className="px-1.5 space-y-1.5">
+                      <div className="space-y-1.5">
                         <div>
                           <label className="text-[11px] text-muted-foreground block mb-0.5">Value</label>
                           <Input
@@ -455,9 +401,7 @@ export function ColumnFilter({
                         </div>
                         {needsTwoValues(tempCondition.operator) && (
                           <div>
-                            <label className="text-[11px] text-muted-foreground block mb-0.5">
-                              And
-                            </label>
+                            <label className="text-[11px] text-muted-foreground block mb-0.5">And</label>
                             <Input
                               type={inputType}
                               className="h-7 text-xs"
@@ -471,39 +415,35 @@ export function ColumnFilter({
                         )}
                       </div>
                     )}
-                    <Separator className="my-0.5" />
-                    <div className="flex justify-end gap-1.5 px-1.5 pb-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => {
-                          setTempCondition(
-                            condition ?? {
-                              mode: 'condition',
-                              operator: 'contains',
-                              value: '',
-                            }
-                          );
-                          handleOpenChange(false);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={handleClearCondition}
-                      >
-                        Clear
-                      </Button>
-                      <Button size="sm" className="h-6 px-2 text-xs" onClick={handleApplyCondition}>
-                        Apply
-                      </Button>
-                    </div>
-                  </>
-                )}
+                  </div>
+                  <div className="relative z-10 flex shrink-0 justify-end gap-1 border-t bg-popover px-1.5 py-1.5 shadow-[0_-6px_12px_-4px_hsl(var(--background)/0.85)]">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={() => {
+                        setTempCondition(
+                          condition ?? { mode: 'condition', operator: 'contains', value: '' }
+                        );
+                        handleOpenChange(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={handleClearCondition}
+                    >
+                      Clear
+                    </Button>
+                    <Button size="sm" className="h-6 px-2 text-[11px]" onClick={handleApplyCondition}>
+                      Apply
+                    </Button>
+                  </div>
+                </>
+              )}
               </TabsContent>
             </Tabs>
           )}

@@ -616,6 +616,47 @@ async function runReadModelSync(pool, logger, opts = {}) {
   }
 }
 
+const DAILY_SYNC_STALE_HOURS = 18;
+
+async function hasActiveBeneficiarySyncJob(pool) {
+  const r = await pool.request().query(`
+    SELECT TOP (1) id FROM dbo.rb_sync_job
+    WHERE status IN (N'pending', N'running')
+    ORDER BY id DESC
+  `);
+  return r.recordset.length > 0;
+}
+
+async function hoursSinceLastBeneficiarySync(pool) {
+  try {
+    const r = await pool.request().query(`SELECT TOP (1) last_sync_at FROM dbo.rb_sync_metadata ORDER BY id`);
+    const raw = r.recordset[0]?.last_sync_at;
+    if (!raw) return Number.POSITIVE_INFINITY;
+    const ms = Date.now() - new Date(raw).getTime();
+    return ms / (1000 * 60 * 60);
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/**
+ * Daily cron: enqueue if warehouse is stale and no job is already pending/running.
+ * Picked up within minutes by sync-beneficiary-queue (same path as manual Sync now).
+ */
+async function ensureDailyBeneficiarySyncEnqueued(pool, logger, opts = {}) {
+  const staleHours = opts.staleHours ?? DAILY_SYNC_STALE_HOURS;
+  if (await hasActiveBeneficiarySyncJob(pool)) {
+    return { enqueued: false, reason: 'active_job' };
+  }
+  const hours = await hoursSinceLastBeneficiarySync(pool);
+  if (hours < staleHours) {
+    return { enqueued: false, reason: 'fresh', hoursSinceSync: Math.round(hours * 10) / 10 };
+  }
+  const jobId = await enqueueSyncJob(pool, 'scheduled-daily');
+  logger.info && logger.info('[rb-sync] daily sync job enqueued', { jobId, hoursSinceSync: hours });
+  return { enqueued: true, jobId, hoursSinceSync: Math.round(hours * 10) / 10 };
+}
+
 async function enqueueSyncJob(pool, username) {
   const r = await pool
     .request()
@@ -672,6 +713,7 @@ module.exports = {
   runReadModelSync,
   enqueueSyncJob,
   claimNextPendingJob,
+  ensureDailyBeneficiarySyncEnqueued,
   processPendingBeneficiarySyncJobs,
   mapCaseRowsToIndividuals,
 };

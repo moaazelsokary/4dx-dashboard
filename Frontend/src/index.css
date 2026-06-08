@@ -143,6 +143,34 @@
   .scrollbar-app-sidebar:hover::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.55);
   }
+
+  /** Column filter popover — thin vertical + horizontal scrollbars */
+  .scrollbar-filter-dropdown {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.32) transparent;
+  }
+
+  .scrollbar-filter-dropdown::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+
+  .scrollbar-filter-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-filter-dropdown::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.32);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-filter-dropdown::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  .scrollbar-filter-dropdown::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 /* Custom animations for dashboard */

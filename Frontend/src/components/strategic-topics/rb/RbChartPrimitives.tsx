@@ -59,6 +59,28 @@ export function formatCount(n: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n);
 }
 
+/** Normalize API / Odoo feedback labels for color lookup. */
+export function normalizeFeedbackStatusKey(label: string): string {
+  return String(label ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+/** Semantic colors for service feedback workflow states. */
+export function getFeedbackStatusColor(label: string): string {
+  const key = normalizeFeedbackStatusKey(label);
+  const colors: Record<string, string> = {
+    draft: readCssHsl('--muted-foreground', 'hsl(215 16% 47%)'),
+    done: readCssHsl('--health-good', 'hsl(142 71% 45%)'),
+    rejected: readCssHsl('--health-critical', 'hsl(0 72% 51%)'),
+    approved: 'hsl(152 69% 31%)',
+    under_investigation: readCssHsl('--health-warning', 'hsl(38 92% 50%)'),
+    postpone: readCssHsl('--secondary', 'hsl(24 95% 53%)'),
+  };
+  return colors[key] ?? readCssHsl('--primary', 'hsl(213 88% 35%)');
+}
+
 export function bucketOthers<T extends { label: string; value: number }>(
   rows: T[],
   limit: number,
@@ -269,19 +291,24 @@ function BarTooltipContent({
 export function ChartCard({
   title,
   hint,
+  headerAction,
   children,
   className,
 }: {
   title: string;
   hint?: string;
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <Card className={cn('border-border/80 shadow-sm', className)}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-2">
+        <div className="min-w-0">
+          <CardTitle className="text-base">{title}</CardTitle>
+          {hint ? <p className="text-xs text-muted-foreground mt-1">{hint}</p> : null}
+        </div>
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -355,6 +382,7 @@ export function RankedVerticalBarChart({
   hint = 'Click the bar or column area to filter other charts',
   height = 280,
   embedded = false,
+  headerAction,
 }: {
   title: string;
   data: SliceRow[];
@@ -364,6 +392,7 @@ export function RankedVerticalBarChart({
   hint?: string;
   height?: number;
   embedded?: boolean;
+  headerAction?: React.ReactNode;
 }) {
   const chartData = useMemo(() => {
     const bucketed = bucketOthers(data, limit);
@@ -376,7 +405,7 @@ export function RankedVerticalBarChart({
 
   if (embedded) return body;
   return (
-    <ChartCard title={title} hint={hint}>
+    <ChartCard title={title} hint={hint} headerAction={headerAction}>
       {body}
     </ChartCard>
   );
@@ -737,7 +766,10 @@ export function FeedbackBarChart({
     const bucketed = bucketOthers(data, 12);
     return bucketed.map((d) => ({ name: d.label, value: d.value }));
   }, [data]);
-  const colors = useMemo(() => getSeriesColors(chartData.length), [chartData.length]);
+  const colorForLabel = useMemo(
+    () => (name: string) => getFeedbackStatusColor(name),
+    []
+  );
   const total = useMemo(() => chartData.reduce((s, d) => s + d.value, 0), [chartData]);
   const yWidth = axisLabelWidth(chartData.map((d) => d.name), 100, 180);
 
@@ -801,13 +833,13 @@ export function FeedbackBarChart({
                 }
                 onClick={interactive && onSelect ? barSelectHandler(onSelect) : undefined}
               >
-                {chartData.map((entry, i) =>
+                {chartData.map((entry) =>
                   interactive && onSelect
-                    ? renderClickableCell(entry.name, colors[i % colors.length]!, active, onSelect)
+                    ? renderClickableCell(entry.name, colorForLabel(entry.name), active, onSelect)
                     : (
                         <Cell
                           key={entry.name}
-                          fill={colors[i % colors.length]}
+                          fill={colorForLabel(entry.name)}
                           opacity={active && active !== entry.name ? 0.35 : 1}
                           stroke={active === entry.name ? 'hsl(var(--foreground))' : undefined}
                           strokeWidth={active === entry.name ? 2 : 0}

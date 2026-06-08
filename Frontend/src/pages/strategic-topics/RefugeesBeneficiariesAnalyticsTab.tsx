@@ -216,8 +216,11 @@ export function RefugeesBeneficiariesAnalyticsTab({ stats, globalStats, loading,
 
   const teamBarData = useMemo(() => {
     const teams = analyticsPayload?.teams ?? [];
-    return teams.map((r) => ({ label: r.label, value: r.services }));
-  }, [analyticsPayload?.teams]);
+    return teams.map((r) => ({
+      label: r.label,
+      value: metricMode === 'cases' ? r.cases : r.services,
+    }));
+  }, [analyticsPayload?.teams, metricMode]);
 
   const toggleFilter = useCallback((key: keyof CrossFilter, label: string) => {
     setFilters((prev) => {
@@ -379,8 +382,13 @@ export function RefugeesBeneficiariesAnalyticsTab({ stats, globalStats, loading,
               data={teamBarData}
               active={filters.team}
               onSelect={(label) => toggleFilter('team', label)}
-              hint="Service count by team. Click a column to filter."
+              hint={
+                metricMode === 'cases'
+                  ? 'Primary case count by team. Click a column to filter.'
+                  : 'Service count by team. Click a column to filter.'
+              }
               height={280}
+              headerAction={<MetricToggle value={metricMode} onChange={setMetricMode} />}
             />
           </div>
 

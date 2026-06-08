@@ -1,12 +1,12 @@
 /**
- * Scheduled daily (UTC): kick off refugees beneficiaries warehouse sync via background function.
- * Netlify scheduled functions must finish in ~30s; full Odoo extract takes several minutes.
+ * Scheduled daily (UTC): enqueue refugees beneficiaries sync if warehouse is stale.
+ * sync-beneficiary-queue (every 3 min) claims the job and runs process-beneficiary-sync-background.
  */
 
 const logger = require('./utils/logger');
 const { getPool } = require('./db.cjs');
 const { validateBeneficiariesEnv } = require('./utils/refugees-beneficiaries-phase0.cjs');
-const { invokeBeneficiarySyncBackground } = require('./utils/refugees-beneficiaries-background-invoke.cjs');
+const { ensureDailyBeneficiarySyncEnqueued } = require('./utils/refugees-beneficiaries-sync-pipeline.cjs');
 
 exports.handler = async (event) => {
   try {
@@ -21,10 +21,11 @@ exports.handler = async (event) => {
       };
     }
 
-    const invoke = await invokeBeneficiarySyncBackground({ source: 'scheduled-daily', jobId: null });
+    const pool = await getPool();
+    const result = await ensureDailyBeneficiarySyncEnqueued(pool, logger);
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, mode: invoke.invoked ? 'background' : 'inline', ...invoke }),
+      body: JSON.stringify({ success: true, ...result }),
     };
   } catch (e) {
     logger.error('sync-refugees-beneficiaries failed', { message: e?.message, stack: e?.stack });

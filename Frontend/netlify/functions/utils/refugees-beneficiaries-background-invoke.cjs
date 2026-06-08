@@ -29,12 +29,26 @@ async function invokeBeneficiarySyncBackground(payload = {}) {
         headers: { 'Content-Type': 'application/json' },
         body,
       });
+      const ok = res.status === 200 || res.status === 202;
+      let detail = '';
+      try {
+        detail = (await res.text()).slice(0, 500);
+      } catch {
+        /* ignore */
+      }
       logger.info('invokeBeneficiarySyncBackground', {
         status: res.status,
+        ok,
         source: payload.source,
         jobId: payload.jobId ?? null,
+        detail: detail || undefined,
       });
-      return { invoked: true };
+      if (!ok) {
+        throw new Error(
+          `Background sync invoke failed HTTP ${res.status}${detail ? `: ${detail}` : ''}`
+        );
+      }
+      return { invoked: true, status: res.status };
     } catch (e) {
       logger.error('invokeBeneficiarySyncBackground fetch failed', {
         message: e?.message,
