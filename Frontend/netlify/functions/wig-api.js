@@ -7,6 +7,7 @@ const strategicTopicKpiRows = require('./wig-api-strategic-topic-kpi-rows.cjs');
 const cmMealKpiRows = require('./wig-api-cm-meal-kpi-rows.cjs');
 const strategicTopicContent = require('./wig-api-strategic-topic-content.cjs');
 const mealContent = require('./wig-api-meal-content.cjs');
+const mealLearningPoints = require('./wig-api-meal-learning-points.cjs');
 const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
 const { canAccessMeal } = require('./utils/meal-access.cjs');
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
@@ -273,7 +274,10 @@ const handler = rateLimiter('general')(
         path === '/cm-meal-kpi-rows/update-order' ||
         /^\/cm-meal-kpi-rows\/\d+$/.test(path) ||
         path === '/meal-content' ||
-        /^\/meal-content\/\d+$/.test(path);
+        /^\/meal-content\/\d+$/.test(path) ||
+        path === '/meal-learning-points' ||
+        /^\/meal-learning-points\/\d+$/.test(path) ||
+        path === '/meal-learning-points/update-order';
       const writeRoles = pathAllowsTopicWriter
         ? ['CEO', 'Admin', 'department', 'topic', 'department-topic', 'M&E', 'cm-meal-project']
         : ['CEO', 'Admin', 'department'];
@@ -653,6 +657,20 @@ const handler = rateLimiter('general')(
     } else if (/^\/meal-content\/\d+$/.test(path) && method === 'DELETE') {
       const id = parseInt(path.split('/')[2], 10);
       result = await mealContent.deleteMealContent(pool, id, event.user);
+    }
+    // MEAL learning points
+    else if (path === '/meal-learning-points' && method === 'GET') {
+      result = await mealLearningPoints.listMealLearningPoints(pool, event.user);
+    } else if (path === '/meal-learning-points/update-order' && method === 'POST') {
+      result = await mealLearningPoints.updateMealLearningPointsOrder(pool, body, event.user);
+    } else if (path === '/meal-learning-points' && method === 'POST') {
+      result = await mealLearningPoints.createMealLearningPoint(pool, body, event.user);
+    } else if (/^\/meal-learning-points\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await mealLearningPoints.updateMealLearningPoint(pool, id, body, event.user);
+    } else if (/^\/meal-learning-points\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await mealLearningPoints.deleteMealLearningPoint(pool, id, event.user);
     }
     // RASCI Metrics
     else if (path === '/rasci' && method === 'GET') {

@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClipboardCheck, FileBarChart, GraduationCap, Wrench } from 'lucide-react';
 import MealDataValidationTab from './MealDataValidationTab';
 import MealContentFolderTab from './MealContentFolderTab';
+import MealLearningPointsTab from './MealLearningPointsTab';
 
 type TabValue = 'validation' | 'tools' | 'reports' | 'learning';
 
@@ -127,12 +128,7 @@ export default function MealPageTemplate() {
         </TabsContent>
 
         <TabsContent value="learning" className="mt-4 focus-visible:outline-none">
-          <MealContentFolderTab
-            category="learning"
-            title="Learning"
-            description="Learning resources, guides, and documentation for MEAL practice."
-            user={user}
-          />
+          <MealLearningPointsTab user={user} />
         </TabsContent>
       </AppLayout>
     </Tabs>

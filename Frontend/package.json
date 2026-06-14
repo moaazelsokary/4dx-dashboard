@@ -24,6 +24,7 @@
     "migrate-dept-objective-dates-topic-responsible": "node scripts/run-dept-objective-dates-topic-responsible-schema.cjs",
     "migrate-strategic-topic-kpi-me": "node scripts/run-strategic-topic-kpi-me-schema.cjs",
     "migrate-meal-content": "node scripts/run-meal-content-schema.cjs",
+    "migrate-meal-learning-points": "node scripts/run-meal-learning-points-schema.cjs",
     "init-cm-meal-kpi": "node scripts/run-cm-meal-kpi-schema.cjs",
     "create-users": "node scripts/create-users.cjs",
     "test-auth": "node scripts/test-auth.cjs",

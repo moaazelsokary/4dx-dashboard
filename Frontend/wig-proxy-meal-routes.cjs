@@ -2,6 +2,7 @@
  * MEAL content folder routes — mounted from wig-proxy.cjs
  */
 const mealContent = require('./netlify/functions/wig-api-meal-content.cjs');
+const mealLearningPoints = require('./netlify/functions/wig-api-meal-learning-points.cjs');
 const { canAccessMeal } = require('./netlify/functions/utils/meal-access.cjs');
 
 function getAuthorizationHeader(req) {
@@ -157,6 +158,76 @@ module.exports = function registerMealWigRoutes(app, { jwt, getPool, setNoCacheH
     } catch (error) {
       if (error.statusCode) return sendMealContentStatus(res, error);
       handleError(res, error, 'Error deleting MEAL content');
+    }
+  });
+
+  app.get('/api/wig/meal-learning-points', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req, jwt);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const rows = await mealLearningPoints.listMealLearningPoints(pool, user);
+      res.json(rows);
+    } catch (error) {
+      if (error.statusCode) return sendMealContentStatus(res, error);
+      handleError(res, error, 'Error listing learning points');
+    }
+  });
+
+  app.post('/api/wig/meal-learning-points/update-order', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req, jwt);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const result = await mealLearningPoints.updateMealLearningPointsOrder(pool, req.body, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendMealContentStatus(res, error);
+      handleError(res, error, 'Error updating learning points order');
+    }
+  });
+
+  app.post('/api/wig/meal-learning-points', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req, jwt);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const row = await mealLearningPoints.createMealLearningPoint(pool, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendMealContentStatus(res, error);
+      handleError(res, error, 'Error creating learning point');
+    }
+  });
+
+  app.put('/api/wig/meal-learning-points/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req, jwt);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const row = await mealLearningPoints.updateMealLearningPoint(pool, id, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendMealContentStatus(res, error);
+      handleError(res, error, 'Error updating learning point');
+    }
+  });
+
+  app.delete('/api/wig/meal-learning-points/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req, jwt);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const result = await mealLearningPoints.deleteMealLearningPoint(pool, id, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendMealContentStatus(res, error);
+      handleError(res, error, 'Error deleting learning point');
     }
   });
 };
