@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -64,6 +64,66 @@ import MealLearningPointFormModal from './MealLearningPointFormModal';
 import { cn } from '@/lib/utils';
 
 const FILTER_STORAGE_KEY = 'meal-learning-points-table-filters';
+const COLUMN_WIDTHS_STORAGE_KEY = 'meal-learning-points-column-widths';
+
+const DEFAULT_COLUMN_WIDTHS = {
+  learning_point: 200,
+  corrective_action: 180,
+  relative_activity: 280,
+  topic: 110,
+  department: 110,
+  status: 90,
+  end_date: 95,
+} as const;
+
+type LearningColumnKey = keyof typeof DEFAULT_COLUMN_WIDTHS;
+
+function loadColumnWidths(): Record<LearningColumnKey, number> {
+  try {
+    const raw = localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_COLUMN_WIDTHS };
+    const parsed = JSON.parse(raw) as Partial<Record<LearningColumnKey, number>>;
+    return {
+      ...DEFAULT_COLUMN_WIDTHS,
+      ...Object.fromEntries(
+        Object.entries(parsed).filter(
+          ([k, v]) => k in DEFAULT_COLUMN_WIDTHS && typeof v === 'number' && v >= 50
+        )
+      ),
+    } as Record<LearningColumnKey, number>;
+  } catch {
+    return { ...DEFAULT_COLUMN_WIDTHS };
+  }
+}
+
+function colWidthStyle(width: number): React.CSSProperties {
+  return { width, minWidth: width, maxWidth: width };
+}
+
+function ResizableTableHead({
+  columnKey,
+  width,
+  onResizeStart,
+  children,
+}: {
+  columnKey: LearningColumnKey;
+  width: number;
+  onResizeStart: (column: LearningColumnKey, e: ReactMouseEvent) => void;
+  children: ReactNode;
+}) {
+  return (
+    <TableHead style={{ ...colWidthStyle(width), position: 'relative' }} className="border-r border-border/50">
+      {children}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${columnKey.replace(/_/g, ' ')} column`}
+        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-10"
+        onMouseDown={(e) => onResizeStart(columnKey, e)}
+      />
+    </TableHead>
+  );
+}
 
 type Props = {
   user: User;
@@ -111,11 +171,13 @@ function matchesColumnFilter(
 function SortableLearningRow({
   row,
   canWrite,
+  columnWidths,
   onEdit,
   onDelete,
 }: {
   row: MealLearningPoint;
   canWrite: boolean;
+  columnWidths: Record<LearningColumnKey, number>;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -146,47 +208,51 @@ function SortableLearningRow({
             {...listeners}
             aria-label="Drag to reorder"
           >
-            <GripVertical className="h-4 w-4" />
+            <GripVertical className="h-3.5 w-3.5" />
           </button>
         ) : null}
       </TableCell>
-      <TableCell className="min-w-[12rem] max-w-[20rem] align-top">
-        <BidirectionalText className="text-sm whitespace-pre-wrap break-words">
+      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.learning_point)}>
+        <BidirectionalText className="text-xs whitespace-pre-wrap break-words">
           {row.learning_point}
         </BidirectionalText>
       </TableCell>
-      <TableCell className="min-w-[10rem] max-w-[18rem] align-top">
-        <BidirectionalText className="text-sm whitespace-pre-wrap break-words text-muted-foreground">
+      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.corrective_action)}>
+        <BidirectionalText className="text-xs whitespace-pre-wrap break-words text-muted-foreground">
           {row.corrective_action?.trim() || '—'}
         </BidirectionalText>
       </TableCell>
-      <TableCell className="min-w-[16rem] max-w-[32rem] align-top">
-        <BidirectionalText className="text-sm whitespace-pre-wrap break-words text-muted-foreground leading-relaxed">
+      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.relative_activity)}>
+        <BidirectionalText className="text-xs whitespace-pre-wrap break-words text-muted-foreground leading-snug">
           {activityText}
         </BidirectionalText>
       </TableCell>
-      <TableCell className="min-w-[8rem] max-w-[14rem] align-top">
-        <BidirectionalText className="text-sm whitespace-pre-wrap break-words text-muted-foreground">
+      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.topic)}>
+        <BidirectionalText className="text-xs whitespace-pre-wrap break-words text-muted-foreground">
           {topicText}
         </BidirectionalText>
       </TableCell>
-      <TableCell className="min-w-[8rem] max-w-[14rem] align-top">
-        <BidirectionalText className="text-sm whitespace-pre-wrap break-words text-muted-foreground">
+      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.department)}>
+        <BidirectionalText className="text-xs whitespace-pre-wrap break-words text-muted-foreground">
           {departmentText}
         </BidirectionalText>
       </TableCell>
-      <TableCell className="align-top">
-        <Badge variant={statusBadgeVariant(row.status)}>{statusText}</Badge>
+      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.status)}>
+        <Badge variant={statusBadgeVariant(row.status)} className="text-[10px] px-1.5 py-0 font-normal">
+          {statusText}
+        </Badge>
       </TableCell>
-      <TableCell className="align-top whitespace-nowrap text-sm">{endDateText}</TableCell>
+      <TableCell className="align-top whitespace-nowrap text-xs border-r border-border/50" style={colWidthStyle(columnWidths.end_date)}>
+        {endDateText}
+      </TableCell>
       {canWrite ? (
         <TableCell className="align-top w-28">
           <div className="flex gap-1">
-            <Button type="button" size="sm" variant="outline" onClick={onEdit} aria-label="Edit">
-              <Edit2 className="h-4 w-4" />
+            <Button type="button" size="sm" variant="outline" onClick={onEdit} aria-label="Edit" className="h-7 w-7 p-0">
+              <Edit2 className="h-3.5 w-3.5" />
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onDelete} aria-label="Delete">
-              <Trash2 className="h-4 w-4" />
+            <Button type="button" size="sm" variant="outline" onClick={onDelete} aria-label="Delete" className="h-7 w-7 p-0">
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         </TableCell>
@@ -209,6 +275,49 @@ export default function MealLearningPointsTab({ user }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<MealLearningPoint | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reordering, setReordering] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<Record<LearningColumnKey, number>>(loadColumnWidths);
+  const [resizingColumn, setResizingColumn] = useState<LearningColumnKey | null>(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+
+  const handleResizeStart = useCallback((column: LearningColumnKey, e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColumn(column);
+    setResizeStartX(e.clientX);
+    setResizeStartWidth(columnWidths[column]);
+  }, [columnWidths]);
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!resizingColumn) return;
+    const diff = e.clientX - resizeStartX;
+    const newWidth = Math.max(50, resizeStartWidth + diff);
+    setColumnWidths((prev) => ({ ...prev, [resizingColumn]: newWidth }));
+  }, [resizingColumn, resizeStartX, resizeStartWidth]);
+
+  const handleResizeEnd = useCallback(() => {
+    setResizingColumn(null);
+  }, []);
+
+  useEffect(() => {
+    if (!resizingColumn) return;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    return () => {
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, [resizingColumn, handleResizeMove, handleResizeEnd]);
+
+  useEffect(() => {
+    localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -371,38 +480,39 @@ export default function MealLearningPointsTab({ user }: Props) {
   const colCount = canWrite ? 9 : 8;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <Card className="text-xs">
+      <CardHeader className="pb-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle className="text-lg">Learning points</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-sm font-semibold">Learning points</CardTitle>
+            <CardDescription className="text-[11px] leading-snug mt-0.5">
               Capture lessons learned, corrective actions, and link them to strategic topic or department activities.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-56">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative w-full sm:w-52">
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8 h-9"
+                className="pl-7 h-8 text-xs"
                 placeholder="Search…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void loadRows()} disabled={loading}>
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            <Button type="button" variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => void loadRows()} disabled={loading}>
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
             </Button>
             {canWrite ? (
               <Button
                 type="button"
                 size="sm"
+                className="h-8 text-xs"
                 onClick={() => {
                   setEditing(null);
                   setFormOpen(true);
                 }}
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-3.5 w-3.5 mr-1" />
                 Add
               </Button>
             ) : null}
@@ -412,19 +522,26 @@ export default function MealLearningPointsTab({ user }: Props) {
 
       <CardContent className="pt-0">
         {loading && rows.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          <div className="flex items-center justify-center py-12 text-muted-foreground text-xs">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
             Loading…
           </div>
         ) : (
           <div className="rounded-md border overflow-x-auto">
             <DndContext collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
-              <Table>
+              <Table
+                className="text-xs [&_td]:px-2 [&_td]:py-1.5 border-collapse"
+                style={{ tableLayout: 'fixed', minWidth: '100%' }}
+              >
                 <TableHeader>
-                  <TableRow>
-                    {canWrite ? <TableHead className="w-10" /> : null}
-                    <TableHead className="min-w-[12rem]">
-                      <div className="flex items-center gap-1">
+                  <TableRow className="[&_th]:text-xs [&_th]:h-8 [&_th]:px-2 [&_th]:font-medium">
+                    {canWrite ? <TableHead className="w-10 border-r border-border/50" /> : null}
+                    <ResizableTableHead
+                      columnKey="learning_point"
+                      width={columnWidths.learning_point}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         Learning point
                         <ColumnFilter
                           columnKey="learning_point"
@@ -442,9 +559,13 @@ export default function MealLearningPointsTab({ user }: Props) {
                           onOpenFilterChange={setOpenFilterId}
                         />
                       </div>
-                    </TableHead>
-                    <TableHead className="min-w-[10rem]">
-                      <div className="flex items-center gap-1">
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="corrective_action"
+                      width={columnWidths.corrective_action}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         Corrective action
                         <ColumnFilter
                           columnKey="corrective_action"
@@ -462,9 +583,13 @@ export default function MealLearningPointsTab({ user }: Props) {
                           onOpenFilterChange={setOpenFilterId}
                         />
                       </div>
-                    </TableHead>
-                    <TableHead className="min-w-[16rem]">
-                      <div className="flex items-center gap-1">
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="relative_activity"
+                      width={columnWidths.relative_activity}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         Relative activity
                         <ColumnFilter
                           columnKey="relative_activity"
@@ -482,9 +607,13 @@ export default function MealLearningPointsTab({ user }: Props) {
                           onOpenFilterChange={setOpenFilterId}
                         />
                       </div>
-                    </TableHead>
-                    <TableHead className="min-w-[8rem]">
-                      <div className="flex items-center gap-1">
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="topic"
+                      width={columnWidths.topic}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         Topic
                         <ColumnFilter
                           columnKey="topic"
@@ -502,9 +631,13 @@ export default function MealLearningPointsTab({ user }: Props) {
                           onOpenFilterChange={setOpenFilterId}
                         />
                       </div>
-                    </TableHead>
-                    <TableHead className="min-w-[8rem]">
-                      <div className="flex items-center gap-1">
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="department"
+                      width={columnWidths.department}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         Department
                         <ColumnFilter
                           columnKey="department"
@@ -522,9 +655,13 @@ export default function MealLearningPointsTab({ user }: Props) {
                           onOpenFilterChange={setOpenFilterId}
                         />
                       </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="flex items-center gap-1">
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="status"
+                      width={columnWidths.status}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         Status
                         <ColumnFilter
                           columnKey="status"
@@ -539,9 +676,13 @@ export default function MealLearningPointsTab({ user }: Props) {
                           listOnly
                         />
                       </div>
-                    </TableHead>
-                    <TableHead>
-                      <div className="flex items-center gap-1">
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="end_date"
+                      width={columnWidths.end_date}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
                         End date
                         <ColumnFilter
                           columnKey="end_date"
@@ -559,15 +700,15 @@ export default function MealLearningPointsTab({ user }: Props) {
                           onOpenFilterChange={setOpenFilterId}
                         />
                       </div>
-                    </TableHead>
-                    {canWrite ? <TableHead className="w-28">Actions</TableHead> : null}
+                    </ResizableTableHead>
+                    {canWrite ? <TableHead className="w-20">Actions</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <SortableContext items={sortedIds} strategy={verticalListSortingStrategy}>
                   <TableBody>
                     {filteredRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={colCount} className="text-center text-muted-foreground py-10">
+                        <TableCell colSpan={colCount} className="text-center text-muted-foreground py-8 text-xs">
                           {rows.length === 0
                             ? 'No learning points yet. Add one to get started.'
                             : 'No rows match your filters.'}
@@ -579,6 +720,7 @@ export default function MealLearningPointsTab({ user }: Props) {
                           key={row.id}
                           row={row}
                           canWrite={canWrite}
+                          columnWidths={columnWidths}
                           onEdit={() => {
                             setEditing(row);
                             setFormOpen(true);
@@ -594,7 +736,7 @@ export default function MealLearningPointsTab({ user }: Props) {
           </div>
         )}
         {reordering ? (
-          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+          <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
             <Loader2 className="h-3 w-3 animate-spin" />
             Saving order…
           </p>

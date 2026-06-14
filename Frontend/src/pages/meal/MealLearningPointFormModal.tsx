@@ -333,39 +333,41 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!w-[min(95vw,50.4rem)] !max-w-[50.4rem] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!w-[min(95vw,50.4rem)] !max-w-[50.4rem] max-h-[90vh] overflow-y-auto text-xs">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit learning point' : 'Add learning point'}</DialogTitle>
+          <DialogTitle className="text-sm">{isEdit ? 'Edit learning point' : 'Add learning point'}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
-          <div className="grid gap-2">
-            <Label htmlFor="lp-learning-point">Learning point</Label>
+        <div className="grid gap-3 py-1">
+          <div className="grid gap-1.5">
+            <Label htmlFor="lp-learning-point" className="text-xs">Learning point</Label>
             <Textarea
               id="lp-learning-point"
               value={learningPoint}
               onChange={(e) => setLearningPoint(e.target.value)}
               rows={3}
               placeholder="Describe what was learned"
+              className="text-xs min-h-[4.5rem]"
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="lp-corrective">Corrective action</Label>
+          <div className="grid gap-1.5">
+            <Label htmlFor="lp-corrective" className="text-xs">Corrective action</Label>
             <Textarea
               id="lp-corrective"
               value={correctiveAction}
               onChange={(e) => setCorrectiveAction(e.target.value)}
               rows={2}
               placeholder="Actions taken or planned"
+              className="text-xs min-h-[3rem]"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Status</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Status</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as MealLearningPointStatus)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -377,35 +379,36 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="lp-end-date">End date</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="lp-end-date" className="text-xs">End date</Label>
               <Input
                 id="lp-end-date"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
+                className="h-8 text-xs"
               />
             </div>
           </div>
 
-          <div className="rounded-lg border border-border/80 p-4 space-y-3">
-            <Label className="text-sm font-medium">Relative activity</Label>
+          <div className="rounded-lg border border-border/80 p-3 space-y-2.5">
+            <Label className="text-xs font-medium">Relative activity</Label>
 
             <div className="relative w-full">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
                 type="search"
                 value={activitySearch}
                 onChange={(e) => setActivitySearch(e.target.value)}
                 placeholder="Search all activities…"
-                className="pl-8 h-9"
+                className="pl-7 h-8 text-xs"
                 aria-label="Search activities"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label className="text-xs text-muted-foreground">Source</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid gap-1.5">
+                <Label className="text-[11px] text-muted-foreground">Source</Label>
                 <Select
                   value={activitySource || ALL_VALUE}
                   onValueChange={(v) => {
@@ -419,7 +422,7 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                     }
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="All sources" />
                   </SelectTrigger>
                   <SelectContent>
@@ -431,13 +434,13 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
               </div>
 
               {activitySource !== 'departments' ? (
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">Topic</Label>
+                <div className="grid gap-1.5">
+                  <Label className="text-[11px] text-muted-foreground">Topic</Label>
                   <Select
                     value={topicCode || ALL_VALUE}
                     onValueChange={(v) => setTopicCode(v === ALL_VALUE ? '' : (v as StrategicTopicCode))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="All topics" />
                     </SelectTrigger>
                     <SelectContent>
@@ -454,13 +457,13 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
 
               {activitySource !== 'topics' ? (
                 <>
-                  <div className="grid gap-2">
-                    <Label className="text-xs text-muted-foreground">Department</Label>
+                  <div className="grid gap-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Department</Label>
                     <Select
                       value={departmentCode || ALL_VALUE}
                       onValueChange={(v) => setDepartmentCode(v === ALL_VALUE ? '' : v)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="All departments" />
                       </SelectTrigger>
                       <SelectContent>
@@ -473,13 +476,13 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid gap-2 sm:col-span-2">
-                    <Label className="text-xs text-muted-foreground">Objective type</Label>
+                  <div className="grid gap-1.5 sm:col-span-2">
+                    <Label className="text-[11px] text-muted-foreground">Objective type</Label>
                     <Select
                       value={deptKind || ALL_VALUE}
                       onValueChange={(v) => setDeptKind(v === ALL_VALUE ? '' : (v as DepartmentObjectiveKind))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="All objective types" />
                       </SelectTrigger>
                       <SelectContent>
@@ -493,36 +496,36 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
               ) : null}
             </div>
 
-            <div className="text-xs text-muted-foreground">
+            <div className="text-[11px] text-muted-foreground">
               {formLinks.length} activit{formLinks.length === 1 ? 'y' : 'ies'} linked (across all sources)
               {activitySearch.trim() && activityOptions.length > 0
                 ? ` · Showing ${filteredActivityOptions.length} of ${activityOptions.length}`
                 : ''}
             </div>
 
-            <ScrollArea className="h-72 rounded-md border border-border/60 p-2">
+            <ScrollArea className="h-64 rounded-md border border-border/60 p-1.5">
               {!needsActivityLoad ? (
-                <p className="text-sm text-muted-foreground py-4 text-center px-2">
+                <p className="text-xs text-muted-foreground py-3 text-center px-2">
                   Search to browse all activities, or narrow by source, topic, or department.
                 </p>
               ) : loadingActivities ? (
-                <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                <div className="flex items-center justify-center py-6 text-muted-foreground text-xs">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   Loading activities…
                 </div>
               ) : activityOptions.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">No activities found</p>
+                <p className="text-xs text-muted-foreground py-3 text-center">No activities found</p>
               ) : filteredActivityOptions.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">No activities match your search</p>
+                <p className="text-xs text-muted-foreground py-3 text-center">No activities match your search</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {filteredActivityOptions.map((opt) => {
                     const key = linkKey(opt.link_type, opt.id);
                     const checked = selectedKeys.has(key);
                     return (
                       <label
                         key={key}
-                        className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50 cursor-pointer"
+                        className="flex items-start gap-2 rounded-md px-1.5 py-1 hover:bg-muted/50 cursor-pointer"
                       >
                         <Checkbox
                           checked={checked}
@@ -530,9 +533,9 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                           className="mt-0.5"
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="text-sm block whitespace-pre-wrap break-words">{opt.label}</span>
+                          <span className="text-xs block whitespace-pre-wrap break-words">{opt.label}</span>
                           {opt.sublabel && (
-                            <span className="text-xs text-muted-foreground block whitespace-pre-wrap break-words">
+                            <span className="text-[11px] text-muted-foreground block whitespace-pre-wrap break-words">
                               {opt.sublabel}
                             </span>
                           )}
@@ -546,12 +549,12 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
           </div>
         </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+        <DialogFooter className="gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="h-8 text-xs">
             Cancel
           </Button>
-          <Button type="button" onClick={() => void handleSubmit()} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+          <Button type="button" onClick={() => void handleSubmit()} disabled={saving} className="h-8 text-xs">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
             {isEdit ? 'Save changes' : 'Add learning point'}
           </Button>
         </DialogFooter>
