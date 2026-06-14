@@ -364,7 +364,7 @@ async function listMealContentFolders(pool, category, user) {
 }
 
 function normalizeParentId(value) {
-  if (value === undefined || value === null || value === '' || value === 'null') return null;
+  if (value === undefined || value === null || value === '' || value === 'null' || value === 'root') return null;
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -400,7 +400,7 @@ async function updateMealContent(pool, id, body, user) {
     updates.push('description = @description');
   }
 
-  if (body.parent_id !== undefined) {
+  if (body.move === true || body.parent_id !== undefined) {
     const category = String(existing.category).toLowerCase();
     const newParent = normalizeParentId(body.parent_id);
     await assertParentValid(pool, category, newParent);

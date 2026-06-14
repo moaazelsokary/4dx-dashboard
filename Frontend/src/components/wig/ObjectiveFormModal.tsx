@@ -28,6 +28,11 @@ function canViewStrategicSensitiveFormFields(role: string | undefined): boolean 
   return r === 'admin' || r === 'ceo';
 }
 
+function canClearObjectiveDates(role: string | undefined): boolean {
+  const r = (role ?? '').trim().toLowerCase();
+  return r === 'admin' || r === 'ceo';
+}
+
 interface ObjectiveFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -60,7 +65,7 @@ export default function ObjectiveFormModal({
   userRole,
 }: ObjectiveFormModalProps) {
   const isStrategic = objectiveKind === 'strategic';
-  const isAdmin = userRole === 'Admin';
+  const canClearDates = canClearObjectiveDates(userRole);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -362,12 +367,12 @@ export default function ObjectiveFormModal({
         mov: mov.trim(),
         start_date: (() => {
           const next = startDate.trim() || null;
-          if (mode === 'edit' && !isAdmin && originalStartDate && !next) return originalStartDate;
+          if (mode === 'edit' && !canClearDates && originalStartDate && !next) return originalStartDate;
           return next;
         })(),
         end_date: (() => {
           const next = endDate.trim() || null;
-          if (mode === 'edit' && !isAdmin && originalEndDate && !next) return originalEndDate;
+          if (mode === 'edit' && !canClearDates && originalEndDate && !next) return originalEndDate;
           return next;
         })(),
         ...(initialData?.id && { id: initialData.id }),
@@ -940,10 +945,10 @@ export default function ObjectiveFormModal({
                   value={startDate}
                   onChange={(e) => {
                     const v = e.target.value;
-                    if (mode === 'edit' && !isAdmin && originalStartDate && !v) {
+                    if (mode === 'edit' && !canClearDates && originalStartDate && !v) {
                       toast({
                         title: 'Start date',
-                        description: 'Only Admin can remove start and end dates.',
+                        description: 'Only Admin or CEO can remove start and end dates.',
                         variant: 'destructive',
                       });
                       return;
@@ -954,7 +959,7 @@ export default function ObjectiveFormModal({
                   readOnly={mode === 'edit' && isAllFieldsLocked}
                   className="flex-1"
                 />
-                {mode === 'edit' && isAdmin && startDate ? (
+                {mode === 'edit' && canClearDates && startDate ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -976,10 +981,10 @@ export default function ObjectiveFormModal({
                   value={endDate}
                   onChange={(e) => {
                     const v = e.target.value;
-                    if (mode === 'edit' && !isAdmin && originalEndDate && !v) {
+                    if (mode === 'edit' && !canClearDates && originalEndDate && !v) {
                       toast({
                         title: 'End date',
-                        description: 'Only Admin can remove start and end dates.',
+                        description: 'Only Admin or CEO can remove start and end dates.',
                         variant: 'destructive',
                       });
                       return;
@@ -990,7 +995,7 @@ export default function ObjectiveFormModal({
                   readOnly={mode === 'edit' && isAllFieldsLocked}
                   className="flex-1"
                 />
-                {mode === 'edit' && isAdmin && endDate ? (
+                {mode === 'edit' && canClearDates && endDate ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -1002,8 +1007,8 @@ export default function ObjectiveFormModal({
                   </Button>
                 ) : null}
               </div>
-              {mode === 'edit' && !isAdmin && (originalStartDate || originalEndDate) ? (
-                <p className="text-[10px] text-muted-foreground">Only Admin can clear dates.</p>
+              {mode === 'edit' && !canClearDates && (originalStartDate || originalEndDate) ? (
+                <p className="text-[10px] text-muted-foreground">Only Admin or CEO can clear dates.</p>
               ) : null}
             </div>
           </div>

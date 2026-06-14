@@ -1365,9 +1365,9 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
     const newKpi = body.kpi;
     const newType = body.type !== undefined ? body.type : currentType;
 
-    const userRole = user ? String(user.role || '').trim() : '';
-    const isAdmin = userRole === 'Admin';
-    if (!isAdmin) {
+    const userRole = user ? String(user.role || user.Role || '').trim() : '';
+    const canClearDates = ['admin', 'ceo'].includes(userRole.toLowerCase());
+    if (!canClearDates) {
       if (
         body.start_date !== undefined &&
         (body.start_date == null || body.start_date === '') &&

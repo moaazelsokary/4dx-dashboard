@@ -8,6 +8,11 @@ const { getPool, sql, withPoolRetry, isConnectionError } = require('./netlify/fu
 const app = express();
 const PORT = 3003;
 
+function canClearObjectiveDatesRole(role) {
+  const r = String(role ?? '').trim().toLowerCase();
+  return r === 'admin' || r === 'ceo';
+}
+
 // Enable CORS
 app.use(cors({
   origin: function(origin, callback) {
@@ -393,14 +398,14 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
       const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'your-secret-key-change-in-production';
       try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        user = { role: decoded.role };
+        user = { role: decoded.role ?? decoded.Role };
       } catch {
         /* continue */
       }
     }
 
     const id = parseInt(req.params.id, 10);
-    const isAdmin = user && String(user.role || '').trim() === 'Admin';
+    const isAdmin = user && canClearObjectiveDatesRole(user.role || user.Role);
     if (!isAdmin && (req.body.start_date !== undefined || req.body.end_date !== undefined)) {
       const cur = pool.request();
       cur.input('id', sql.Int, id);

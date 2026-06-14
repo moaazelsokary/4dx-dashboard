@@ -33,6 +33,7 @@ import {
   getMealContentBreadcrumb,
   getMealContentList,
   MAX_MEAL_CONTENT_BYTES,
+  moveMealContentItem,
   updateMealContentItem,
 } from '@/services/mealContentService';
 import { toast } from '@/hooks/use-toast';
@@ -488,7 +489,7 @@ export default function MealContentFolderTab({ category, title, description, use
     const newParentId = browseFolderId;
     setSaving(true);
     try {
-      await updateMealContentItem(moveRow.id, { parent_id: newParentId });
+      await moveMealContentItem(moveRow.id, newParentId);
       toast({
         title: 'Moved',
         description: `${moveRow.display_name} was moved to ${browsePathLabel}.`,

@@ -93,6 +93,16 @@ export async function createMealFile(payload: {
   });
 }
 
+export async function moveMealContentItem(id: number, parentId: number | null): Promise<MealContentItem> {
+  return fetchMealAPI<MealContentItem>(`/meal-content/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      move: true,
+      parent_id: parentId === null ? 'root' : parentId,
+    }),
+  });
+}
+
 export async function updateMealContentItem(
   id: number,
   payload: {

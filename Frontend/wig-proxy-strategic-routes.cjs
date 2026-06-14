@@ -216,7 +216,8 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       const body = req.body || {};
       const user = decodeWigUser(req, jwt);
       const role = user?.role ?? user?.Role ?? '';
-      const isAdmin = String(role).trim() === 'Admin';
+      const canClearDates = ['admin', 'ceo'].includes(String(role).trim().toLowerCase());
+      const isAdmin = canClearDates;
       if (!isAdmin && (body.start_date !== undefined || body.end_date !== undefined)) {
         const cur = pool.request();
         cur.input('id', sql.Int, id);

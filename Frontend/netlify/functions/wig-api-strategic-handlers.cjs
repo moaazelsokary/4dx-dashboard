@@ -147,8 +147,9 @@ async function createStrategicDepartmentObjective(pool, body, userRole) {
 }
 
 async function updateStrategicDepartmentObjective(pool, id, body, userRole) {
-  const isAdmin = String(userRole || '').trim() === 'Admin';
-  if (!isAdmin && (body.start_date !== undefined || body.end_date !== undefined)) {
+  const role = String(userRole || '').trim();
+  const canClearDates = ['admin', 'ceo'].includes(role.toLowerCase());
+  if (!canClearDates && (body.start_date !== undefined || body.end_date !== undefined)) {
     const cur = pool.request();
     cur.input('id', sql.Int, id);
     const r = await cur.query(
