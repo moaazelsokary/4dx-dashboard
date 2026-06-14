@@ -134,6 +134,32 @@ export function isTopicActivityKpiRow(row: StrategicTopicKpiRow): boolean {
   return !isTopicMeKpiRow(row);
 }
 
+/** Objective / KPI text for a strategic topic row (not the activity column). */
+export function topicObjectiveDisplayText(row: StrategicTopicKpiRow): string {
+  return (row.objective_text || row.main_objective || row.main_kpi || '').trim();
+}
+
+function topicObjectiveDedupeKey(row: StrategicTopicKpiRow): string {
+  const text = topicObjectiveDisplayText(row).toLowerCase();
+  const mainId = row.main_objective_id ?? 0;
+  return `${mainId}::${text}`;
+}
+
+/** One pickable row per distinct topic objective (multiple activity rows may share an objective). */
+export function uniqueTopicObjectiveRows(rows: StrategicTopicKpiRow[]): StrategicTopicKpiRow[] {
+  const seen = new Set<string>();
+  const out: StrategicTopicKpiRow[] = [];
+  for (const row of rows.filter(isTopicActivityKpiRow)) {
+    const label = topicObjectiveDisplayText(row);
+    if (!label) continue;
+    const key = topicObjectiveDedupeKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
 export function topicMeKpisForParent(rows: StrategicTopicKpiRow[], parentId: number): StrategicTopicKpiRow[] {
   const prefix = `${ME_PARENT_PREFIX}${parentId}]`;
   return rows.filter(

@@ -590,10 +590,10 @@ export default function MealLearningPointsTab({ user }: Props) {
                       onResizeStart={handleResizeStart}
                     >
                       <div className="flex items-center gap-1 pr-1">
-                        Relative activity
+                        Relative objective
                         <ColumnFilter
                           columnKey="relative_activity"
-                          columnLabel="Relative activity"
+                          columnLabel="Relative objective"
                           filterId="lp-relative_activity"
                           columnType="text"
                           uniqueValues={uniqueValues.relative_activity}

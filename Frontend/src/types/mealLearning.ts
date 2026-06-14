@@ -31,7 +31,7 @@ export interface MealLearningPoint {
 }
 
 export const MEAL_LEARNING_STATUS_OPTIONS: { value: MealLearningPointStatus; label: string }[] = [
-  { value: 'pending', label: 'Pending' },
+  { value: 'pending', label: 'In Progress' },
   { value: 'on_hold', label: 'On Hold' },
   { value: 'completed', label: 'Completed' },
 ];

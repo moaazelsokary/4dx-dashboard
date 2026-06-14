@@ -33,7 +33,7 @@ import {
   getStrategicTopicKpiRows,
 } from '@/services/wigService';
 import type { Department, DepartmentObjective, StrategicDepartmentObjective, StrategicTopicKpiRow } from '@/types/wig';
-import { isTopicActivityKpiRow } from '@/pages/strategic-topics/strategicTopicKpiUtils';
+import { topicObjectiveDisplayText, uniqueTopicObjectiveRows } from '@/pages/strategic-topics/strategicTopicKpiUtils';
 import type {
   MealLearningActivityLink,
   MealLearningActivityLinkType,
@@ -71,12 +71,8 @@ function linkKey(link_type: string, linked_id: number): string {
   return `${link_type}:${linked_id}`;
 }
 
-function activityLabel(row: StrategicTopicKpiRow): string {
-  return (row.activity || row.objective_text || `Row ${row.id}`).trim();
-}
-
-function deptActivityLabel(row: DepartmentObjective | StrategicDepartmentObjective): string {
-  return (row.activity || row.kpi || `Objective ${row.id}`).trim();
+function deptObjectiveLabel(row: DepartmentObjective | StrategicDepartmentObjective): string {
+  return (row.kpi || row.activity || `Objective ${row.id}`).trim();
 }
 
 export default function MealLearningPointFormModal({ open, onOpenChange, initial, onSave }: Props) {
@@ -213,13 +209,14 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
           topicResults.forEach((rows, idx) => {
             const code = topicCodes[idx];
             const topicLabel = STRATEGIC_TOPIC_LABELS[code];
-            for (const r of rows.filter(isTopicActivityKpiRow)) {
-              if (!activityLabel(r)) continue;
-              const kpi = (r.objective_text || r.kpi || '').trim();
+            for (const r of uniqueTopicObjectiveRows(rows)) {
+              const label = topicObjectiveDisplayText(r);
+              if (!label) continue;
+              const kpi = (r.main_kpi || '').trim();
               pushOption({
                 id: r.id,
                 link_type: 'strategic_topic_kpi',
-                label: activityLabel(r),
+                label,
                 sublabel: kpi ? `[${topicLabel}] ${kpi}` : `[${topicLabel}]`,
               });
             }
@@ -235,13 +232,14 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                   : await getStrategicDepartmentObjectives({ department_code: code });
               const kindLabel = kind === 'bau' ? 'BAU' : 'Strategic';
               for (const r of rows) {
-                if (!(r.activity || r.kpi || '').trim()) continue;
+                if (!(r.kpi || r.activity || '').trim()) continue;
                 const kpi = (r.kpi || '').trim();
+                const activity = (r.activity || '').trim();
                 pushOption({
                   id: r.id,
                   link_type: kind === 'bau' ? 'department_objective' : 'strategic_department_objective',
-                  label: deptActivityLabel(r),
-                  sublabel: kpi ? `[${code} · ${kindLabel}] ${kpi}` : `[${code} · ${kindLabel}]`,
+                  label: deptObjectiveLabel(r),
+                  sublabel: activity && activity !== kpi ? `[${code} · ${kindLabel}] ${activity}` : `[${code} · ${kindLabel}]`,
                 });
               }
             }
@@ -392,7 +390,7 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
           </div>
 
           <div className="rounded-lg border border-border/80 p-3 space-y-2.5">
-            <Label className="text-xs font-medium">Relative activity</Label>
+            <Label className="text-xs font-medium">Relative objective</Label>
 
             <div className="relative w-full">
               <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -400,9 +398,9 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                 type="search"
                 value={activitySearch}
                 onChange={(e) => setActivitySearch(e.target.value)}
-                placeholder="Search all activities…"
+                placeholder="Search objectives…"
                 className="pl-7 h-8 text-xs"
-                aria-label="Search activities"
+                aria-label="Search objectives"
               />
             </div>
 
@@ -497,7 +495,7 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
             </div>
 
             <div className="text-[11px] text-muted-foreground">
-              {formLinks.length} activit{formLinks.length === 1 ? 'y' : 'ies'} linked (across all sources)
+              {formLinks.length} objective{formLinks.length === 1 ? '' : 's'} linked (across all sources)
               {activitySearch.trim() && activityOptions.length > 0
                 ? ` · Showing ${filteredActivityOptions.length} of ${activityOptions.length}`
                 : ''}
@@ -506,17 +504,17 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
             <ScrollArea className="h-64 rounded-md border border-border/60 p-1.5">
               {!needsActivityLoad ? (
                 <p className="text-xs text-muted-foreground py-3 text-center px-2">
-                  Search to browse all activities, or narrow by source, topic, or department.
+                  Search to browse all objectives, or narrow by source, topic, or department.
                 </p>
               ) : loadingActivities ? (
                 <div className="flex items-center justify-center py-6 text-muted-foreground text-xs">
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Loading activities…
+                  Loading objectives…
                 </div>
               ) : activityOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-3 text-center">No activities found</p>
+                <p className="text-xs text-muted-foreground py-3 text-center">No objectives found</p>
               ) : filteredActivityOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-3 text-center">No activities match your search</p>
+                <p className="text-xs text-muted-foreground py-3 text-center">No objectives match your search</p>
               ) : (
                 <div className="space-y-1">
                   {filteredActivityOptions.map((opt) => {

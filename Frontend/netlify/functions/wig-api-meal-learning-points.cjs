@@ -83,9 +83,9 @@ async function fetchLinksForPoints(pool, pointIds) {
       l.link_type,
       l.linked_id,
       CASE
-        WHEN l.link_type = 'strategic_topic_kpi' THEN st.activity
-        WHEN l.link_type = 'department_objective' THEN do.activity
-        WHEN l.link_type = 'strategic_department_objective' THEN sdo.activity
+        WHEN l.link_type = 'strategic_topic_kpi' THEN COALESCE(NULLIF(LTRIM(RTRIM(st.objective_text)), N''), NULLIF(LTRIM(RTRIM(m.objective)), N''), NULLIF(LTRIM(RTRIM(m.kpi)), N''), st.activity)
+        WHEN l.link_type = 'department_objective' THEN COALESCE(NULLIF(LTRIM(RTRIM(do.kpi)), N''), do.activity)
+        WHEN l.link_type = 'strategic_department_objective' THEN COALESCE(NULLIF(LTRIM(RTRIM(sdo.kpi)), N''), sdo.activity)
       END AS activity_label,
       CASE
         WHEN l.link_type = 'strategic_topic_kpi' THEN st.strategic_topic
@@ -93,12 +93,13 @@ async function fetchLinksForPoints(pool, pointIds) {
         WHEN l.link_type = 'strategic_department_objective' THEN d2.code
       END AS source_label,
       CASE
-        WHEN l.link_type = 'strategic_topic_kpi' THEN st.objective_text
+        WHEN l.link_type = 'strategic_topic_kpi' THEN COALESCE(NULLIF(LTRIM(RTRIM(m.kpi)), N''), st.objective_text)
         WHEN l.link_type = 'department_objective' THEN do.kpi
         WHEN l.link_type = 'strategic_department_objective' THEN sdo.kpi
       END AS kpi_label
     FROM meal_learning_point_activity_links l
     LEFT JOIN strategic_topic_kpi_rows st ON l.link_type = 'strategic_topic_kpi' AND l.linked_id = st.id
+    LEFT JOIN main_plan_objectives m ON st.main_objective_id = m.id
     LEFT JOIN department_objectives do ON l.link_type = 'department_objective' AND l.linked_id = do.id
     LEFT JOIN departments d1 ON do.department_id = d1.id
     LEFT JOIN strategic_department_objectives sdo ON l.link_type = 'strategic_department_objective' AND l.linked_id = sdo.id
