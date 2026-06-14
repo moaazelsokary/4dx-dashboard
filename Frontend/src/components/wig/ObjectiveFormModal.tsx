@@ -60,6 +60,7 @@ export default function ObjectiveFormModal({
   userRole,
 }: ObjectiveFormModalProps) {
   const isStrategic = objectiveKind === 'strategic';
+  const isAdmin = userRole === 'Admin';
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -72,6 +73,10 @@ export default function ObjectiveFormModal({
   const [targetType, setTargetType] = useState<'number' | 'percentage'>('number');
   const [responsiblePerson, setResponsiblePerson] = useState('');
   const [mov, setMov] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [originalStartDate, setOriginalStartDate] = useState('');
+  const [originalEndDate, setOriginalEndDate] = useState('');
   const [responsibleSuggestions, setResponsibleSuggestions] = useState<string[]>([]);
   const [showResponsibleSuggestions, setShowResponsibleSuggestions] = useState(false);
   const [definition, setDefinition] = useState('');
@@ -150,6 +155,10 @@ export default function ObjectiveFormModal({
       setTargetType(initialData.target_type || 'number');
       setResponsiblePerson(initialData.responsible_person || '');
       setMov(initialData.mov || '');
+      setStartDate(initialData.start_date ? String(initialData.start_date).slice(0, 10) : '');
+      setEndDate(initialData.end_date ? String(initialData.end_date).slice(0, 10) : '');
+      setOriginalStartDate(initialData.start_date ? String(initialData.start_date).slice(0, 10) : '');
+      setOriginalEndDate(initialData.end_date ? String(initialData.end_date).slice(0, 10) : '');
       setDefinition((initialData as { definition?: string }).definition || '');
       setMeasurementAspect((initialData as { measurement_aspect?: string }).measurement_aspect || '');
       setMeetingNotes((initialData as { meeting_notes?: string }).meeting_notes || '');
@@ -176,6 +185,10 @@ export default function ObjectiveFormModal({
       setTargetType('number');
       setResponsiblePerson('');
       setMov('');
+      setStartDate('');
+      setEndDate('');
+      setOriginalStartDate('');
+      setOriginalEndDate('');
       setDefinition('');
       setMeasurementAspect('');
       setMeetingNotes('');
@@ -347,6 +360,16 @@ export default function ObjectiveFormModal({
         target_type: targetType,
         responsible_person: responsiblePerson.trim(),
         mov: mov.trim(),
+        start_date: (() => {
+          const next = startDate.trim() || null;
+          if (mode === 'edit' && !isAdmin && originalStartDate && !next) return originalStartDate;
+          return next;
+        })(),
+        end_date: (() => {
+          const next = endDate.trim() || null;
+          if (mode === 'edit' && !isAdmin && originalEndDate && !next) return originalEndDate;
+          return next;
+        })(),
         ...(initialData?.id && { id: initialData.id }),
         ...(!isStrategic &&
           initialData?.main_objective_id !== undefined && {
@@ -905,6 +928,84 @@ export default function ObjectiveFormModal({
             {errors.mov && (
               <p className="text-sm text-destructive">{errors.mov}</p>
             )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="obj-start-date">Start date</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="obj-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (mode === 'edit' && !isAdmin && originalStartDate && !v) {
+                      toast({
+                        title: 'Start date',
+                        description: 'Only Admin can remove start and end dates.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    setStartDate(v);
+                  }}
+                  disabled={mode === 'edit' && isAllFieldsLocked}
+                  readOnly={mode === 'edit' && isAllFieldsLocked}
+                  className="flex-1"
+                />
+                {mode === 'edit' && isAdmin && startDate ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setStartDate('')}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="obj-end-date">End date</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="obj-end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (mode === 'edit' && !isAdmin && originalEndDate && !v) {
+                      toast({
+                        title: 'End date',
+                        description: 'Only Admin can remove start and end dates.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    setEndDate(v);
+                  }}
+                  disabled={mode === 'edit' && isAllFieldsLocked}
+                  readOnly={mode === 'edit' && isAllFieldsLocked}
+                  className="flex-1"
+                />
+                {mode === 'edit' && isAdmin && endDate ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setEndDate('')}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+              {mode === 'edit' && !isAdmin && (originalStartDate || originalEndDate) ? (
+                <p className="text-[10px] text-muted-foreground">Only Admin can clear dates.</p>
+              ) : null}
+            </div>
           </div>
 
           {isStrategic && (

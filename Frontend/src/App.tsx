@@ -38,6 +38,7 @@ const PwdPage = lazy(() => import("./pages/strategic-topics/PwdPage"));
 const FundingPage = lazy(() => import("./pages/strategic-topics/FundingPage"));
 const CommunityPage = lazy(() => import("./pages/strategic-topics/CommunityPage"));
 const MealPage = lazy(() => import("./pages/meal/MealPage"));
+const CmMealKpisPage = lazy(() => import("./pages/CmMealKpisPage"));
 
 const queryClient = new QueryClient();
 
@@ -114,6 +115,7 @@ const App = () => (
               <Route path="/admin/configuration" element={<GuardedRoute><Configuration /></GuardedRoute>} />
               <Route path="/pms-odoo-metrics" element={<GuardedRoute><PMSOdooMetrics /></GuardedRoute>} />
               <Route path="/meal" element={<GuardedRoute><MealPage /></GuardedRoute>} />
+              <Route path="/cm-meal-kpis" element={<GuardedRoute><CmMealKpisPage /></GuardedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

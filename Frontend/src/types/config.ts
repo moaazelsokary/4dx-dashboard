@@ -235,6 +235,8 @@ export interface AccountUser {
   powerbi_dashboard_ids: string[] | null;
   /** Role `topic`: single strategic pillar this user may edit (view-only on others). */
   editable_strategic_topic?: string | null;
+  /** Role `cm-meal-project`: pipe-delimited project codes. */
+  cm_meal_projects?: string | null;
   avatar_key?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -279,5 +281,6 @@ export interface AccountPayload {
   allowed_routes?: string[] | null;
   powerbi_dashboard_ids?: string[] | null;
   editable_strategic_topic?: string | null;
+  cm_meal_projects?: string | null;
   avatar_key?: string | null;
 }

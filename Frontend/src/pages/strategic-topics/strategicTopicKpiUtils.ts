@@ -6,7 +6,7 @@ import {
   type StrategicTopicCode,
   isStrategicTopicCode,
 } from '@/config/strategicTopics';
-import { isDepartmentLikeRole, isDepartmentTopicRole, isTopicLikeRole } from '@/config/userRoles';
+import { isDepartmentLikeRole, isDepartmentTopicRole, isDepartmentRole, isTopicLikeRole } from '@/config/userRoles';
 
 export type { StrategicTopicCode };
 export { STRATEGIC_TOPIC_CODES, STRATEGIC_TOPIC_LABELS, isStrategicTopicCode };
@@ -35,6 +35,11 @@ export function userDepartmentCodes(user: User | null): string[] {
 export function isCeoOrAdmin(user: User | null): boolean {
   const r = user?.role || '';
   return r === 'CEO' || r === 'Admin';
+}
+
+/** Only Admin may change end_date on existing strategic topic KPI rows. */
+export function canEditStrategicTopicEndDate(user: User | null): boolean {
+  return user?.role === 'Admin';
 }
 
 /** Topic / department-topic role: pillars this user may edit (`||`-delimited in DB / JWT). */
@@ -115,6 +120,35 @@ export function canManageStrategicTopicContent(user: User | null, pageTopic: Str
   if (!user) return false;
   if (isCeoOrAdmin(user)) return true;
   return topicRoleCanEditTopic(user, pageTopic);
+}
+
+const ME_PARENT_PREFIX = '[M&E-PARENT:';
+
+export function isTopicMeKpiRow(row: StrategicTopicKpiRow): boolean {
+  const rt = String(row.row_type ?? '').trim();
+  if (rt === 'M&E' || rt === 'M&E MOV') return true;
+  return String(row.activity ?? '').startsWith(ME_PARENT_PREFIX);
+}
+
+export function isTopicActivityKpiRow(row: StrategicTopicKpiRow): boolean {
+  return !isTopicMeKpiRow(row);
+}
+
+export function topicMeKpisForParent(rows: StrategicTopicKpiRow[], parentId: number): StrategicTopicKpiRow[] {
+  const prefix = `${ME_PARENT_PREFIX}${parentId}]`;
+  return rows.filter(
+    (r) => isTopicMeKpiRow(r) && String(r.activity ?? '').startsWith(prefix)
+  );
+}
+
+export function topicMeKpiDisplayName(row: StrategicTopicKpiRow): string {
+  const fromActivity = String(row.activity ?? '').replace(/^\[M&E-PARENT:\d+\]\s*/, '').trim();
+  return (row.objective_text || fromActivity || row.activity || '—').trim();
+}
+
+/** Only CEO can add/edit/delete topic M&E KPIs (matches department objectives). */
+export function canModifyTopicMeKpis(user: User | null): boolean {
+  return user?.role === 'CEO';
 }
 
 /** Default department pipe tokens for an inline-created row (department users: own dept only). */

@@ -46,6 +46,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import type { Department, MainPlanObjective, StrategicTopicCode, StrategicTopicKpiRow } from '@/types/wig';
 import type { User } from '@/services/authService';
+import MEKPIsModal, { type MEKPIDisplayRow } from '@/components/wig/MEKPIsModal';
+import MEKPIFormModal from '@/components/wig/MEKPIFormModal';
 import KPISelector from '@/components/wig/KPISelector';
 import MonthlyDataEditor from '@/components/wig/MonthlyDataEditor';
 import {
@@ -56,9 +58,14 @@ import {
   toPipeList,
   userDepartmentCodes,
   canEditStrategicTopicRow,
+  canEditStrategicTopicEndDate,
   canDeleteStrategicTopicRow,
   canCreateStrategicTopicRow,
   pickDefaultDeptCodesForNewRow,
+  isTopicActivityKpiRow,
+  topicMeKpisForParent,
+  topicMeKpiDisplayName,
+  canModifyTopicMeKpis,
 } from './strategicTopicKpiUtils';
 import { isDepartmentLikeRole, isDepartmentRole } from '@/config/userRoles';
 import {
@@ -133,7 +140,7 @@ function sortRowsForDisplay(rows: StrategicTopicKpiRow[]): StrategicTopicKpiRow[
   );
 }
 
-const STRATEGIC_TOPIC_KPI_TABLE_COL_COUNT = 12;
+const STRATEGIC_TOPIC_KPI_TABLE_COL_COUNT = 13;
 
 function StrategicTopicInlineRowInsertStrip({
   colSpan,
@@ -235,6 +242,35 @@ function kpiFilterValueForRow(row: StrategicTopicKpiRow): string {
   return stripKpiNumberPrefix((row.main_kpi || '—').trim() || '—');
 }
 
+function topicRowToMeDisplay(row: StrategicTopicKpiRow): MEKPIDisplayRow {
+  return {
+    id: row.id,
+    kpi: topicMeKpiDisplayName(row),
+    mov: row.mov,
+    me_target: row.me_target,
+    me_actual: row.me_actual,
+    me_frequency: row.me_frequency,
+    me_start_date: row.me_start_date,
+    me_end_date: row.me_end_date,
+    me_tool: row.me_tool,
+    me_responsible: row.me_responsible,
+    me_folder_link: row.me_folder_link,
+  };
+}
+
+type TopicMEKPIFormData = {
+  me_kpi: string;
+  mov: string;
+  target?: number | null;
+  actual?: number | null;
+  frequency?: string;
+  start_date?: string;
+  end_date?: string;
+  tool?: string;
+  responsible?: string;
+  folder_link?: string;
+};
+
 export default function StrategicTopicKpiTable({
   rows,
   mergeRows,
@@ -246,6 +282,11 @@ export default function StrategicTopicKpiTable({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StrategicTopicKpiRow | null>(null);
+  const [isMEModalOpen, setIsMEModalOpen] = useState(false);
+  const [selectedMERow, setSelectedMERow] = useState<StrategicTopicKpiRow | null>(null);
+  const [isMEKPIFormModalOpen, setIsMEKPIFormModalOpen] = useState(false);
+  const [currentMEKPIParentId, setCurrentMEKPIParentId] = useState<number | null>(null);
+  const [editingMEKPI, setEditingMEKPI] = useState<StrategicTopicKpiRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [appendPending, setAppendPending] = useState(false);
   const appendLockRef = useRef(false);
@@ -290,6 +331,7 @@ export default function StrategicTopicKpiTable({
   const [mainPlanObjectiveId, setMainPlanObjectiveId] = useState<number | null>(null);
   const [objectiveText, setObjectiveText] = useState('');
   const [activity, setActivity] = useState('');
+  const [responsible, setResponsible] = useState('');
   const [expectedDuration, setExpectedDuration] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -303,6 +345,7 @@ export default function StrategicTopicKpiTable({
     setMainPlanObjectiveId(null);
     setObjectiveText('');
     setActivity('');
+    setResponsible('');
     setExpectedDuration('');
     setStartDate('');
     setEndDate('');
@@ -332,6 +375,7 @@ export default function StrategicTopicKpiTable({
     setMainPlanObjectiveId(row.main_objective_id ?? null);
     setObjectiveText(row.objective_text || '');
     setActivity(row.activity || '');
+    setResponsible(row.responsible || '');
     setExpectedDuration(row.expected_duration || '');
     setStartDate(row.start_date ? String(row.start_date).slice(0, 10) : '');
     setEndDate(row.end_date ? String(row.end_date).slice(0, 10) : '');
@@ -399,9 +443,15 @@ export default function StrategicTopicKpiTable({
         main_objective_id: mainPlanObjectiveId,
         objective_text: objectiveText.trim() || null,
         activity: activity.trim(),
+        responsible: responsible.trim() || null,
         expected_duration: expectedDuration.trim() || null,
         start_date: startDate || null,
-        end_date: endDate || null,
+        end_date:
+          editing && !canEditStrategicTopicEndDate(user)
+            ? editing.end_date
+              ? String(editing.end_date).slice(0, 10)
+              : null
+            : endDate || null,
         associated_departments: toPipeList(selectedDeptCodes),
         associated_strategic_topics: toPipeList(selectedTopicCodes),
         status,
@@ -460,6 +510,7 @@ export default function StrategicTopicKpiTable({
       main_objective_id: null as number | null,
       objective_text: null as string | null,
       activity: placeholderActivity,
+      responsible: null as string | null,
       expected_duration: null as string | null,
       start_date: null as string | null,
       end_date: null as string | null,
@@ -543,10 +594,144 @@ export default function StrategicTopicKpiTable({
     []
   );
 
+  const canModifyMEKPIs = canModifyTopicMeKpis(user);
+  const activityRows = useMemo(() => rows.filter(isTopicActivityKpiRow), [rows]);
+
+  const handleOpenMEModal = (row: StrategicTopicKpiRow) => {
+    setSelectedMERow(row);
+    setIsMEModalOpen(true);
+  };
+
+  const handleCloseMEModal = () => {
+    setIsMEModalOpen(false);
+    setSelectedMERow(null);
+  };
+
+  const handleDeleteMEKPI = async (id: number) => {
+    if (!canModifyMEKPIs) {
+      toast({ title: 'Access Denied', description: 'Only CEO can delete M&E KPIs', variant: 'destructive' });
+      return;
+    }
+    if (!window.confirm('Delete this M&E KPI?')) return;
+    try {
+      await deleteStrategicTopicKpiRow(id);
+      mergeRows((prev) => prev.filter((r) => r.id !== id));
+      toast({ title: 'M&E KPI deleted' });
+      onRefresh();
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'Delete failed',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleEditMEKPI = (display: MEKPIDisplayRow) => {
+    if (!canModifyMEKPIs) return;
+    const meRow = rows.find((r) => r.id === display.id);
+    if (!meRow) return;
+    const match = String(meRow.activity ?? '').match(/^\[M&E-PARENT:(\d+)\]/);
+    const parentId = match ? parseInt(match[1], 10) : null;
+    if (parentId) setCurrentMEKPIParentId(parentId);
+    setEditingMEKPI(meRow);
+    setIsMEKPIFormModalOpen(true);
+  };
+
+  const handleAddMEKPI = async (meKpiData: TopicMEKPIFormData) => {
+    if (!canModifyMEKPIs) {
+      toast({ title: 'Access Denied', description: 'Only CEO can add M&E KPIs', variant: 'destructive' });
+      throw new Error('Access denied');
+    }
+
+    if (editingMEKPI?.id) {
+      const parentMatch = String(editingMEKPI.activity ?? '').match(/^\[M&E-PARENT:(\d+)\]/);
+      const parentId = parentMatch ? parseInt(parentMatch[1], 10) : currentMEKPIParentId;
+      try {
+        await updateStrategicTopicKpiRow(editingMEKPI.id, {
+          objective_text: meKpiData.me_kpi,
+          activity: `[M&E-PARENT:${parentId}] ${meKpiData.me_kpi}`,
+          mov: meKpiData.mov,
+          me_target: meKpiData.target ?? null,
+          me_actual: meKpiData.actual ?? null,
+          me_frequency: meKpiData.frequency || null,
+          me_start_date: meKpiData.start_date || null,
+          me_end_date: meKpiData.end_date || null,
+          me_tool: meKpiData.tool || null,
+          me_responsible: meKpiData.responsible || null,
+          me_folder_link: meKpiData.folder_link || null,
+        });
+        toast({ title: 'M&E KPI updated' });
+        setEditingMEKPI(null);
+        setIsMEKPIFormModalOpen(false);
+        onRefresh();
+        return;
+      } catch (e) {
+        toast({
+          title: 'Error',
+          description: e instanceof Error ? e.message : 'Update failed',
+          variant: 'destructive',
+        });
+        throw e;
+      }
+    }
+
+    if (!currentMEKPIParentId) {
+      toast({ title: 'Error', description: 'Parent activity not found', variant: 'destructive' });
+      throw new Error('Parent not found');
+    }
+
+    const parent = rows.find((r) => r.id === currentMEKPIParentId);
+    if (!parent) {
+      toast({ title: 'Error', description: 'Parent activity not found', variant: 'destructive' });
+      throw new Error('Parent not found');
+    }
+
+    try {
+      const created = await createStrategicTopicKpiRow({
+        strategic_topic: strategicTopicCode,
+        main_objective_id: parent.main_objective_id,
+        objective_text: meKpiData.me_kpi,
+        activity: `[M&E-PARENT:${currentMEKPIParentId}] ${meKpiData.me_kpi}`,
+        row_type: 'M&E',
+        expected_duration: null,
+        start_date: null,
+        end_date: null,
+        associated_departments: parent.associated_departments,
+        associated_strategic_topics: parent.associated_strategic_topics,
+        status: 'In Progress',
+        notes: null,
+        responsible: meKpiData.responsible || null,
+        mov: meKpiData.mov,
+        me_target: meKpiData.target ?? null,
+        me_actual: meKpiData.actual ?? null,
+        me_frequency: meKpiData.frequency || null,
+        me_start_date: meKpiData.start_date || null,
+        me_end_date: meKpiData.end_date || null,
+        me_tool: meKpiData.tool || null,
+        me_responsible: meKpiData.responsible || null,
+        me_folder_link: meKpiData.folder_link || null,
+      });
+      mergeRows((prev) => [...prev, created]);
+      toast({ title: 'M&E KPI added' });
+      setIsMEKPIFormModalOpen(false);
+      setCurrentMEKPIParentId(null);
+      onRefresh();
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'Create failed',
+        variant: 'destructive',
+      });
+      throw e;
+    }
+  };
+
   const {
     uniqueKpis,
     uniqueObjectives,
     uniqueActivities,
+    uniqueResponsibles,
     uniqueDurations,
     uniqueStarts,
     uniqueEnds,
@@ -558,6 +743,7 @@ export default function StrategicTopicKpiTable({
     const kpis = new Set<string>();
     const objs = new Set<string>();
     const acts = new Set<string>();
+    const resps = new Set<string>();
     const durs = new Set<string>();
     const starts = new Set<string>();
     const ends = new Set<string>();
@@ -565,10 +751,11 @@ export default function StrategicTopicKpiTable({
     const topics = new Set<string>();
     const stats = new Set<string>();
     const notes = new Set<string>();
-    for (const r of rows) {
+    for (const r of activityRows) {
       kpis.add(kpiFilterValueForRow(r));
       objs.add(objectiveCellText(r));
       if (r.activity?.trim()) acts.add(r.activity.trim());
+      resps.add((r.responsible || '—').trim() || '—');
       durs.add((r.expected_duration || '—').trim());
       starts.add(formatDateShort(r.start_date));
       ends.add(formatDateShort(r.end_date));
@@ -583,6 +770,7 @@ export default function StrategicTopicKpiTable({
       uniqueKpis: [...kpis].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
       uniqueObjectives: [...objs].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
       uniqueActivities: [...acts].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+      uniqueResponsibles: [...resps].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
       uniqueDurations: [...durs].sort(),
       uniqueStarts: [...starts].sort(),
       uniqueEnds: [...ends].sort(),
@@ -591,9 +779,9 @@ export default function StrategicTopicKpiTable({
       uniqueStatuses: [...stats].sort(),
       uniqueNotes: [...notes].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
     };
-  }, [rows]);
+  }, [activityRows]);
 
-  const orderedRows = useMemo(() => sortRowsForDisplay(rows), [rows]);
+  const orderedRows = useMemo(() => sortRowsForDisplay(activityRows), [activityRows]);
 
   const filteredRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -605,6 +793,7 @@ export default function StrategicTopicKpiTable({
           row.objective_text,
           row.main_objective,
           row.activity,
+          row.responsible,
           row.expected_duration,
           row.notes,
           displayDepts(row.associated_departments),
@@ -620,6 +809,7 @@ export default function StrategicTopicKpiTable({
       if (!matchesTextColumnFilter(tableFilterState, 'kpi', kpiFilterValueForRow(row))) return false;
       if (!matchesTextColumnFilter(tableFilterState, 'objective', objectiveCellText(row))) return false;
       if (!matchesTextColumnFilter(tableFilterState, 'activity', row.activity.trim())) return false;
+      if (!matchesTextColumnFilter(tableFilterState, 'responsible', (row.responsible || '—').trim() || '—')) return false;
       if (!matchesTextColumnFilter(tableFilterState, 'duration', (row.expected_duration || '—').trim())) return false;
       if (!matchesTextColumnFilter(tableFilterState, 'start', formatDateShort(row.start_date))) return false;
       if (!matchesTextColumnFilter(tableFilterState, 'end', formatDateShort(row.end_date))) return false;
@@ -668,6 +858,14 @@ export default function StrategicTopicKpiTable({
     async (rowId: number, column: StTopicGridColumn, raw: string): Promise<boolean> => {
       const row = rows.find((r) => r.id === rowId);
       if (!row || !canEditStrategicTopicRow(user, row, strategicTopicCode)) return false;
+      if (column === 'end' && !canEditStrategicTopicEndDate(user)) {
+        toast({
+          title: 'End date locked',
+          description: 'Only Admin can change the end date on existing KPIs.',
+          variant: 'destructive',
+        });
+        return false;
+      }
 
       const parsed = parseStTopicInlineCommit(column, raw);
       if (parsed.ok === false) {
@@ -711,6 +909,8 @@ export default function StrategicTopicKpiTable({
   useEffect(() => {
     resetStTopicSheet();
   }, [strategicTopicCode]);
+
+  const canEditEndDate = canEditStrategicTopicEndDate(user);
 
   const hasActiveFilters =
     searchQuery.trim() !== '' ||
@@ -937,6 +1137,27 @@ export default function StrategicTopicKpiTable({
                       />
                     </div>
                   </TableHead>
+                  <TableHead className="bg-primary/10 border-r border-border/50 align-bottom min-w-[9rem] w-[10%]">
+                    <div className="flex items-center gap-2">
+                      <span>Responsible</span>
+                      <ColumnFilter
+                        columnKey="responsible"
+                        columnLabel="Responsible"
+                        filterId="st-responsible"
+                        columnType="text"
+                        uniqueValues={uniqueResponsibles}
+                        selectedValues={getListSelected(tableFilterState, 'responsible')}
+                        onListChange={(selected) =>
+                          updateColumnFilter('responsible', { mode: 'list', selectedValues: selected })
+                        }
+                        condition={getCondition(tableFilterState, 'responsible')}
+                        onConditionChange={(c) => updateColumnFilter('responsible', c)}
+                        openFilterId={openFilter}
+                        onOpenFilterChange={setOpenFilter}
+                        scrollMaxHeight="max-h-[11.2rem]"
+                      />
+                    </div>
+                  </TableHead>
                   <TableHead className="bg-primary/10 border-r border-border/50 whitespace-nowrap align-bottom min-w-[6.5rem] w-[8%]">
                     <div className="flex items-center gap-2">
                       <span>Expected duration</span>
@@ -1122,6 +1343,7 @@ export default function StrategicTopicKpiTable({
                       {filteredRows.map((row, rowIndex) => {
                         const canEdit = canEditStrategicTopicRow(user, row, strategicTopicCode);
                         const canDel = canDeleteStrategicTopicRow(user);
+                        const meKPIsForRow = topicMeKpisForParent(rows, row.id);
                         const displayOrder =
                           row.sort_order != null && Number.isFinite(row.sort_order)
                             ? row.sort_order
@@ -1167,6 +1389,15 @@ export default function StrategicTopicKpiTable({
                             </StrategicTopicKpiSheetCell>
                             <StrategicTopicKpiSheetCell
                               rowId={row.id}
+                              column="responsible"
+                              editorSeed={getStTopicEditorSeed('responsible', row)}
+                              disabled={!canEdit}
+                              className="align-top text-sm border-r border-border/50 min-w-0"
+                            >
+                              <BidirectionalText>{row.responsible || '—'}</BidirectionalText>
+                            </StrategicTopicKpiSheetCell>
+                            <StrategicTopicKpiSheetCell
+                              rowId={row.id}
                               column="duration"
                               editorSeed={getStTopicEditorSeed('duration', row)}
                               disabled={!canEdit}
@@ -1187,7 +1418,7 @@ export default function StrategicTopicKpiTable({
                               rowId={row.id}
                               column="end"
                               editorSeed={getStTopicEditorSeed('end', row)}
-                              disabled={!canEdit}
+                              disabled={!canEdit || !canEditEndDate}
                               className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50"
                             >
                               {formatDateShort(row.end_date)}
@@ -1228,6 +1459,46 @@ export default function StrategicTopicKpiTable({
                               <BidirectionalText>{row.notes || '—'}</BidirectionalText>
                             </StrategicTopicKpiSheetCell>
                             <TableCell className="align-top text-right space-x-1 whitespace-nowrap" data-no-drag>
+                              {meKPIsForRow.length > 0 && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  data-no-drag
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenMEModal(row);
+                                  }}
+                                  aria-label={`View ${meKPIsForRow.length} M&E KPIs`}
+                                  title={`View ${meKPIsForRow.length} M&E KPIs`}
+                                >
+                                  <Badge variant="secondary" className="mr-1">
+                                    {meKPIsForRow.length}
+                                  </Badge>
+                                  M&E
+                                </Button>
+                              )}
+                              {canModifyMEKPIs && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  data-no-drag
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentMEKPIParentId(row.id);
+                                    setEditingMEKPI(null);
+                                    setIsMEKPIFormModalOpen(true);
+                                  }}
+                                  aria-label="Add M&E KPI"
+                                  title="Add M&E KPI"
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  M&E
+                                </Button>
+                              )}
                               {canEdit && (
                                 <div
                                   className="inline-block"
@@ -1297,6 +1568,7 @@ export default function StrategicTopicKpiTable({
                     {filteredRows.map((row, rowIndex) => {
                       const canEdit = canEditStrategicTopicRow(user, row, strategicTopicCode);
                       const canDel = canDeleteStrategicTopicRow(user);
+                      const meKPIsForRow = topicMeKpisForParent(rows, row.id);
                       const displayOrder =
                         row.sort_order != null && Number.isFinite(row.sort_order)
                           ? row.sort_order
@@ -1341,6 +1613,15 @@ export default function StrategicTopicKpiTable({
                           </StrategicTopicKpiSheetCell>
                           <StrategicTopicKpiSheetCell
                             rowId={row.id}
+                            column="responsible"
+                            editorSeed={getStTopicEditorSeed('responsible', row)}
+                            disabled={!canEdit}
+                            className="align-top text-sm border-r border-border/50 min-w-0"
+                          >
+                            <BidirectionalText>{row.responsible || '—'}</BidirectionalText>
+                          </StrategicTopicKpiSheetCell>
+                          <StrategicTopicKpiSheetCell
+                            rowId={row.id}
                             column="duration"
                             editorSeed={getStTopicEditorSeed('duration', row)}
                             disabled={!canEdit}
@@ -1361,7 +1642,7 @@ export default function StrategicTopicKpiTable({
                             rowId={row.id}
                             column="end"
                             editorSeed={getStTopicEditorSeed('end', row)}
-                            disabled={!canEdit}
+                            disabled={!canEdit || !canEditEndDate}
                             className="align-top text-sm whitespace-nowrap tabular-nums border-r border-border/50"
                           >
                             {formatDateShort(row.end_date)}
@@ -1402,6 +1683,38 @@ export default function StrategicTopicKpiTable({
                             <BidirectionalText>{row.notes || '—'}</BidirectionalText>
                           </StrategicTopicKpiSheetCell>
                           <TableCell className="align-top text-right space-x-1 whitespace-nowrap">
+                            {meKPIsForRow.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleOpenMEModal(row)}
+                                aria-label={`View ${meKPIsForRow.length} M&E KPIs`}
+                                title={`View ${meKPIsForRow.length} M&E KPIs`}
+                              >
+                                <Badge variant="secondary" className="mr-1">
+                                  {meKPIsForRow.length}
+                                </Badge>
+                                M&E
+                              </Button>
+                            )}
+                            {canModifyMEKPIs && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setCurrentMEKPIParentId(row.id);
+                                  setEditingMEKPI(null);
+                                  setIsMEKPIFormModalOpen(true);
+                                }}
+                                aria-label="Add M&E KPI"
+                                title="Add M&E KPI"
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                M&E
+                              </Button>
+                            )}
                             {canEdit && (
                               <div className="inline-block">
                                 <MonthlyDataEditor
@@ -1505,6 +1818,15 @@ export default function StrategicTopicKpiTable({
               <Input id="st-act" value={activity} onChange={(e) => setActivity(e.target.value)} />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="st-resp">Responsible</Label>
+              <Input
+                id="st-resp"
+                value={responsible}
+                onChange={(e) => setResponsible(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="st-dur">Expected duration</Label>
               <Input id="st-dur" value={expectedDuration} onChange={(e) => setExpectedDuration(e.target.value)} placeholder="e.g. 3 months" />
             </div>
@@ -1515,7 +1837,18 @@ export default function StrategicTopicKpiTable({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="st-ed">End date</Label>
-                <Input id="st-ed" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <Input
+                  id="st-ed"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  readOnly={!!editing && !canEditEndDate}
+                  disabled={!!editing && !canEditEndDate}
+                  className={editing && !canEditEndDate ? 'bg-muted cursor-not-allowed' : undefined}
+                />
+                {editing && !canEditEndDate ? (
+                  <p className="text-[10px] text-muted-foreground">Only Admin can change the end date.</p>
+                ) : null}
               </div>
             </div>
             <div className="space-y-2">
@@ -1578,6 +1911,48 @@ export default function StrategicTopicKpiTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedMERow && (
+        <MEKPIsModal
+          isOpen={isMEModalOpen}
+          onClose={handleCloseMEModal}
+          objectiveKPI={selectedMERow.main_kpi || selectedMERow.activity}
+          objectiveActivity={selectedMERow.activity}
+          meKPIs={topicMeKpisForParent(rows, selectedMERow.id).map(topicRowToMeDisplay)}
+          onDelete={handleDeleteMEKPI}
+          onEdit={handleEditMEKPI}
+          canModify={canModifyMEKPIs}
+        />
+      )}
+
+      <MEKPIFormModal
+        open={isMEKPIFormModalOpen}
+        onOpenChange={(open) => {
+          setIsMEKPIFormModalOpen(open);
+          if (!open) {
+            setCurrentMEKPIParentId(null);
+            setEditingMEKPI(null);
+          }
+        }}
+        onSave={handleAddMEKPI}
+        initialData={
+          editingMEKPI
+            ? {
+                id: editingMEKPI.id,
+                me_kpi: topicMeKpiDisplayName(editingMEKPI),
+                mov: editingMEKPI.mov || '',
+                target: editingMEKPI.me_target ?? null,
+                actual: editingMEKPI.me_actual ?? null,
+                frequency: editingMEKPI.me_frequency || undefined,
+                start_date: editingMEKPI.me_start_date || undefined,
+                end_date: editingMEKPI.me_end_date || undefined,
+                tool: editingMEKPI.me_tool || undefined,
+                responsible: editingMEKPI.me_responsible || undefined,
+                folder_link: editingMEKPI.me_folder_link || undefined,
+              }
+            : undefined
+        }
+      />
     </>
   );
 }

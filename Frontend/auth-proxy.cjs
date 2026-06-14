@@ -193,6 +193,7 @@ app.post('/api/auth/signin', async (req, res) => {
         allowed_routes,
         powerbi_dashboard_ids,
         editable_strategic_topic,
+        cm_meal_projects,
         avatar_key
       FROM users
       WHERE username = @username
@@ -265,6 +266,10 @@ app.post('/api/auth/signin', async (req, res) => {
       user.editable_strategic_topic != null && String(user.editable_strategic_topic).trim()
         ? String(user.editable_strategic_topic).trim().toLowerCase()
         : null;
+    const cmMealProjects =
+      user.cm_meal_projects != null && String(user.cm_meal_projects).trim()
+        ? String(user.cm_meal_projects).trim().toLowerCase()
+        : null;
 
     const roleRaw = String(user.role || '').trim();
     const roleLower = roleRaw.toLowerCase();
@@ -273,7 +278,9 @@ app.post('/api/auth/signin', async (req, res) => {
         ? 'topic'
         : roleLower === 'department-topic'
           ? 'department-topic'
-          : roleRaw;
+          : roleLower === 'cm-meal-project'
+            ? 'cm-meal-project'
+            : roleRaw;
 
     const avatarKey =
       user.avatar_key != null && String(user.avatar_key).trim() !== ''
@@ -295,6 +302,11 @@ app.post('/api/auth/signin', async (req, res) => {
     } else if (editableStrategicTopic) {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
     }
+    if (authRole === 'cm-meal-project') {
+      jwtPayload.cmMealProjects = cmMealProjects;
+    } else if (cmMealProjects) {
+      jwtPayload.cmMealProjects = cmMealProjects;
+    }
 
     const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
@@ -306,6 +318,7 @@ app.post('/api/auth/signin', async (req, res) => {
       allowedRoutes,
       powerbiDashboardIds,
       editableStrategicTopic,
+      cmMealProjects,
       avatarKey,
     };
 
@@ -369,7 +382,7 @@ async function handleAuthSession(req, res) {
       .request()
       .input('id', sql.Int, userId)
       .query(`
-        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, avatar_key
+        SELECT default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, cm_meal_projects, avatar_key
         FROM users
         WHERE id = @id
       `);
@@ -385,6 +398,10 @@ async function handleAuthSession(req, res) {
       row.editable_strategic_topic != null && String(row.editable_strategic_topic).trim()
         ? String(row.editable_strategic_topic).trim().toLowerCase()
         : null;
+    const cmMealProjects =
+      row.cm_meal_projects != null && String(row.cm_meal_projects).trim()
+        ? String(row.cm_meal_projects).trim().toLowerCase()
+        : null;
     const avatarKey =
       row.avatar_key != null && String(row.avatar_key).trim() !== ''
         ? String(row.avatar_key).trim()
@@ -396,6 +413,7 @@ async function handleAuthSession(req, res) {
         allowedRoutes: parseJsonArrayColumnSession(row.allowed_routes),
         powerbiDashboardIds: parseJsonArrayColumnSession(row.powerbi_dashboard_ids),
         editableStrategicTopic,
+        cmMealProjects,
         avatarKey,
       },
     });
@@ -706,11 +724,10 @@ beneficiariesApiRouter.use(async (req, res) => {
 });
 app.use('/.netlify/functions/beneficiaries-api', beneficiariesApiRouter);
 
-// ---- MEAL validation API (local dev — proxies to Python FastAPI) ----
-/** Local dev default when .env.local omits MEAL_VALIDATION_API_URL (auth-proxy only). */
-const MEAL_UPSTREAM = (
-  process.env.MEAL_VALIDATION_API_URL || 'http://127.0.0.1:8090'
-).replace(/\/$/, '');
+// ---- MEAL validation API (local dev — in-process Node engine; optional Python upstream) ----
+const { validateVolunteerUpload } = require('./netlify/functions/utils/meal/validate.cjs');
+/** When set, forwards to external Python FastAPI instead of the built-in Node engine. */
+const MEAL_UPSTREAM = (process.env.MEAL_VALIDATION_API_URL || '').replace(/\/$/, '');
 const MEAL_API_KEY = (process.env.MEAL_VALIDATION_API_KEY || 'dev-local-key').trim();
 const MEAL_MAX_BYTES = Number(process.env.MEAL_MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
 
@@ -817,7 +834,26 @@ mealValidateApiRouter.post('/validate', async (req, res) => {
       fileName: parsed.fileName,
       bytes: parsed.fileBuffer.length,
     });
-    const out = await forwardMealValidateToPython(parsed);
+    let out;
+    if (MEAL_UPSTREAM) {
+      out = await forwardMealValidateToPython(parsed);
+    } else {
+      try {
+        const result = validateVolunteerUpload(parsed.fileBuffer, {
+          sheetName: parsed.sheetName || undefined,
+          validateMode: parsed.validateMode || 'both',
+        });
+        out = { status: 200, body: JSON.stringify(result) };
+      } catch (engineErr) {
+        out = {
+          status: 422,
+          body: JSON.stringify({
+            ok: false,
+            error: `Validation failed: ${engineErr?.message || 'unknown error'}`,
+          }),
+        };
+      }
+    }
     res.status(out.status).send(out.body);
   } catch (err) {
     console.error('[Auth Proxy] MEAL validate error:', err.message);

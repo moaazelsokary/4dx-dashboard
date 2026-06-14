@@ -88,8 +88,8 @@ export default function MealDataValidationTab() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not validate file.';
       const hint =
-        msg.includes('MEAL_VALIDATION_API_URL') || msg.includes('503')
-          ? ' Restart `npm run proxies` (MEAL API runs with proxies on port 8090). Requires Python 3 (`py -3` on Windows).'
+        msg.includes('Authentication') || msg.includes('403')
+          ? ' Sign in with CEO, Admin, or M&E role.'
           : '';
       toast({
         title: 'Validation failed',
@@ -268,7 +268,7 @@ export default function MealDataValidationTab() {
                 </span>
               ) : (
                 <span className="block mt-1 text-xs text-amber-600 dark:text-amber-400">
-                  Validator version missing — restart `npm run proxies` to load the latest rules.
+                  Validator version missing — restart `npm run proxies` and try again.
                 </span>
               )}
               {!result.ok && (

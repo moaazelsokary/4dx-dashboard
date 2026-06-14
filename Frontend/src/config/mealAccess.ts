@@ -7,6 +7,10 @@ export function isMealRole(role: string | undefined | null): boolean {
   return r === 'CEO' || r === 'Admin' || r === 'M&E';
 }
 
+export function canManageMealContent(user: User | null | undefined): boolean {
+  return isMealRole(user?.role);
+}
+
 export function canAccessMeal(user: User | null | undefined): boolean {
   if (!user) return false;
   const routes = user.allowedRoutes;

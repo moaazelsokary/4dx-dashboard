@@ -6,6 +6,7 @@ const { normalizeStrategicDbRow } = require('./netlify/functions/utils/normalize
 const { collectJwtSecrets } = require('./netlify/functions/utils/jwt-secrets.cjs');
 const strategicTopicKpiRows = require('./netlify/functions/wig-api-strategic-topic-kpi-rows.cjs');
 const strategicTopicContent = require('./netlify/functions/wig-api-strategic-topic-content.cjs');
+const cmMealKpiRows = require('./netlify/functions/wig-api-cm-meal-kpi-rows.cjs');
 const { canReadStrategicTopicApi } = require('./netlify/functions/utils/strategic-topic-wig-access.cjs');
 
 function getAuthorizationHeader(req) {
@@ -136,6 +137,8 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       request.input('target_type', sql.NVarChar, t.target_type);
       request.input('responsible_person', sql.NVarChar, responsible);
       request.input('mov', sql.NVarChar, mov);
+      request.input('start_date', sql.Date, body.start_date || null);
+      request.input('end_date', sql.Date, body.end_date || null);
       request.input('definition', sql.NVarChar, body.definition ?? null);
       request.input('measurement_aspect', sql.NVarChar, body.measurement_aspect ?? null);
       request.input('meeting_notes', sql.NVarChar, body.meeting_notes ?? null);
@@ -171,12 +174,12 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
       const insertResult = await request.query(`
         INSERT INTO strategic_department_objectives (
           main_objective_id, department_id, kpi, activity, type, activity_target, target_type,
-          responsible_person, mov, sort_order,
+          responsible_person, mov, start_date, end_date, sort_order,
           definition, measurement_aspect, meeting_notes, me_e, active, notes
           ${meFields}
         ) VALUES (
           @main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type,
-          @responsible_person, @mov, @sort_order,
+          @responsible_person, @mov, @start_date, @end_date, @sort_order,
           @definition, @measurement_aspect, @meeting_notes, @me_e, @active, @notes
           ${meValues}
         );
@@ -211,6 +214,33 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
         'definition', 'measurement_aspect', 'meeting_notes', 'me_e', 'active', 'notes',
       ];
       const body = req.body || {};
+      const user = decodeWigUser(req, jwt);
+      const role = user?.role ?? user?.Role ?? '';
+      const isAdmin = String(role).trim() === 'Admin';
+      if (!isAdmin && (body.start_date !== undefined || body.end_date !== undefined)) {
+        const cur = pool.request();
+        cur.input('id', sql.Int, id);
+        const curRes = await cur.query(
+          'SELECT start_date, end_date FROM strategic_department_objectives WHERE id = @id'
+        );
+        const row = curRes.recordset[0];
+        if (row) {
+          if (
+            body.start_date !== undefined &&
+            (body.start_date == null || body.start_date === '') &&
+            row.start_date
+          ) {
+            delete body.start_date;
+          }
+          if (
+            body.end_date !== undefined &&
+            (body.end_date == null || body.end_date === '') &&
+            row.end_date
+          ) {
+            delete body.end_date;
+          }
+        }
+      }
       const nullableNvarcharUpdate = (v) => {
         if (v === undefined || v === null) return null;
         const s = String(v).trim();
@@ -247,6 +277,14 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
         request.input('sort_order', sql.Int, body.sort_order);
         updates.push('sort_order = @sort_order');
       }
+      if (body.start_date !== undefined) {
+        request.input('start_date', sql.Date, body.start_date || null);
+        updates.push('start_date = @start_date');
+      }
+      if (body.end_date !== undefined) {
+        request.input('end_date', sql.Date, body.end_date || null);
+        updates.push('end_date = @end_date');
+      }
       const meFields = ['me_target', 'me_actual', 'me_frequency', 'me_start_date', 'me_end_date', 'me_tool', 'me_responsible', 'me_folder_link'];
       for (const f of meFields) {
         if (body[f] !== undefined) {
@@ -270,8 +308,6 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
         INNER JOIN departments d ON s.department_id = d.id
         WHERE s.id = @id
       `);
-      const user = decodeWigUser(req, jwt);
-      const role = user?.role ?? user?.Role ?? '';
       res.json(stripStrategicAdminFields(normalizeStrategicDbRow(row.recordset[0]), role));
     } catch (error) {
       handleError(res, error, 'Error updating strategic department objective');
@@ -436,7 +472,14 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
     const decoded = decodeWigUser(req, jwt);
     if (!decoded) return null;
     const rawRole = String(decoded.role ?? decoded.Role ?? '').trim();
-    const roleOut = rawRole.toLowerCase() === 'topic' ? 'topic' : rawRole;
+    let roleOut = rawRole;
+    if (rawRole.toLowerCase() === 'topic') roleOut = 'topic';
+    else if (rawRole.toLowerCase() === 'cm-meal-project') roleOut = 'cm-meal-project';
+    const cmMealProjects =
+      decoded.cmMealProjects ??
+      decoded.cm_meal_projects ??
+      decoded.CM_MEAL_PROJECTS ??
+      null;
     return {
       userId: decoded.userId,
       username: decoded.username,
@@ -446,6 +489,10 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
         decoded.editableStrategicTopic ??
         decoded.editable_strategic_topic ??
         decoded.EditableStrategicTopic,
+      cmMealProjects,
+      cm_meal_projects: cmMealProjects,
+      allowedRoutes: decoded.allowedRoutes ?? decoded.allowed_routes,
+      allowed_routes: decoded.allowedRoutes ?? decoded.allowed_routes,
     };
   }
 
@@ -660,6 +707,84 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
     } catch (error) {
       if (error.statusCode) return sendTopicKpiStatus(res, error);
       handleError(res, error, 'Error deleting strategic topic file');
+    }
+  });
+
+  app.get('/api/wig/cm-meal-kpi-rows', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      if (!cmMealKpiRows.canReadCmMealKpis(user)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+      const project = req.query.project || req.query.project_code;
+      const month = req.query.month || req.query.month_year;
+      if (!project || !month) {
+        return res.status(400).json({ error: 'project and month query parameters are required' });
+      }
+      const pool = await getPool();
+      const rows = await cmMealKpiRows.getCmMealKpiRows(pool, { project, month, user });
+      res.json(rows);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error loading CM & MEAL KPI rows');
+    }
+  });
+
+  app.post('/api/wig/cm-meal-kpi-rows/update-order', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const result = await cmMealKpiRows.updateCmMealKpiRowsOrder(pool, req.body, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating CM & MEAL KPI order');
+    }
+  });
+
+  app.post('/api/wig/cm-meal-kpi-rows', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const row = await cmMealKpiRows.postCmMealKpiRow(pool, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error creating CM & MEAL KPI row');
+    }
+  });
+
+  app.put('/api/wig/cm-meal-kpi-rows/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const row = await cmMealKpiRows.putCmMealKpiRow(pool, id, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating CM & MEAL KPI row');
+    }
+  });
+
+  app.delete('/api/wig/cm-meal-kpi-rows/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const result = await cmMealKpiRows.deleteCmMealKpiRow(pool, id, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error deleting CM & MEAL KPI row');
     }
   });
 };

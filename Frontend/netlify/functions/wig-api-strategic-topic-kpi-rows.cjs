@@ -79,6 +79,10 @@ function isCeoOrAdmin(user) {
   return r === 'ceo' || r === 'admin';
 }
 
+function isAdminRole(user) {
+  return normalizeRole(user) === 'admin';
+}
+
 function deptIntersection(userCodes, rowTokens) {
   const row = rowTokens.map((t) => t.toLowerCase());
   return userCodes.filter((c) => row.includes(c));
@@ -298,6 +302,10 @@ async function createStrategicTopicKpiRow(pool, body, user) {
   const objectiveText = body.objective_text != null ? String(body.objective_text).trim() : null;
   const expectedDuration = body.expected_duration != null ? String(body.expected_duration).trim() : null;
   const notes = body.notes != null ? String(body.notes).trim() : null;
+  const responsible =
+    body.responsible != null && String(body.responsible).trim()
+      ? String(body.responsible).trim()
+      : null;
 
   let startDate = null;
   let endDate = null;
@@ -343,6 +351,22 @@ async function createStrategicTopicKpiRow(pool, body, user) {
   insRequest.input('associated_strategic_topics', sql.NVarChar, toDelimited(topicTokens));
   insRequest.input('status', sql.NVarChar, status);
   insRequest.input('notes', sql.NVarChar, notes || null);
+  insRequest.input('responsible', sql.NVarChar, responsible);
+  const rowType = body.row_type != null ? String(body.row_type).trim() || null : null;
+  insRequest.input('row_type', sql.NVarChar, rowType);
+  insRequest.input('mov', sql.NVarChar, body.mov != null ? String(body.mov) : null);
+  insRequest.input('me_target', sql.Decimal(18, 2), body.me_target ?? null);
+  insRequest.input('me_actual', sql.Decimal(18, 2), body.me_actual ?? null);
+  insRequest.input('me_frequency', sql.NVarChar, body.me_frequency != null ? String(body.me_frequency) : null);
+  insRequest.input('me_start_date', sql.Date, body.me_start_date || null);
+  insRequest.input('me_end_date', sql.Date, body.me_end_date || null);
+  insRequest.input('me_tool', sql.NVarChar, body.me_tool != null ? String(body.me_tool) : null);
+  insRequest.input('me_responsible', sql.NVarChar, body.me_responsible != null ? String(body.me_responsible) : null);
+  insRequest.input('me_folder_link', sql.NVarChar, body.me_folder_link != null ? String(body.me_folder_link) : null);
+  const meCols =
+    ', row_type, mov, me_target, me_actual, me_frequency, me_start_date, me_end_date, me_tool, me_responsible, me_folder_link';
+  const meVals =
+    ', @row_type, @mov, @me_target, @me_actual, @me_frequency, @me_start_date, @me_end_date, @me_tool, @me_responsible, @me_folder_link';
 
   let ins;
   if (hasSort) {
@@ -350,24 +374,28 @@ async function createStrategicTopicKpiRow(pool, body, user) {
     ins = await insRequest.query(`
       INSERT INTO strategic_topic_kpi_rows (
         strategic_topic, main_objective_id, objective_text, activity, expected_duration,
-        start_date, end_date, associated_departments, associated_strategic_topics, status, notes, sort_order
+        start_date, end_date, associated_departments, associated_strategic_topics, status, notes, responsible, sort_order
+        ${meCols}
       )
       OUTPUT INSERTED.id
       VALUES (
         @strategic_topic, @main_objective_id, @objective_text, @activity, @expected_duration,
-        @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes, @sort_order
+        @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes, @responsible, @sort_order
+        ${meVals}
       );
     `);
   } else {
     ins = await insRequest.query(`
       INSERT INTO strategic_topic_kpi_rows (
         strategic_topic, main_objective_id, objective_text, activity, expected_duration,
-        start_date, end_date, associated_departments, associated_strategic_topics, status, notes
+        start_date, end_date, associated_departments, associated_strategic_topics, status, notes, responsible
+        ${meCols}
       )
       OUTPUT INSERTED.id
       VALUES (
         @strategic_topic, @main_objective_id, @objective_text, @activity, @expected_duration,
-        @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes
+        @start_date, @end_date, @associated_departments, @associated_strategic_topics, @status, @notes, @responsible
+        ${meVals}
       );
     `);
   }
@@ -487,6 +515,9 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
     updates.push('start_date = @start_date');
   }
   if (body.end_date !== undefined) {
+    if (!isAdminRole(user)) {
+      /* Only Admin may change end_date on existing rows. */
+    } else {
     let ed = null;
     if (body.end_date) {
       ed = new Date(body.end_date);
@@ -498,6 +529,7 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
     }
     request.input('end_date', sql.Date, ed);
     updates.push('end_date = @end_date');
+    }
   }
   if (body.associated_departments !== undefined) {
     request.input('associated_departments', sql.NVarChar, toDelimited(nextDepts));
@@ -514,6 +546,40 @@ async function updateStrategicTopicKpiRow(pool, id, body, user) {
   if (body.notes !== undefined) {
     request.input('notes', sql.NVarChar, body.notes == null ? null : String(body.notes));
     updates.push('notes = @notes');
+  }
+  if (body.responsible !== undefined) {
+    const resp =
+      body.responsible == null || !String(body.responsible).trim()
+        ? null
+        : String(body.responsible).trim();
+    request.input('responsible', sql.NVarChar, resp);
+    updates.push('responsible = @responsible');
+  }
+  if (body.row_type !== undefined) {
+    request.input('row_type', sql.NVarChar, body.row_type == null ? null : String(body.row_type).trim() || null);
+    updates.push('row_type = @row_type');
+  }
+  if (body.mov !== undefined) {
+    request.input('mov', sql.NVarChar, body.mov == null ? null : String(body.mov));
+    updates.push('mov = @mov');
+  }
+  const meFields = [
+    'me_target',
+    'me_actual',
+    'me_frequency',
+    'me_start_date',
+    'me_end_date',
+    'me_tool',
+    'me_responsible',
+    'me_folder_link',
+  ];
+  for (const f of meFields) {
+    if (body[f] !== undefined) {
+      if (f.includes('date')) request.input(f, sql.Date, body[f] || null);
+      else if (f === 'me_target' || f === 'me_actual') request.input(f, sql.Decimal(18, 2), body[f] ?? null);
+      else request.input(f, sql.NVarChar, body[f] == null ? null : String(body[f]));
+      updates.push(`${f} = @${f}`);
+    }
   }
   if (body.sort_order !== undefined && body.sort_order !== null) {
     const hasSort = await strategicTopicKpiRowsHasSortOrderColumn(pool);

@@ -16,6 +16,8 @@ import type {
   StrategicTopicCode,
   StrategicTopicContentItem,
   StrategicTopicKpiRow,
+  CmMealKpiRow,
+  CmMealKpiRowInput,
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
@@ -445,6 +447,36 @@ export async function updateStrategicTopicKpiRowsOrder(payload: {
   return fetchAPI<{ success: boolean }>('/strategic-topic-kpi-rows/update-order', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function getCmMealKpiRows(project: string, month: string): Promise<CmMealKpiRow[]> {
+  const qs = new URLSearchParams({ project, month });
+  return fetchAPI<CmMealKpiRow[]>(`/cm-meal-kpi-rows?${qs.toString()}`);
+}
+
+export async function createCmMealKpiRow(
+  data: CmMealKpiRowInput
+): Promise<CmMealKpiRow> {
+  return fetchAPI<CmMealKpiRow>('/cm-meal-kpi-rows', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCmMealKpiRow(
+  id: number,
+  data: Partial<CmMealKpiRowInput>
+): Promise<CmMealKpiRow> {
+  return fetchAPI<CmMealKpiRow>(`/cm-meal-kpi-rows/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCmMealKpiRow(id: number): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>(`/cm-meal-kpi-rows/${id}`, {
+    method: 'DELETE',
   });
 }
 

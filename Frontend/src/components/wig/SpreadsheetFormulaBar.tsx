@@ -36,6 +36,7 @@ const DEPT_COLUMN_LABELS = {
 const ST_TOPIC_COLUMN_LABELS = {
   objective: 'Objectives',
   activity: 'Activity / Task',
+  responsible: 'Responsible',
   duration: 'Duration',
   start: 'Start',
   end: 'End',

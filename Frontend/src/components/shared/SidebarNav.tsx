@@ -1,6 +1,6 @@
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
-import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet, BookOpen, ClipboardCheck } from 'lucide-react';
+import { Home, Users, BarChart3, History, Settings, ChevronRight, FileSpreadsheet, BookOpen, ClipboardCheck, Table2 } from 'lucide-react';
 import { PowerBIIcon } from '@/components/icons/PowerBIIcon';
 import { OdooIcon } from '@/components/icons/OdooIcon';
 import { RASCIIcon } from '@/components/icons/RASCIIcon';
@@ -9,7 +9,8 @@ import { AppLogo } from '@/components/shared/AppLogo';
 import type { User } from '@/services/authService';
 import { canAccessAppPath } from '@/utils/routeAccess';
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
-import { MEAL_PATH } from '@/config/mealAccess';
+import { MEAL_PATH, canAccessMeal } from '@/config/mealAccess';
+import { CM_MEAL_KPIS_PATH, canAccessCmMealKpis } from '@/config/cmMealAccess';
 import { STRATEGIC_TOPIC_NAV_ITEMS } from '@/config/strategicTopics';
 
 const STRATEGIC_TOPIC_NAV = STRATEGIC_TOPIC_NAV_ITEMS.map((t) => ({
@@ -47,6 +48,7 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     if (canNavForUser('/main-plan')) return '/main-plan?tab=view';
     const topic = STRATEGIC_TOPIC_NAV.find((t) => canNavForUser(t.path));
     if (topic) return topic.path;
+    if (canNavForUser(CM_MEAL_KPIS_PATH)) return CM_MEAL_KPIS_PATH;
     if (canNavForUser('/powerbi')) return '/powerbi';
     const explicit = user.allowedRoutes != null && Array.isArray(user.allowedRoutes);
     if (explicit && user.allowedRoutes?.length) return user.allowedRoutes[0]!;
@@ -335,8 +337,11 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
     ];
     items.push(navItemWithChildren('department-objectives', '/department-objectives', isCEO ? 'Department Objectives' : 'My Objectives', Users, deptSub));
   }
-  if (!caseWorker && canNav(MEAL_PATH) && shouldShowButton(MEAL_PATH)) {
+  if (!caseWorker && canAccessMeal(user) && canNav(MEAL_PATH) && shouldShowButton(MEAL_PATH)) {
     items.push(navItem('meal', MEAL_PATH, 'MEAL', ClipboardCheck));
+  }
+  if (!caseWorker && canAccessCmMealKpis(user) && canNav(CM_MEAL_KPIS_PATH) && shouldShowButton(CM_MEAL_KPIS_PATH)) {
+    items.push(navItem('cm-meal-kpis', CM_MEAL_KPIS_PATH, 'CM & MEAL KPIs', Table2));
   }
   if (!caseWorker && canNav('/powerbi') && shouldShowButton('/powerbi')) {
     items.push(navItem('powerbi', '/powerbi', 'Power BI Dashboards', PowerBIIcon));

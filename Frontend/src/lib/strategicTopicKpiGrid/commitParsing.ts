@@ -24,6 +24,8 @@ export function parseStTopicInlineCommit(column: StTopicGridColumn, raw: string)
       if (!v) return { ok: false, error: 'Activity cannot be empty.' };
       return { ok: true, patch: { activity: v } };
     }
+    case 'responsible':
+      return { ok: true, patch: { responsible: raw.trim() || null } };
     case 'duration':
       return { ok: true, patch: { expected_duration: raw.trim() || null } };
     case 'start': {
@@ -63,6 +65,8 @@ export function getStTopicEditorSeed(column: StTopicGridColumn, row: StrategicTo
       return row.objective_text ?? '';
     case 'activity':
       return row.activity ?? '';
+    case 'responsible':
+      return row.responsible ?? '';
     case 'duration':
       return row.expected_duration ?? '';
     case 'start':

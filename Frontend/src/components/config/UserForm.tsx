@@ -44,7 +44,17 @@ import {
   ROLE_DEPARTMENT_TOPIC_LABEL,
   roleRequiresDepartment,
   roleRequiresEditableTopics,
+  roleRequiresCmMealProjects,
 } from '@/config/userRoles';
+import {
+  CM_MEAL_PROJECT_CODES,
+  CM_MEAL_PROJECT_LABELS,
+  ROLE_CM_MEAL_PROJECT,
+  ROLE_CM_MEAL_PROJECT_LABEL,
+  type CmMealProjectCode,
+  parseCmMealProjectsPipe,
+  toCmMealProjectsPipe,
+} from '@/config/cmMealProjects';
 
 const ROLE_OPTIONS = [
   'CEO',
@@ -53,6 +63,7 @@ const ROLE_OPTIONS = [
   'department',
   'topic',
   ROLE_DEPARTMENT_TOPIC,
+  'cm-meal-project',
   'project',
   'Viewer',
   'case worker',
@@ -60,6 +71,7 @@ const ROLE_OPTIONS = [
 
 const ROLE_LABELS: Record<string, string> = {
   [ROLE_DEPARTMENT_TOPIC]: ROLE_DEPARTMENT_TOPIC_LABEL,
+  [ROLE_CM_MEAL_PROJECT]: ROLE_CM_MEAL_PROJECT_LABEL,
 };
 
 const DEPT_SELECT_NONE = '__none__';
@@ -102,6 +114,7 @@ export default function UserForm({
   const [selectedPbi, setSelectedPbi] = useState<string[]>([]);
   /** Role `topic`: pillars this user may edit (stored as `||`-delimited codes). */
   const [selectedEditableTopics, setSelectedEditableTopics] = useState<StrategicTopicCode[]>([]);
+  const [selectedCmMealProjects, setSelectedCmMealProjects] = useState<CmMealProjectCode[]>([]);
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('man');
   const [submitting, setSubmitting] = useState(false);
 
@@ -161,6 +174,11 @@ export default function UserForm({
       } else {
         setSelectedEditableTopics([]);
       }
+      if (roleRequiresCmMealProjects(account.role)) {
+        setSelectedCmMealProjects(parseCmMealProjectsPipe(account.cm_meal_projects));
+      } else {
+        setSelectedCmMealProjects([]);
+      }
       const ak = account.avatar_key;
       setAvatarKey(isAvatarKey(ak) ? ak : 'man');
     } else {
@@ -175,6 +193,7 @@ export default function UserForm({
       setPbiInherit(true);
       setSelectedPbi([]);
       setSelectedEditableTopics([]);
+      setSelectedCmMealProjects([]);
       setAvatarKey('man');
     }
   }, [open, accountSyncKey]);
@@ -222,6 +241,15 @@ export default function UserForm({
         setSubmitting(false);
         return;
       }
+      if (roleRequiresCmMealProjects(role) && selectedCmMealProjects.length === 0) {
+        toast({
+          title: 'CM & MEAL project required',
+          description: 'Choose at least one project for this role.',
+          variant: 'destructive',
+        });
+        setSubmitting(false);
+        return;
+      }
       const departments = departmentsPayload();
       const payload: AccountPayload = {
         username: username.trim(),
@@ -234,6 +262,10 @@ export default function UserForm({
         editable_strategic_topic:
           roleRequiresEditableTopics(role) && selectedEditableTopics.length > 0
             ? toPipeList(selectedEditableTopics)
+            : null,
+        cm_meal_projects:
+          roleRequiresCmMealProjects(role) && selectedCmMealProjects.length > 0
+            ? toCmMealProjectsPipe(selectedCmMealProjects)
             : null,
         avatar_key: avatarKey,
       };
@@ -317,6 +349,9 @@ export default function UserForm({
                       setDepartmentValue(DEPT_SELECT_NONE);
                     } else if (v === 'department') {
                       setSelectedEditableTopics([]);
+                    } else if (v === ROLE_CM_MEAL_PROJECT) {
+                      setDepartmentValue(DEPT_SELECT_NONE);
+                      setSelectedEditableTopics([]);
                     }
                     if (String(v).toLowerCase() === 'case worker') {
                       setDefaultRoute('/main-plan/refugees/case-story');
@@ -384,6 +419,30 @@ export default function UserForm({
                     {String(role).toLowerCase() === ROLE_DEPARTMENT_TOPIC
                       ? 'View all strategic topics; edit KPI rows and content on selected topics (and rows tied to their department where applicable).'
                       : 'View all strategic topic pages; edit KPI rows and content only on the topics selected here.'}
+                  </p>
+                </div>
+              )}
+              {roleRequiresCmMealProjects(role) && (
+                <div className="space-y-2">
+                  <Label>CM & MEAL projects</Label>
+                  <div className="rounded-md border p-3 max-h-48 overflow-y-auto space-y-2">
+                    {CM_MEAL_PROJECT_CODES.map((code) => (
+                      <label key={code} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={selectedCmMealProjects.includes(code)}
+                          onCheckedChange={(v) => {
+                            setSelectedCmMealProjects((prev) => {
+                              if (v) return prev.includes(code) ? prev : [...prev, code];
+                              return prev.filter((c) => c !== code);
+                            });
+                          }}
+                        />
+                        {CM_MEAL_PROJECT_LABELS[code]}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    User can view and edit KPI rows only for the selected project(s). With one project, the project column is fixed automatically.
                   </p>
                 </div>
               )}

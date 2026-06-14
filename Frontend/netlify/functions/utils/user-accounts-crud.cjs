@@ -14,7 +14,8 @@ const {
   TOPIC_CODES_LIST,
 } = require('./strategic-topics.cjs');
 const { normalizeEditableStrategicTopicInput } = require('./editable-strategic-topics.cjs');
-const { roleRequiresEditableTopics } = require('./user-roles.cjs');
+const { roleRequiresEditableTopics, roleRequiresCmMealProjects } = require('./user-roles.cjs');
+const { normalizeCmMealProjectsInput } = require('./cm-meal-projects.cjs');
 
 /** Persist canonical lowercase for multi-word roles used in JWT / route checks. */
 function normalizeRoleForStorage(role) {
@@ -22,6 +23,7 @@ function normalizeRoleForStorage(role) {
   const lower = s.toLowerCase();
   if (lower === 'topic') return 'topic';
   if (lower === 'department-topic') return 'department-topic';
+  if (lower === 'cm-meal-project') return 'cm-meal-project';
   return s;
 }
 
@@ -47,6 +49,7 @@ const ALLOWED_APP_PATHS = new Set([
   '/admin/configuration',
   '/pms-odoo-metrics',
   '/meal',
+  '/cm-meal-kpis',
   '/access-denied',
 ]);
 
@@ -134,6 +137,9 @@ function mapUserAccountRow(row) {
     row.EditableStrategicTopic;
   const etOut =
     etRaw != null && String(etRaw).trim() !== '' ? String(etRaw).trim().toLowerCase() : null;
+  const cmpRaw = row.cm_meal_projects ?? row.CM_MEAL_PROJECTS;
+  const cmpOut =
+    cmpRaw != null && String(cmpRaw).trim() !== '' ? String(cmpRaw).trim().toLowerCase() : null;
   return {
     id: row.id,
     username: row.username,
@@ -144,6 +150,7 @@ function mapUserAccountRow(row) {
     allowed_routes: parseJsonArrayOrNull(row.allowed_routes),
     powerbi_dashboard_ids: parseJsonArrayOrNull(row.powerbi_dashboard_ids),
     editable_strategic_topic: etOut,
+    cm_meal_projects: cmpOut,
     avatar_key:
       row.avatar_key != null && String(row.avatar_key).trim() !== ''
         ? String(row.avatar_key).trim()
@@ -175,7 +182,7 @@ async function handleAccountsCrud(opts) {
   if (method === 'GET' && !accountId) {
     const result = await pool.request().query(`
       SELECT id, username, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids,
-        editable_strategic_topic, avatar_key, created_at, updated_at
+        editable_strategic_topic, cm_meal_projects, avatar_key, created_at, updated_at
       FROM users
       ORDER BY username
     `);
@@ -256,6 +263,21 @@ async function handleAccountsCrud(opts) {
       editableStrategicTopicVal = norm.value;
     }
 
+    let cmMealProjectsVal = null;
+    if (roleRequiresCmMealProjects(roleTrim)) {
+      const normCmp = normalizeCmMealProjectsInput(body);
+      if (normCmp.error) {
+        return { statusCode: 400, json: { success: false, error: normCmp.error } };
+      }
+      if (!normCmp.value) {
+        return {
+          statusCode: 400,
+          json: { success: false, error: 'Role "cm-meal-project" requires at least one CM & MEAL project' },
+        };
+      }
+      cmMealProjectsVal = normCmp.value;
+    }
+
     const avatarErr = normalizeAvatarKey(avatar_key);
     if (typeof avatarErr === 'string' && avatarErr.startsWith('Invalid')) {
       return { statusCode: 400, json: { success: false, error: avatarErr } };
@@ -284,12 +306,13 @@ async function handleAccountsCrud(opts) {
     ins.input('allowed_routes', sql.NVarChar(sql.MAX), routesJson);
     ins.input('powerbi_dashboard_ids', sql.NVarChar(sql.MAX), pbiJson);
     ins.input('editable_strategic_topic', sql.NVarChar(sql.MAX), editableStrategicTopicVal);
+    ins.input('cm_meal_projects', sql.NVarChar(500), cmMealProjectsVal);
     ins.input('avatar_key', sql.NVarChar(32), avatarErr);
 
     const insertResult = await ins.query(`
-      INSERT INTO users (username, password_hash, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, avatar_key)
-      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
-      VALUES (@username, @password_hash, @role, @departments, @is_active, @default_route, @allowed_routes, @powerbi_dashboard_ids, @editable_strategic_topic, @avatar_key)
+      INSERT INTO users (username, password_hash, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids, editable_strategic_topic, cm_meal_projects, avatar_key)
+      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.cm_meal_projects, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
+      VALUES (@username, @password_hash, @role, @departments, @is_active, @default_route, @allowed_routes, @powerbi_dashboard_ids, @editable_strategic_topic, @cm_meal_projects, @avatar_key)
     `);
 
     const row = insertResult.recordset[0];
@@ -313,7 +336,7 @@ async function handleAccountsCrud(opts) {
     const existingReq = pool.request();
     existingReq.input('id', sql.Int, accountId);
     const existingUserResult = await existingReq.query(
-      `SELECT id, role, editable_strategic_topic FROM users WHERE id = @id`
+      `SELECT id, role, editable_strategic_topic, cm_meal_projects FROM users WHERE id = @id`
     );
     if (existingUserResult.recordset.length === 0) {
       return { statusCode: 404, json: { success: false, error: 'User not found' } };
@@ -421,6 +444,36 @@ async function handleAccountsCrud(opts) {
       }
     }
 
+    let nextCmMealProjectsSql = undefined;
+    if (role !== undefined || body.cm_meal_projects !== undefined || body.cm_meal_project !== undefined) {
+      const nextRole = role !== undefined ? String(role).trim() : String(ex.role || '').trim();
+      if (!roleRequiresCmMealProjects(nextRole)) {
+        nextCmMealProjectsSql = null;
+      } else if (body.cm_meal_projects !== undefined || body.cm_meal_project !== undefined) {
+        const normCmp = normalizeCmMealProjectsInput(body);
+        if (normCmp.error) {
+          return { statusCode: 400, json: { success: false, error: normCmp.error } };
+        }
+        if (!normCmp.value) {
+          return {
+            statusCode: 400,
+            json: { success: false, error: 'CM & MEAL project role requires at least one project' },
+          };
+        }
+        nextCmMealProjectsSql = normCmp.value;
+      } else {
+        const existingCmp = ex.cm_meal_projects;
+        if (existingCmp != null && String(existingCmp).trim()) {
+          nextCmMealProjectsSql = String(existingCmp).trim().toLowerCase();
+        } else {
+          return {
+            statusCode: 400,
+            json: { success: false, error: 'CM & MEAL project role requires at least one project' },
+          };
+        }
+      }
+    }
+
     const upd = pool.request();
     upd.input('id', sql.Int, accountId);
     const sets = [];
@@ -461,6 +514,10 @@ async function handleAccountsCrud(opts) {
       upd.input('editable_strategic_topic', sql.NVarChar(sql.MAX), nextEditableTopicSql);
       sets.push('editable_strategic_topic = @editable_strategic_topic');
     }
+    if (nextCmMealProjectsSql !== undefined) {
+      upd.input('cm_meal_projects', sql.NVarChar(500), nextCmMealProjectsSql);
+      sets.push('cm_meal_projects = @cm_meal_projects');
+    }
     if (avatar_key !== undefined) {
       const avatarVal = normalizeAvatarKey(avatar_key);
       if (typeof avatarVal === 'string' && avatarVal.startsWith('Invalid')) {
@@ -478,7 +535,7 @@ async function handleAccountsCrud(opts) {
 
     const updateResult = await upd.query(`
       UPDATE users SET ${sets.join(', ')}
-      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
+      OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.cm_meal_projects, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
       WHERE id = @id
     `);
 

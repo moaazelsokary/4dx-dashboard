@@ -6,7 +6,7 @@ import type { User } from '@/services/authService';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClipboardCheck, FileBarChart, GraduationCap, Wrench } from 'lucide-react';
 import MealDataValidationTab from './MealDataValidationTab';
-import MealPlaceholderTab from './MealPlaceholderTab';
+import MealContentFolderTab from './MealContentFolderTab';
 
 type TabValue = 'validation' | 'tools' | 'reports' | 'learning';
 
@@ -23,8 +23,15 @@ export default function MealPageTemplate() {
 
   const activeTab: TabValue = useMemo(() => {
     const t = searchParams.get('tab');
+    if (t === 'cm-kpis') return 'validation';
     return isTabValue(t) ? t : 'validation';
   }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get('tab') === 'cm-kpis') {
+      navigate('/cm-meal-kpis', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   useEffect(() => {
     const u = getCurrentUser();
@@ -58,6 +65,7 @@ export default function MealPageTemplate() {
   const onTabChange = (v: string) => {
     const next = new URLSearchParams(searchParams);
     next.set('tab', v);
+    next.delete('folder');
     setSearchParams(next, { replace: true });
   };
 
@@ -101,15 +109,30 @@ export default function MealPageTemplate() {
         </TabsContent>
 
         <TabsContent value="tools" className="mt-4 focus-visible:outline-none">
-          <MealPlaceholderTab title="M&E Tools" description="Tools for monitoring and evaluation workflows." />
+          <MealContentFolderTab
+            category="tools"
+            title="M&E Tools"
+            description="Templates, checklists, and tools for monitoring and evaluation. Create folders to organize content."
+            user={user}
+          />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-4 focus-visible:outline-none">
-          <MealPlaceholderTab title="Reports" description="MEAL reporting will be available here." />
+          <MealContentFolderTab
+            category="reports"
+            title="Reports"
+            description="MEAL reports and related documents. Organize by project, period, or type using nested folders."
+            user={user}
+          />
         </TabsContent>
 
         <TabsContent value="learning" className="mt-4 focus-visible:outline-none">
-          <MealPlaceholderTab title="Learning" description="Learning resources and documentation." />
+          <MealContentFolderTab
+            category="learning"
+            title="Learning"
+            description="Learning resources, guides, and documentation for MEAL practice."
+            user={user}
+          />
         </TabsContent>
       </AppLayout>
     </Tabs>

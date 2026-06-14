@@ -17,7 +17,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { AccountUser } from '@/types/config';
 import type { StrategicTopicCode } from '@/types/wig';
 import { STRATEGIC_TOPIC_LABELS, parsePipeList } from '@/pages/strategic-topics/strategicTopicKpiUtils';
-import { ROLE_DEPARTMENT_TOPIC_LABEL, isTopicLikeRole, normalizeUserRole } from '@/config/userRoles';
+import { ROLE_DEPARTMENT_TOPIC_LABEL, isCmMealProjectRole, isTopicLikeRole, normalizeUserRole } from '@/config/userRoles';
+import {
+  CM_MEAL_PROJECT_LABELS,
+  parseCmMealProjectsPipe,
+  type CmMealProjectCode,
+} from '@/config/cmMealProjects';
 import {
   getDashboardFromCatalog,
   getAccessibleDashboards,
@@ -71,6 +76,11 @@ function formatDepartmentCell(row: AccountUser): string {
 }
 
 function formatDeptOrTopicCell(row: AccountUser): string {
+  if (isCmMealProjectRole(row.role)) {
+    const codes = parseCmMealProjectsPipe(row.cm_meal_projects);
+    if (codes.length === 0) return '—';
+    return codes.map((c) => CM_MEAL_PROJECT_LABELS[c as CmMealProjectCode] ?? c).join(', ');
+  }
   if (isTopicLikeRole(row.role)) {
     const codes = parsePipeList(row.editable_strategic_topic);
     if (codes.length === 0) return '—';

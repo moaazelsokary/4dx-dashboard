@@ -35,6 +35,15 @@ export function isDepartmentLikeRole(role: string | null | undefined): boolean {
   return r === 'department' || r === ROLE_DEPARTMENT_TOPIC;
 }
 
+/** CM & MEAL KPIs — access scoped by project pillar instead of department. */
+export function isCmMealProjectRole(role: string | null | undefined): boolean {
+  return normalizeUserRole(role) === 'cm-meal-project';
+}
+
+export function roleRequiresCmMealProjects(role: string | null | undefined): boolean {
+  return isCmMealProjectRole(role);
+}
+
 export function roleRequiresEditableTopics(role: string | null | undefined): boolean {
   return isTopicLikeRole(role);
 }

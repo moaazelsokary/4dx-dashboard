@@ -47,6 +47,8 @@ export interface DepartmentObjective {
   target_type?: 'number' | 'percentage';
   responsible_person: string;
   mov: string;
+  start_date?: string | null;
+  end_date?: string | null;
   created_at?: string;
   updated_at?: string;
   sort_order?: number;
@@ -75,6 +77,8 @@ export interface StrategicDepartmentObjective {
   target_type?: 'number' | 'percentage';
   responsible_person: string;
   mov: string;
+  start_date?: string | null;
+  end_date?: string | null;
   definition?: string | null;
   measurement_aspect?: string | null;
   meeting_notes?: string | null;
@@ -222,6 +226,18 @@ export interface StrategicTopicKpiRow {
   associated_strategic_topics: string;
   status: StrategicTopicKpiStatus;
   notes: string | null;
+  responsible: string | null;
+  /** `activity` for normal rows; `M&E` / `M&E MOV` for monitoring child rows */
+  row_type?: string | null;
+  mov?: string | null;
+  me_target?: number | null;
+  me_actual?: number | null;
+  me_frequency?: string | null;
+  me_start_date?: string | null;
+  me_end_date?: string | null;
+  me_tool?: string | null;
+  me_responsible?: string | null;
+  me_folder_link?: string | null;
   /** Table / Gantt order (1 = top); NULL sorts after explicit values, then by id */
   sort_order?: number | null;
   created_at?: string;
@@ -245,4 +261,24 @@ export interface KPIBreakdownResponse {
   breakdown_source?: KPIBreakdownSource;
   breakdown: DepartmentBreakdown[];
 }
+
+export interface CmMealKpiRow {
+  id: number;
+  project_code: string;
+  month_year: string;
+  activity: string;
+  target: number | null;
+  actual: number | null;
+  difference: number | null;
+  responsible: string | null;
+  notes: string | null;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type CmMealKpiRowInput = Omit<
+  CmMealKpiRow,
+  'id' | 'difference' | 'created_at' | 'updated_at' | 'sort_order'
+> & { sort_order?: number };
 

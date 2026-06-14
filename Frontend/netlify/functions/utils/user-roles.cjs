@@ -38,6 +38,14 @@ function roleRequiresDepartment(role) {
   return isDepartmentLikeRole(role);
 }
 
+function isCmMealProjectRole(role) {
+  return normalizeUserRole(role) === 'cm-meal-project';
+}
+
+function roleRequiresCmMealProjects(role) {
+  return isCmMealProjectRole(role);
+}
+
 module.exports = {
   ROLE_DEPARTMENT_TOPIC,
   normalizeUserRole,
@@ -48,4 +56,6 @@ module.exports = {
   isDepartmentLikeRole,
   roleRequiresEditableTopics,
   roleRequiresDepartment,
+  isCmMealProjectRole,
+  roleRequiresCmMealProjects,
 };

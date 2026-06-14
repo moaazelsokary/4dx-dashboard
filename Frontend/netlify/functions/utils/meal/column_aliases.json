@@ -1,0 +1,137 @@
+{
+  "name": [
+    "الاسم رباعي",
+    "الأسم الرباعي",
+    "الاسم",
+    "الأسم",
+    "اسم العميل",
+    "اسم المستفيد",
+    "name",
+    "client name",
+    "customer name",
+    "اسم المدرس - Teacher's Name",
+    " الأسم بالكامل / Full Name ",
+    "Name"
+  ],
+  "File Number": [
+    "رقم ملف المفوضية",
+    "رقم الملف",
+    "file number",
+    "file no",
+    "Case Number - رقم الملف",
+    "File Number",
+    "File Number - رقم الملف"
+  ],
+  "personal_identification_number": [
+    "الرقم الشخصي (بجانب الاسم في الكارت)",
+    "الرقم الشخصى (بجانب الاسم في الكارت)",
+    "الرقم الشخصي",
+    "رقم شخصي",
+    "personal identification number",
+    "الرقم الشخصي\\رقم الباسبور  - Individual Number",
+    "الرقم الشخصي-رقم الباسبور-individual number",
+    "الرقم الشخصي-رقم الباسبور-Individual Number",
+    "Individual ID - الرقم الشخصي",
+    "Individual ID",
+    "individual id",
+    "Personal ID",
+    "personal id",
+    "PID",
+    "رقم الهوية الفردية",
+    "ID Number",
+    "id number",
+    " رقم الهوية / ID Number  ",
+    "personal_identification_number",
+    "Passport Number - رقم الباسبور"
+  ],
+  "phone": [
+    "رقم الموبايل",
+    "رقم التليفون",
+    "رقم الهاتف",
+    "الموبايل",
+    "الهاتف",
+    "phone",
+    "phone number",
+    "mobile",
+    "رقم الهاتف - Phone Number",
+    "Phone Number / رقم التليفون ",
+    "Phone number",
+    "phone - رقم التليفون"
+  ],
+  "age": [
+    "السن",
+    "العمر",
+    "age",
+    "Year of birth ",
+    "العمر ",
+    "Age",
+    "Age - السن"
+  ],
+  "gender": [
+    "الجنس",
+    "النوع",
+    "gender",
+    "sex",
+    "النوع - Gender",
+    "Gender ",
+    "Gender",
+    "Gender - النوع الاجتماعي"
+  ],
+  "Nationality": [
+    "الجنسية",
+    "nationality",
+    "الجنسية - Nationality",
+    "Nationality / الجنسية ",
+    "Nationality",
+    "الجنسية (يمكن اختيار أكثر من خيار)",
+    "Nationality - الجنسية"
+  ],
+  "national_id": [
+    "الرقم القومي",
+    "الرقم القومى",
+    "رقم قومي",
+    "national id",
+    "national_id"
+  ],
+  "Education Type": [
+    "التعليم",
+    "المستوى التعليمي",
+    "education",
+    "education type",
+    "Education Type",
+    "Education Type - الشهادة التعليمية"
+  ],
+  "State": [
+    "المحافظة",
+    "الولاية",
+    "state",
+    "governorate",
+    "المحافظة ",
+    "State",
+    "State - المحافظة"
+  ],
+  "Zone": [
+    "منطقة السكن",
+    "المنطقة",
+    "zone",
+    "district",
+    "Aria - المنطقة",
+    "Zone",
+    "منطقة السكن - الجيزة",
+    "Zone - المدينة"
+  ],
+  "Social Status": [
+    "الحاله الاجتماعيه",
+    "الحالة الاجتماعية",
+    "social status",
+    "marital status",
+    "civil status",
+    "الاجتماعي",
+    "Marital Status",
+    "Civil status",
+    "الحالة الاجتماعيه",
+    "الوضع الاجتماعي",
+    "الوضع الاجتماعى",
+    "Social Status - الوضع الاجتماعي"
+  ]
+}

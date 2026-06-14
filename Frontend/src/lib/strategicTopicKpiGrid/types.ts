@@ -2,6 +2,7 @@
 export type StTopicGridColumn =
   | 'objective'
   | 'activity'
+  | 'responsible'
   | 'duration'
   | 'start'
   | 'end'

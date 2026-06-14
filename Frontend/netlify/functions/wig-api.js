@@ -4,8 +4,11 @@ const rateLimiter = require('./utils/rate-limiter');
 const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
 const strategicTopicKpiRows = require('./wig-api-strategic-topic-kpi-rows.cjs');
+const cmMealKpiRows = require('./wig-api-cm-meal-kpi-rows.cjs');
 const strategicTopicContent = require('./wig-api-strategic-topic-content.cjs');
+const mealContent = require('./wig-api-meal-content.cjs');
 const { canReadStrategicTopicApi } = require('./utils/strategic-topic-wig-access.cjs');
+const { canAccessMeal } = require('./utils/meal-access.cjs');
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./utils/monthly-fill-from-cache.cjs');
 const { computeKPIBreakdown } = require('./utils/kpi-breakdown.cjs');
 
@@ -265,9 +268,14 @@ const handler = rateLimiter('general')(
         /^\/strategic-topic-kpi-rows\/\d+$/.test(path) ||
         path === '/strategic-topic-kpi-monthly-data' ||
         path === '/strategic-topic-content' ||
-        /^\/strategic-topic-content\/\d+$/.test(path);
+        /^\/strategic-topic-content\/\d+$/.test(path) ||
+        path === '/cm-meal-kpi-rows' ||
+        path === '/cm-meal-kpi-rows/update-order' ||
+        /^\/cm-meal-kpi-rows\/\d+$/.test(path) ||
+        path === '/meal-content' ||
+        /^\/meal-content\/\d+$/.test(path);
       const writeRoles = pathAllowsTopicWriter
-        ? ['CEO', 'Admin', 'department', 'topic', 'department-topic']
+        ? ['CEO', 'Admin', 'department', 'topic', 'department-topic', 'M&E', 'cm-meal-project']
         : ['CEO', 'Admin', 'department'];
       if (!writeRoles.some((w) => w.toLowerCase() === userRoleLower)) {
         return {
@@ -475,6 +483,47 @@ const handler = rateLimiter('general')(
     } else if (path === '/strategic-topic-kpi-monthly-data' && method === 'POST') {
       result = await strategicTopicKpiRows.createOrUpdateStrategicTopicKpiMonthlyData(pool, body, event.user);
     }
+    // CM & MEAL KPI rows (project + month scoped)
+    else if (path === '/cm-meal-kpi-rows' && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      if (!cmMealKpiRows.canReadCmMealKpis(event.user)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      const project = queryParams.project || queryParams.project_code;
+      const month = queryParams.month || queryParams.month_year;
+      if (!project || !month) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'project and month query parameters are required' }),
+        };
+      }
+      result = await cmMealKpiRows.getCmMealKpiRows(pool, {
+        project,
+        month,
+        user: event.user,
+      });
+    } else if (path === '/cm-meal-kpi-rows/update-order' && method === 'POST') {
+      result = await cmMealKpiRows.updateCmMealKpiRowsOrder(pool, body, event.user);
+    } else if (path === '/cm-meal-kpi-rows' && method === 'POST') {
+      result = await cmMealKpiRows.postCmMealKpiRow(pool, body, event.user);
+    } else if (/^\/cm-meal-kpi-rows\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await cmMealKpiRows.putCmMealKpiRow(pool, id, body, event.user);
+    } else if (/^\/cm-meal-kpi-rows\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await cmMealKpiRows.deleteCmMealKpiRow(pool, id, event.user);
+    }
     // Strategic topic content folder (files per pillar)
     else if (path === '/strategic-topic-content' && method === 'GET') {
       if (!event.user) {
@@ -529,6 +578,81 @@ const handler = rateLimiter('general')(
     } else if (/^\/strategic-topic-content\/\d+$/.test(path) && method === 'DELETE') {
       const id = parseInt(path.split('/')[2], 10);
       result = await strategicTopicContent.deleteStrategicTopicContent(pool, id, event.user);
+    }
+    // MEAL content library (nested folders per tab)
+    else if (path === '/meal-content' && method === 'GET') {
+      if (!event.user) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Authentication required' }) };
+      }
+      if (!canAccessMeal(event.user)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Insufficient permissions' }) };
+      }
+      const category = queryParams.category;
+      if (!category) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'category query parameter is required' }) };
+      }
+      const parentRaw = queryParams.parent_id;
+      const parentId =
+        parentRaw === undefined || parentRaw === null || parentRaw === '' || parentRaw === 'null'
+          ? null
+          : parseInt(String(parentRaw), 10);
+      if (parentId != null && Number.isNaN(parentId)) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid parent_id' }) };
+      }
+      result = await mealContent.listMealContent(pool, category, parentId, event.user);
+    } else if (path === '/meal-content/breadcrumb' && method === 'GET') {
+      if (!event.user) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Authentication required' }) };
+      }
+      if (!canAccessMeal(event.user)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Insufficient permissions' }) };
+      }
+      const category = queryParams.category;
+      const folderId = parseInt(String(queryParams.folder_id ?? ''), 10);
+      if (!category) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'category is required' }) };
+      }
+      if (!Number.isFinite(folderId) || folderId <= 0) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'folder_id is required' }) };
+      }
+      result = await mealContent.getMealContentBreadcrumb(pool, category, folderId, event.user);
+    } else if (path === '/meal-content/folders' && method === 'GET') {
+      if (!event.user) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Authentication required' }) };
+      }
+      if (!canAccessMeal(event.user)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Insufficient permissions' }) };
+      }
+      const category = queryParams.category;
+      if (!category) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'category query parameter is required' }) };
+      }
+      result = await mealContent.listMealContentFolders(pool, category, event.user);
+    } else if (/^\/meal-content\/\d+\/download$/.test(path) && method === 'GET') {
+      if (!event.user) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Authentication required' }) };
+      }
+      const id = parseInt(path.match(/^\/meal-content\/(\d+)\/download$/)[1], 10);
+      const bin = await mealContent.getMealContentDownload(pool, id, event.user);
+      const fname = encodeURIComponent(bin.filename);
+      return {
+        statusCode: 200,
+        headers: {
+          ...headers,
+          'Content-Type': bin.mime,
+          'Content-Disposition': `attachment; filename*=UTF-8''${fname}`,
+        },
+        body: bin.buffer.toString('base64'),
+        isBase64Encoded: true,
+      };
+    } else if (path === '/meal-content' && method === 'POST') {
+      result = await mealContent.createMealContent(pool, body, event.user);
+    } else if (/^\/meal-content\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await mealContent.updateMealContent(pool, id, body, event.user);
+    } else if (/^\/meal-content\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await mealContent.deleteMealContent(pool, id, event.user);
     }
     // RASCI Metrics
     else if (path === '/rasci' && method === 'GET') {
@@ -1121,6 +1245,11 @@ async function createDepartmentObjective(pool, body) {
   request.input('activity_target', sql.Decimal(18, 2), body.activity_target);
   request.input('responsible_person', sql.NVarChar, body.responsible_person);
   request.input('mov', sql.NVarChar, body.mov);
+  request.input('start_date', sql.Date, body.start_date || null);
+  request.input('end_date', sql.Date, body.end_date || null);
+
+  const objectiveDateFields = ', start_date, end_date';
+  const objectiveDateValues = ', @start_date, @end_date';
 
   // Only include M&E fields if type is M&E or M&E MOV and columns exist (use normalized type)
   const isME = typeForDb === 'M&E' || typeForDb === 'M&E MOV';
@@ -1146,9 +1275,9 @@ async function createDepartmentObjective(pool, body) {
   let result;
   try {
     const insertQuery = `
-      INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov${meFields})
+      INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov${objectiveDateFields}${meFields})
       OUTPUT INSERTED.*
-      VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${meValues})
+      VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov${objectiveDateValues}${meValues})
     `;
     console.log('[createDepartmentObjective] Insert query:', insertQuery);
     console.log('[createDepartmentObjective] M&E fields:', meFields);
@@ -1236,6 +1365,25 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
     const newKpi = body.kpi;
     const newType = body.type !== undefined ? body.type : currentType;
 
+    const userRole = user ? String(user.role || '').trim() : '';
+    const isAdmin = userRole === 'Admin';
+    if (!isAdmin) {
+      if (
+        body.start_date !== undefined &&
+        (body.start_date == null || body.start_date === '') &&
+        currentRecord.start_date
+      ) {
+        delete body.start_date;
+      }
+      if (
+        body.end_date !== undefined &&
+        (body.end_date == null || body.end_date === '') &&
+        currentRecord.end_date
+      ) {
+        delete body.end_date;
+      }
+    }
+
     // RASCI is not validated on update: users can change to a single KPI (or merge/split KPIs) and add RASCI later.
 
     // Auto-link to main objective if:
@@ -1263,7 +1411,7 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
     const request = pool.request();
     request.input('id', sql.Int, id);
     const updates = [];
-    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov'];
+    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov', 'start_date', 'end_date'];
     const meFields = ['me_target', 'me_actual', 'me_frequency', 'me_start_date', 'me_end_date', 'me_tool', 'me_responsible', 'me_folder_link'];
     
     fields.forEach((field) => {
@@ -1272,6 +1420,8 @@ async function updateDepartmentObjective(pool, id, body, user = null) {
           request.input(field, sql.Int, body[field] || null);
         } else if (field === 'department_id' || field === 'activity_target') {
           request.input(field, field === 'department_id' ? sql.Int : sql.Decimal(18, 2), body[field]);
+        } else if (field === 'start_date' || field === 'end_date') {
+          request.input(field, sql.Date, body[field] || null);
         } else {
           request.input(field, sql.NVarChar, body[field]);
         }

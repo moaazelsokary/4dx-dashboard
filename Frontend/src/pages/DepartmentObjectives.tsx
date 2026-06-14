@@ -152,6 +152,11 @@ type DepartmentObjectiveNewForm = Partial<Omit<DepartmentObjective, 'kpi'>> & {
   kpi: string | string[];
 };
 
+function formatObjectiveDate(s: string | null | undefined): string {
+  if (!s) return '—';
+  return String(s).slice(0, 10);
+}
+
 type SortableRowRenderProps = {
   attributes: DraggableAttributes;
   listeners: ReturnType<typeof useSortable>['listeners'] | undefined;
@@ -397,6 +402,8 @@ export default function DepartmentObjectives() {
     definition: 300,
     measurement: 300,
     mov: 200,
+    start_date: 110,
+    end_date: 110,
     admin_meeting: 300,
     admin_mee: 140,
     admin_active: 140,
@@ -628,109 +635,145 @@ export default function DepartmentObjectives() {
         });
         return;
       }
-      
-      const userObj = JSON.parse(userData);
-      
-      // Determine which department to use
-      let departmentCode: string | undefined;
-      if (userObj.role === 'CEO') {
-        // CEO users should use selectedDepartment if set
-        departmentCode = selectedDepartment || userObj.departments?.[0];
-      } else {
-        // Department users use their own department
-        departmentCode = userObj.departments?.[0];
-      }
-      
-      if (!departmentCode) {
-        toast({
-          title: 'Error',
-          description: userObj.role === 'CEO' 
-            ? 'Please select a department filter' 
-            : 'Department not found in user profile',
-          variant: 'destructive',
-        });
-        return;
-      }
-      
-      // Find department by code (case-insensitive)
-      const department = departments.find((d) => 
-        d.code?.toLowerCase() === departmentCode?.toLowerCase()
-      );
-      
-      if (!department) {
-        console.error('[DepartmentObjectives] Department lookup failed:', {
-          departmentCode,
-          availableDepartments: departments.map(d => ({ code: d.code, name: d.name })),
-          userDepartments: userObj.departments,
-          userRole: userObj.role,
-          selectedDepartment
-        });
-        toast({
-          title: 'Error',
-          description: `Department "${departmentCode}" not found. Available departments: ${departments.map(d => d.code).join(', ')}`,
-          variant: 'destructive',
-        });
-        return;
-      }
 
       type StrategicSavePayload = Partial<DepartmentObjective> &
         Partial<StrategicDepartmentObjective> & { main_objective_ids?: number[] };
       const strategicData = data as StrategicSavePayload;
 
-      if (kpiMode === 'strategic') {
-        if (modalMode === 'add') {
-          const created = await createStrategicDepartmentObjective({
-            department_id: department.id,
-            kpi: strategicData.kpi ?? null,
-            activity: strategicData.activity ?? null,
-            type: (strategicData.type as StrategicDepartmentObjective['type']) || 'Direct',
-            activity_target: strategicData.activity_target ?? 0,
-            target_type: strategicData.target_type || 'number',
-            responsible_person: strategicData.responsible_person?.trim() ?? '',
-            mov: strategicData.mov?.trim() ?? '',
-            main_objective_id: strategicData.main_objective_id ?? null,
-            definition: strategicData.definition ?? null,
-            measurement_aspect: strategicData.measurement_aspect ?? null,
-            meeting_notes: strategicData.meeting_notes ?? null,
-            me_e: strategicData.me_e ?? null,
-            active: strategicData.active ?? null,
-            notes: strategicData.notes ?? null,
+      // Edit: no department filter required (objective already belongs to a department)
+      if (modalMode === 'edit') {
+        if (kpiMode === 'strategic') {
+          if (!strategicData.id) return;
+          await updateStrategicDepartmentObjective(strategicData.id, {
+            kpi: strategicData.kpi,
+            activity: strategicData.activity,
+            type: strategicData.type,
+            activity_target: strategicData.activity_target,
+            target_type: strategicData.target_type,
+            responsible_person: strategicData.responsible_person,
+            mov: strategicData.mov,
+            main_objective_id: strategicData.main_objective_id,
+            definition: strategicData.definition,
+            measurement_aspect: strategicData.measurement_aspect,
+            meeting_notes: strategicData.meeting_notes,
+            me_e: strategicData.me_e,
+            active: strategicData.active,
+            notes: strategicData.notes,
+            start_date: strategicData.start_date,
+            end_date: strategicData.end_date,
           });
-          await putStrategicMainObjectiveLinks(created.id, strategicData.main_objective_ids ?? []);
+          await putStrategicMainObjectiveLinks(strategicData.id, strategicData.main_objective_ids ?? []);
           setIsModalOpen(false);
           setModalInitialData(undefined);
           await loadData(false);
-          toast({ title: 'Success', description: 'Strategic objective created successfully' });
+          toast({ title: 'Success', description: 'Strategic objective updated successfully' });
           return;
         }
-        if (!strategicData.id) return;
-        await updateStrategicDepartmentObjective(strategicData.id, {
-          kpi: strategicData.kpi,
-          activity: strategicData.activity,
-          type: strategicData.type,
-          activity_target: strategicData.activity_target,
-          target_type: strategicData.target_type,
-          responsible_person: strategicData.responsible_person,
-          mov: strategicData.mov,
-          main_objective_id: strategicData.main_objective_id,
-          definition: strategicData.definition,
-          measurement_aspect: strategicData.measurement_aspect,
-          meeting_notes: strategicData.meeting_notes,
-          me_e: strategicData.me_e,
-          active: strategicData.active,
-          notes: strategicData.notes,
+
+        if (!data.id) return;
+
+        const originalObjective = objectives.find((obj) => obj.id === data.id);
+        flushSync(() => {
+          setObjectives((prev) =>
+            prev.map((obj) =>
+              obj.id === data.id ? { ...obj, ...data, updated_at: new Date().toISOString() } : obj
+            )
+          );
+          setIsModalOpen(false);
+          setModalInitialData(undefined);
         });
-        await putStrategicMainObjectiveLinks(strategicData.id, strategicData.main_objective_ids ?? []);
+
+        toast({ title: 'Updating...', description: 'Objective is being updated' });
+
+        const savedObjective = await updateDepartmentObjective(data.id, data);
+        const completeUpdated: DepartmentObjective = {
+          ...savedObjective,
+          department_name: savedObjective.department_name || originalObjective?.department_name || '',
+          department_code: savedObjective.department_code || originalObjective?.department_code || '',
+        };
+
+        setObjectives((prev) => prev.map((obj) => (obj.id === data.id ? completeUpdated : obj)));
+        toast({ title: 'Success', description: 'Objective updated successfully' });
+        setTimeout(() => {
+          void loadData(false);
+        }, 500);
+        return;
+      }
+
+      const userObj = JSON.parse(userData);
+
+      // Add mode: resolve department from filter / user profile
+      let departmentCode: string | undefined;
+      if (userObj.role === 'CEO') {
+        departmentCode = selectedDepartment || userObj.departments?.[0];
+      } else {
+        departmentCode = userObj.departments?.[0];
+      }
+
+      if (!departmentCode) {
+        toast({
+          title: 'Error',
+          description:
+            userObj.role === 'CEO'
+              ? 'Please select a department filter'
+              : 'Department not found in user profile',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const department = departments.find(
+        (d) => d.code?.toLowerCase() === departmentCode?.toLowerCase()
+      );
+
+      if (!department) {
+        console.error('[DepartmentObjectives] Department lookup failed:', {
+          departmentCode,
+          availableDepartments: departments.map((d) => ({ code: d.code, name: d.name })),
+          userDepartments: userObj.departments,
+          userRole: userObj.role,
+          selectedDepartment,
+        });
+        toast({
+          title: 'Error',
+          description: `Department "${departmentCode}" not found. Available departments: ${departments.map((d) => d.code).join(', ')}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (kpiMode === 'strategic') {
+        const created = await createStrategicDepartmentObjective({
+          department_id: department.id,
+          kpi: strategicData.kpi ?? null,
+          activity: strategicData.activity ?? null,
+          type: (strategicData.type as StrategicDepartmentObjective['type']) || 'Direct',
+          activity_target: strategicData.activity_target ?? 0,
+          target_type: strategicData.target_type || 'number',
+          responsible_person: strategicData.responsible_person?.trim() ?? '',
+          mov: strategicData.mov?.trim() ?? '',
+          main_objective_id: strategicData.main_objective_id ?? null,
+          definition: strategicData.definition ?? null,
+          measurement_aspect: strategicData.measurement_aspect ?? null,
+          meeting_notes: strategicData.meeting_notes ?? null,
+          me_e: strategicData.me_e ?? null,
+          active: strategicData.active ?? null,
+          notes: strategicData.notes ?? null,
+          start_date: strategicData.start_date ?? null,
+          end_date: strategicData.end_date ?? null,
+        });
+        await putStrategicMainObjectiveLinks(created.id, strategicData.main_objective_ids ?? []);
         setIsModalOpen(false);
         setModalInitialData(undefined);
         await loadData(false);
-        toast({ title: 'Success', description: 'Strategic objective updated successfully' });
+        toast({ title: 'Success', description: 'Strategic objective created successfully' });
         return;
       }
 
       let savedObjective: DepartmentObjective;
 
-      if (modalMode === 'add') {
+      // BAU add (edit handled above)
+      {
         // Optimistically add to UI immediately - use functional update for instant UI response
         const tempId = Date.now(); // Temporary ID
         const optimisticObjective: DepartmentObjective = {
@@ -792,6 +835,8 @@ export default function DepartmentObjectives() {
           responsible_person: data.responsible_person!,
           mov: data.mov!,
           main_objective_id: data.main_objective_id || null,
+          start_date: data.start_date || null,
+          end_date: data.end_date || null,
         });
         
         console.log('[DepartmentObjectives] API returned saved objective:', {
@@ -908,100 +953,6 @@ export default function DepartmentObjectives() {
           } catch (err) {
             console.error('[DepartmentObjectives] Delayed reload failed:', err);
             // If reload fails, the optimistic update should still show the new objective
-          }
-        }, 500); // 500ms delay to allow server transaction to commit
-      } else {
-        if (!data.id) return;
-        
-        // Optimistically update in UI immediately - use flushSync for instant re-render
-        const originalObjective = objectives.find(obj => obj.id === data.id);
-        flushSync(() => {
-          setObjectives(prev => {
-            const updated = prev.map(obj => 
-              obj.id === data.id ? { ...obj, ...data, updated_at: new Date().toISOString() } : obj
-            );
-            return updated;
-          });
-          setIsModalOpen(false);
-          setModalInitialData(undefined);
-        });
-        
-        toast({
-          title: 'Updating...',
-          description: 'Objective is being updated',
-        });
-        
-        // Save to database
-        console.log('[DepartmentObjectives] Updating objective:', data.id);
-        savedObjective = await updateDepartmentObjective(data.id, data);
-        
-        console.log('[DepartmentObjectives] API returned updated objective:', {
-          id: savedObjective.id,
-          has_department_name: !!savedObjective.department_name,
-          has_department_code: !!savedObjective.department_code,
-        });
-        
-        // Ensure savedObjective has all required fields
-        const completeUpdated: DepartmentObjective = {
-          ...savedObjective,
-          department_name: savedObjective.department_name || originalObjective?.department_name || '',
-          department_code: savedObjective.department_code || originalObjective?.department_code || '',
-        };
-        
-        console.log('[DepartmentObjectives] Complete updated objective:', {
-          id: completeUpdated.id,
-          department_name: completeUpdated.department_name,
-          department_code: completeUpdated.department_code,
-        });
-        
-        // Update with real data from server - ensure all fields are present
-        setObjectives(prev => {
-          console.log('[DepartmentObjectives] Updating state after edit. Previous count:', prev.length);
-          const updated = prev.map(obj => {
-            if (obj.id === data.id) {
-              console.log('[DepartmentObjectives] Replacing objective in state:', obj.id);
-              return completeUpdated;
-            }
-            return obj;
-          });
-          console.log('[DepartmentObjectives] After edit update. New count:', updated.length, 'Has updated objective:', updated.some(obj => obj.id === completeUpdated.id));
-          return updated;
-        });
-        
-        toast({
-          title: 'Success',
-          description: 'Objective updated successfully',
-        });
-        
-        // Delay reload to allow server transaction to commit and avoid race conditions
-        // This ensures the updated objective appears immediately and persists
-        setTimeout(async () => {
-          console.log('[DepartmentObjectives] Delayed reload after edit starting...');
-          try {
-            await loadData(false);
-            console.log('[DepartmentObjectives] Delayed reload after edit completed');
-            
-            // Check if the updated objective is still in state after reload
-            setObjectives(prev => {
-              const updatedObjective = prev.find(obj => obj.id === completeUpdated.id);
-              if (updatedObjective) {
-                // Check if server returned stale data (older updated_at)
-                const serverIsStale = updatedObjective.updated_at && completeUpdated.updated_at &&
-                  new Date(updatedObjective.updated_at) < new Date(completeUpdated.updated_at);
-                
-                if (serverIsStale) {
-                  console.warn('[DepartmentObjectives] Server returned stale data after edit! Using our updated version.');
-                  return prev.map(obj => obj.id === completeUpdated.id ? completeUpdated : obj);
-                }
-                console.log('[DepartmentObjectives] After reload - updated objective is in state with latest data');
-              } else {
-                console.warn('[DepartmentObjectives] Updated objective missing after reload! This should not happen for edits.');
-              }
-              return prev;
-            });
-          } catch (err) {
-            console.error('[DepartmentObjectives] Delayed reload after edit failed:', err);
-            // If reload fails, the optimistic update should still show the updated objective
           }
         }, 500); // 500ms delay to allow server transaction to commit
       }
@@ -2667,6 +2618,7 @@ export default function DepartmentObjectives() {
             >
               <DeptObjectiveSpreadsheetProvider commitInline={handleInlineCommit}>
               <DeptObjectiveFormulaBar />
+              <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <Table style={{ tableLayout: 'fixed', width: '100%' }} className="border-collapse">
                 <TableHeader>
                   <TableRow>
@@ -2886,6 +2838,26 @@ export default function DepartmentObjectives() {
                         onMouseDown={(e) => handleResizeStart('mov', e)}
                       />
                     </TableHead>
+                    <TableHead
+                      style={{ width: columnWidths.start_date, minWidth: columnWidths.start_date, position: 'relative' }}
+                      className="border-r border-border/50 whitespace-nowrap"
+                    >
+                      <span>Start date</span>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('start_date', e)}
+                      />
+                    </TableHead>
+                    <TableHead
+                      style={{ width: columnWidths.end_date, minWidth: columnWidths.end_date, position: 'relative' }}
+                      className="border-r border-border/50 whitespace-nowrap"
+                    >
+                      <span>End date</span>
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50"
+                        onMouseDown={(e) => handleResizeStart('end_date', e)}
+                      />
+                    </TableHead>
                     {kpiMode === 'strategic' && canViewStrategicSensitiveColumns(user?.role) && (
                       <>
                         <TableHead
@@ -3007,7 +2979,6 @@ export default function DepartmentObjectives() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={filteredObjectives.filter(obj => kpiMode === 'strategic' || (obj.type !== 'M&E' && obj.type !== 'M&E MOV' && !obj.activity?.startsWith('[M&E]') && !obj.activity?.startsWith('[M&E-PARENT:'))).map(obj => obj.id.toString())} strategy={verticalListSortingStrategy}>
 
                       {/* Display regular objectives with their M&E KPIs */}
@@ -3137,6 +3108,18 @@ export default function DepartmentObjectives() {
                                       >
                                         <BidirectionalText>{obj.mov}</BidirectionalText>
                                       </DeptObjectiveSheetCell>
+                                      <TableCell
+                                        style={{ width: columnWidths.start_date, minWidth: columnWidths.start_date }}
+                                        className="border-r border-border/50 align-top text-sm whitespace-nowrap tabular-nums text-muted-foreground"
+                                      >
+                                        {formatObjectiveDate(obj.start_date)}
+                                      </TableCell>
+                                      <TableCell
+                                        style={{ width: columnWidths.end_date, minWidth: columnWidths.end_date }}
+                                        className="border-r border-border/50 align-top text-sm whitespace-nowrap tabular-nums text-muted-foreground"
+                                      >
+                                        {formatObjectiveDate(obj.end_date)}
+                                      </TableCell>
                                       {kpiMode === 'strategic' && canViewStrategicSensitiveColumns(user?.role) && (
                                         <>
                                           <DeptObjectiveSheetCell
@@ -3281,9 +3264,9 @@ export default function DepartmentObjectives() {
                       );
                     })}
                     </SortableContext>
-                  </DndContext>
                 </TableBody>
               </Table>
+              </DndContext>
               </DeptObjectiveSpreadsheetProvider>
             </div>
           </CardContent>

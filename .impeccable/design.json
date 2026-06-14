@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-19T00:00:00.000Z",
+  "title": "Design System: The One (4DX Operations)",
+  "extensions": {
+    "colorMeta": {
+      "navy-primary": {
+        "role": "primary",
+        "displayName": "Deep Program Navy",
+        "canonical": "oklch(32% 0.12 250)",
+        "tonalRamp": ["#04182f", "#062447", "#0A3568", "#0f4a8c", "#1a5fa8", "#3d7bc4", "#6b9ad4", "#a8c4e8"]
+      },
+      "orange-signal": {
+        "role": "secondary",
+        "displayName": "Signal Orange",
+        "canonical": "oklch(68% 0.19 45)",
+        "tonalRamp": ["#431407", "#7c2d12", "#c2410c", "#F97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"]
+      },
+      "surface-white": {
+        "role": "neutral",
+        "displayName": "Office White",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": ["#f8fafc", "#f1f5f9", "#e2e8f0", "#cbd5e1", "#94a3b8", "#64748b", "#475569", "#334155"]
+      }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "Default UI and chart tooltips." },
+      "title": { "displayName": "Title", "purpose": "Card and section headers." },
+      "label": { "displayName": "Label", "purpose": "KPI captions, chips, axis hints." }
+    },
+    "shadows": [
+      { "name": "card-sm", "value": "0 1px 2px 0 rgb(15 23 42 / 0.05)", "purpose": "Resting card elevation only." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Button and chip color transitions." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1024px" },
+      { "name": "2xl", "value": "1400px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call to action on light surfaces.",
+      "html": "<button type=\"button\" class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 8px 16px; font-family: 'Noto Sans Arabic', 'Cairo', system-ui, sans-serif; font-size: 14px; font-weight: 500; color: #fff; background: #0A3568; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: rgba(10, 53, 104, 0.9); } .ds-btn-primary:focus-visible { outline: 2px solid #0A3568; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "High-visibility secondary action.",
+      "html": "<button type=\"button\" class=\"ds-btn-secondary\">Queue sync</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 8px 16px; font-size: 14px; font-weight: 500; color: #fff; background: #F97316; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s; } .ds-btn-secondary:hover { background: rgba(249, 115, 22, 0.88); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "description": "Low-emphasis actions such as View products.",
+      "html": "<button type=\"button\" class=\"ds-btn-outline\">View products</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; height: 36px; padding: 0 12px; font-size: 14px; font-weight: 500; color: #0F172A; background: #fff; border: 1px solid #E2E8F0; border-radius: 8px; cursor: pointer; } .ds-btn-outline:hover { background: #F1F5F9; }"
+    },
+    {
+      "name": "Analytics Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Chart and KPI container.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Nationality</h3><p class=\"ds-card-hint\">Click anywhere in the column to filter.</p></div>",
+      "css": ".ds-card { border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 8px; background: #fff; color: #0F172A; box-shadow: 0 1px 2px rgb(15 23 42 / 0.05); padding: 24px; } .ds-card-title { margin: 0 0 4px; font-size: 16px; font-weight: 600; } .ds-card-hint { margin: 0; font-size: 12px; color: #64748B; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "description": "Active cross-filter badge with clear control.",
+      "html": "<span class=\"ds-chip\">nationality: Syria <button type=\"button\" class=\"ds-chip-x\" aria-label=\"Clear\">×</button></span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 10px; font-size: 12px; background: #F1F5F9; color: #0F172A; border-radius: 999px; } .ds-chip-x { border: none; background: transparent; cursor: pointer; padding: 2px; border-radius: 999px; line-height: 1; } .ds-chip-x:hover { background: #E2E8F0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Program Briefing Room",
+    "overview": "Staff review refugee and humanitarian program data in a bright office during working hours. The interface should feel like a trusted internal briefing pack: calm surfaces, one strong navy anchor, orange only where attention is earned.",
+    "keyCharacteristics": [
+      "Restrained navy + orange palette",
+      "Bilingual Noto Sans Arabic / Cairo / Inter stack",
+      "Flat bordered cards, minimal shadow",
+      "Clickable full chart columns and legend rows for cross-filter"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Orange and navy each have a job: navy carries structure; orange carries attention.", "section": "colors" },
+      { "name": "The Truncate-and-Tooltip Rule", "body": "Long Arabic category names truncate on chart axes; full strings always appear in tooltips and clickable legend rows.", "section": "typography" },
+      { "name": "The No-Glass Rule", "body": "Do not use backdrop blur or glassmorphism for dashboards.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do pick chart types by data shape.",
+      "Do make entire chart columns and legend rows filter targets.",
+      "Do use CSS variable series colors for Recharts fills.",
+      "Do show sync freshness near warehouse-backed analytics."
+    ],
+    "donts": [
+      "Don't use hero-metric cards with gradient numbers and decorative icon grids.",
+      "Don't use pie charts for nationality or product categories.",
+      "Don't use generic dark-blue neon ops styling or glassmorphism cards.",
+      "Don't use side-stripe colored borders on alerts or KPI callouts.",
+      "Don't paste Power BI chrome into surfaces that already have a custom warehouse dashboard."
+    ]
+  }
+}

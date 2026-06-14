@@ -92,6 +92,8 @@ async function createStrategicDepartmentObjective(pool, body, userRole) {
   request.input('target_type', sql.NVarChar, t.target_type);
   request.input('responsible_person', sql.NVarChar, responsible);
   request.input('mov', sql.NVarChar, mov);
+  request.input('start_date', sql.Date, body.start_date || null);
+  request.input('end_date', sql.Date, body.end_date || null);
   request.input('definition', sql.NVarChar, body.definition ?? null);
   request.input('measurement_aspect', sql.NVarChar, body.measurement_aspect ?? null);
   request.input('meeting_notes', sql.NVarChar, body.meeting_notes ?? null);
@@ -123,12 +125,12 @@ async function createStrategicDepartmentObjective(pool, body, userRole) {
   const insertResult = await request.query(`
     INSERT INTO strategic_department_objectives (
       main_objective_id, department_id, kpi, activity, type, activity_target, target_type,
-      responsible_person, mov, sort_order,
+      responsible_person, mov, start_date, end_date, sort_order,
       definition, measurement_aspect, meeting_notes, me_e, active, notes
       ${meFields}
     ) VALUES (
       @main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type,
-      @responsible_person, @mov, @sort_order,
+      @responsible_person, @mov, @start_date, @end_date, @sort_order,
       @definition, @measurement_aspect, @meeting_notes, @me_e, @active, @notes
       ${meValues}
     );
@@ -145,6 +147,32 @@ async function createStrategicDepartmentObjective(pool, body, userRole) {
 }
 
 async function updateStrategicDepartmentObjective(pool, id, body, userRole) {
+  const isAdmin = String(userRole || '').trim() === 'Admin';
+  if (!isAdmin && (body.start_date !== undefined || body.end_date !== undefined)) {
+    const cur = pool.request();
+    cur.input('id', sql.Int, id);
+    const r = await cur.query(
+      'SELECT start_date, end_date FROM strategic_department_objectives WHERE id = @id'
+    );
+    const row = r.recordset[0];
+    if (row) {
+      if (
+        body.start_date !== undefined &&
+        (body.start_date == null || body.start_date === '') &&
+        row.start_date
+      ) {
+        delete body.start_date;
+      }
+      if (
+        body.end_date !== undefined &&
+        (body.end_date == null || body.end_date === '') &&
+        row.end_date
+      ) {
+        delete body.end_date;
+      }
+    }
+  }
+
   const request = pool.request();
   request.input('id', sql.Int, id);
   const updates = [];
@@ -180,6 +208,14 @@ async function updateStrategicDepartmentObjective(pool, id, body, userRole) {
   if (body.sort_order !== undefined) {
     request.input('sort_order', sql.Int, body.sort_order);
     updates.push('sort_order = @sort_order');
+  }
+  if (body.start_date !== undefined) {
+    request.input('start_date', sql.Date, body.start_date || null);
+    updates.push('start_date = @start_date');
+  }
+  if (body.end_date !== undefined) {
+    request.input('end_date', sql.Date, body.end_date || null);
+    updates.push('end_date = @end_date');
   }
   const meFields = ['me_target', 'me_actual', 'me_frequency', 'me_start_date', 'me_end_date', 'me_tool', 'me_responsible', 'me_folder_link'];
   for (const f of meFields) {

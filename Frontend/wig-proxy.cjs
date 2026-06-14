@@ -280,9 +280,13 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     request.input('activity', sql.NVarChar, req.body.activity);
     request.input('type', sql.NVarChar, req.body.type);
     request.input('activity_target', sql.Decimal(18, 2), req.body.activity_target);
-    request.input('target_type', sql.NVarChar, req.body.target_type || 'number');
     request.input('responsible_person', sql.NVarChar, req.body.responsible_person);
     request.input('mov', sql.NVarChar, req.body.mov);
+    request.input('start_date', sql.Date, req.body.start_date || null);
+    request.input('end_date', sql.Date, req.body.end_date || null);
+
+    const objectiveDateFields = ', start_date, end_date';
+    const objectiveDateValues = ', @start_date, @end_date';
 
     // Only include M&E fields if type is M&E or M&E MOV
     const isME = req.body.type === 'M&E' || req.body.type === 'M&E MOV';
@@ -321,8 +325,8 @@ app.post('/api/wig/department-objectives', async (req, res) => {
     let newId;
     try {
       const insertResult = await request.query(`
-        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov, sort_order${meFields})
-        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov, @sort_order${meValues});
+        INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov, sort_order${objectiveDateFields}${meFields})
+        VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov, @sort_order${objectiveDateValues}${meValues});
         SELECT SCOPE_IDENTITY() AS id;
       `);
       newId = insertResult.recordset[0].id;
@@ -337,7 +341,6 @@ app.post('/api/wig/department-objectives', async (req, res) => {
         basicRequest.input('activity', sql.NVarChar, req.body.activity);
         basicRequest.input('type', sql.NVarChar, req.body.type);
         basicRequest.input('activity_target', sql.Decimal(18, 2), req.body.activity_target);
-        basicRequest.input('target_type', sql.NVarChar, req.body.target_type || 'number');
         basicRequest.input('responsible_person', sql.NVarChar, req.body.responsible_person);
         basicRequest.input('mov', sql.NVarChar, req.body.mov);
         
@@ -353,8 +356,8 @@ app.post('/api/wig/department-objectives', async (req, res) => {
         basicRequest.input('sort_order', sql.Int, nextSortOrder);
         
         const insertResult = await basicRequest.query(`
-          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, target_type, responsible_person, mov, sort_order)
-          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @target_type, @responsible_person, @mov, @sort_order);
+          INSERT INTO department_objectives (main_objective_id, department_id, kpi, activity, type, activity_target, responsible_person, mov, sort_order)
+          VALUES (@main_objective_id, @department_id, @kpi, @activity, @type, @activity_target, @responsible_person, @mov, @sort_order);
           SELECT SCOPE_IDENTITY() AS id;
         `);
         newId = insertResult.recordset[0].id;
@@ -382,22 +385,50 @@ app.post('/api/wig/department-objectives', async (req, res) => {
 app.put('/api/wig/department-objectives/:id', async (req, res) => {
   try {
     const pool = await getPool();
-    
-    // Validate KPI has RASCI if KPI is being updated
-    if (req.body.kpi) {
-      const rasciCheck = pool.request();
-      rasciCheck.input('kpi', sql.NVarChar, req.body.kpi);
-      const rasciResult = await rasciCheck.query('SELECT COUNT(*) as count FROM rasci_metrics WHERE kpi = @kpi');
-      
-      if (rasciResult.recordset[0].count === 0) {
-        return res.status(400).json({ error: 'KPI must have at least one RASCI assignment' });
+
+    let user = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+      const JWT_SECRET = process.env.JWT_SECRET || process.env.VITE_JWT_SECRET || 'your-secret-key-change-in-production';
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = { role: decoded.role };
+      } catch {
+        /* continue */
+      }
+    }
+
+    const id = parseInt(req.params.id, 10);
+    const isAdmin = user && String(user.role || '').trim() === 'Admin';
+    if (!isAdmin && (req.body.start_date !== undefined || req.body.end_date !== undefined)) {
+      const cur = pool.request();
+      cur.input('id', sql.Int, id);
+      const curRes = await cur.query('SELECT start_date, end_date FROM department_objectives WHERE id = @id');
+      const row = curRes.recordset[0];
+      if (row) {
+        if (
+          req.body.start_date !== undefined &&
+          (req.body.start_date == null || req.body.start_date === '') &&
+          row.start_date
+        ) {
+          delete req.body.start_date;
+        }
+        if (
+          req.body.end_date !== undefined &&
+          (req.body.end_date == null || req.body.end_date === '') &&
+          row.end_date
+        ) {
+          delete req.body.end_date;
+        }
       }
     }
 
     const request = pool.request();
     request.input('id', sql.Int, parseInt(req.params.id));
     const updates = [];
-    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'target_type', 'responsible_person', 'mov', 'sort_order'];
+    const fields = ['main_objective_id', 'department_id', 'kpi', 'activity', 'type', 'activity_target', 'responsible_person', 'mov', 'sort_order', 'start_date', 'end_date'];
+    const meFields = ['me_target', 'me_actual', 'me_frequency', 'me_start_date', 'me_end_date', 'me_tool', 'me_responsible', 'me_folder_link'];
     
     fields.forEach((field) => {
       if (req.body[field] !== undefined) {
@@ -407,8 +438,23 @@ app.put('/api/wig/department-objectives/:id', async (req, res) => {
           request.input(field, field === 'department_id' ? sql.Int : sql.Decimal(18, 2), req.body[field]);
         } else if (field === 'sort_order') {
           request.input(field, sql.Int, req.body[field]);
+        } else if (field === 'start_date' || field === 'end_date') {
+          request.input(field, sql.Date, req.body[field] || null);
         } else {
           request.input(field, sql.NVarChar, req.body[field]);
+        }
+        updates.push(`${field} = @${field}`);
+      }
+    });
+
+    meFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        if (field === 'me_target' || field === 'me_actual') {
+          request.input(field, sql.Decimal(18, 2), req.body[field] ?? null);
+        } else if (field === 'me_start_date' || field === 'me_end_date') {
+          request.input(field, sql.Date, req.body[field] || null);
+        } else {
+          request.input(field, sql.NVarChar, req.body[field] ?? null);
         }
         updates.push(`${field} = @${field}`);
       }
@@ -1110,6 +1156,9 @@ app.post('/api/wig/checkers/calculate', async (req, res) => {
 
 const registerStrategicWigRoutes = require('./wig-proxy-strategic-routes.cjs');
 registerStrategicWigRoutes(app, { sql, getPool, setNoCacheHeaders, handleError, jwt });
+
+const registerMealWigRoutes = require('./wig-proxy-meal-routes.cjs');
+registerMealWigRoutes(app, { jwt, getPool, setNoCacheHeaders, handleError });
 
 const { getDepartmentMonthlyDataWithLiveMapping } = require('./netlify/functions/utils/monthly-fill-from-cache.cjs');
 

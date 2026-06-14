@@ -168,9 +168,14 @@ export default function StrategicTopicTemplate({ title, strategicTopicCode }: St
   }, [departments]);
 
   const vizRows = useMemo(() => {
-    if (departmentScope === 'all') return rows;
+    const activityOnly = rows.filter((r) => {
+      const rt = String(r.row_type ?? '').trim();
+      if (rt === 'M&E' || rt === 'M&E MOV') return false;
+      return !String(r.activity ?? '').startsWith('[M&E-PARENT:');
+    });
+    if (departmentScope === 'all') return activityOnly;
     const code = departmentScope.toLowerCase();
-    return rows.filter((r) =>
+    return activityOnly.filter((r) =>
       parsePipeList(r.associated_departments).some((c) => String(c).toLowerCase() === code)
     );
   }, [rows, departmentScope]);

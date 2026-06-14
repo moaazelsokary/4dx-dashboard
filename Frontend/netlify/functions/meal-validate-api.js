@@ -1,6 +1,6 @@
 /**
- * MEAL Data Validation proxy — auth + forward to Python validation service.
- * Does not persist uploads or reports.
+ * MEAL Data Validation — auth + in-process Node validation engine.
+ * Optional MEAL_VALIDATION_API_URL forwards to external Python (legacy).
  */
 
 const rateLimiter = require('./utils/rate-limiter');
@@ -8,6 +8,7 @@ const authMiddleware = require('./utils/auth-middleware');
 const logger = require('./utils/logger');
 const { canAccessMeal } = require('./utils/meal-access.cjs');
 const { parseMultipart } = require('./utils/meal-multipart.cjs');
+const { validateVolunteerUpload } = require('./utils/meal/validate.cjs');
 
 const MAX_BYTES = Number(process.env.MEAL_MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
 const UPSTREAM = (process.env.MEAL_VALIDATION_API_URL || '').replace(/\/$/, '');
@@ -24,17 +25,6 @@ function jsonHeaders(extra = {}) {
 }
 
 async function forwardToPython({ fileBuffer, fileName, fileMime, sheetName, validateMode }) {
-  if (!UPSTREAM) {
-    return {
-      statusCode: 503,
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        ok: false,
-        error: 'MEAL_VALIDATION_API_URL is not configured',
-      }),
-    };
-  }
-
   const boundary = `----meal${Date.now()}${Math.random().toString(36).slice(2)}`;
   const parts = [];
 
@@ -67,6 +57,18 @@ async function forwardToPython({ fileBuffer, fileName, fileMime, sheetName, vali
     statusCode: res.status,
     headers: jsonHeaders(),
     body: text,
+  };
+}
+
+function validateInProcess({ fileBuffer, sheetName, validateMode }) {
+  const result = validateVolunteerUpload(fileBuffer, {
+    sheetName: sheetName || undefined,
+    validateMode: validateMode || 'both',
+  });
+  return {
+    statusCode: 200,
+    headers: jsonHeaders(),
+    body: JSON.stringify(result),
   };
 }
 
@@ -124,9 +126,26 @@ const handler = rateLimiter('general')(
         username: user.username,
         fileName: parsed.fileName,
         bytes: parsed.fileBuffer.length,
+        engine: UPSTREAM ? 'python-proxy' : 'node',
       });
 
-      return await forwardToPython(parsed);
+      if (UPSTREAM) {
+        return await forwardToPython(parsed);
+      }
+
+      try {
+        return validateInProcess(parsed);
+      } catch (engineErr) {
+        logger.error('MEAL validate engine error', { message: engineErr?.message });
+        return {
+          statusCode: 422,
+          headers: jsonHeaders(),
+          body: JSON.stringify({
+            ok: false,
+            error: `Validation failed: ${engineErr?.message || 'unknown error'}`,
+          }),
+        };
+      }
     } catch (err) {
       logger.error('MEAL validate error', { message: err?.message });
       return {

@@ -1,22 +1,43 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Trash2, Folder, Edit2 } from "lucide-react";
-import type { DepartmentObjective } from "@/types/wig";
+
+export interface MEKPIDisplayRow {
+  id: number;
+  kpi: string;
+  mov?: string | null;
+  me_target?: number | null;
+  me_actual?: number | null;
+  me_frequency?: string | null;
+  me_start_date?: string | null;
+  me_end_date?: string | null;
+  me_tool?: string | null;
+  me_responsible?: string | null;
+  me_folder_link?: string | null;
+}
 
 interface MEKPIsModalProps {
   isOpen: boolean;
   onClose: () => void;
   objectiveKPI: string;
   objectiveActivity?: string;
-  meKPIs: DepartmentObjective[];
+  meKPIs: MEKPIDisplayRow[];
   onDelete: (id: number) => void;
-  onEdit?: (meKPI: DepartmentObjective) => void;
+  onEdit?: (meKPI: MEKPIDisplayRow) => void;
   canModify?: boolean;
 }
 
-const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs, onDelete, onEdit, canModify = false }: MEKPIsModalProps) => {
+const MEKPIsModal = ({
+  isOpen,
+  onClose,
+  objectiveKPI,
+  objectiveActivity,
+  meKPIs,
+  onDelete,
+  onEdit,
+  canModify = false,
+}: MEKPIsModalProps) => {
   const formatDate = (dateString: string | null | undefined): string => {
     if (!dateString) return '—';
     try {
@@ -26,7 +47,6 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
     }
   };
 
-  // Extract text in parentheses from KPI
   const extractParenthesesText = (kpi: string): string => {
     if (!kpi) return kpi;
     const match = kpi.match(/\(([^)]+)\)/);
@@ -35,57 +55,41 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
 
   const displayKPI = extractParenthesesText(objectiveKPI);
 
-  // Debug: Log the first M&E KPI to see what fields are available
-  if (meKPIs.length > 0) {
-    console.log('=== M&E KPIs Modal Debug ===');
-    console.log('Number of M&E KPIs:', meKPIs.length);
-    console.log('First M&E KPI object:', meKPIs[0]);
-    console.log('Available keys:', Object.keys(meKPIs[0]));
-    console.log('me_target:', meKPIs[0].me_target, typeof meKPIs[0].me_target);
-    console.log('me_actual:', meKPIs[0].me_actual, typeof meKPIs[0].me_actual);
-    console.log('me_frequency:', meKPIs[0].me_frequency, typeof meKPIs[0].me_frequency);
-    console.log('me_start_date:', meKPIs[0].me_start_date, typeof meKPIs[0].me_start_date);
-    console.log('me_end_date:', meKPIs[0].me_end_date, typeof meKPIs[0].me_end_date);
-    console.log('me_tool:', meKPIs[0].me_tool, typeof meKPIs[0].me_tool);
-    console.log('me_responsible:', meKPIs[0].me_responsible, typeof meKPIs[0].me_responsible);
-    console.log('me_folder_link:', meKPIs[0].me_folder_link, typeof meKPIs[0].me_folder_link);
-    console.log('mov:', meKPIs[0].mov, typeof meKPIs[0].mov);
-    console.log('===========================');
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="w-[min(98vw,144rem)] max-w-[min(98vw,144rem)] sm:max-w-[min(98vw,144rem)] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>
-            M&E KPIs for: {displayKPI}
-          </DialogTitle>
+          <DialogTitle>M&E KPIs for: {displayKPI}</DialogTitle>
+          {objectiveActivity && (
+            <p className="text-sm text-muted-foreground truncate" title={objectiveActivity}>
+              {objectiveActivity}
+            </p>
+          )}
         </DialogHeader>
-        <div className="mt-4">
+        <div className="mt-4 min-h-0 flex-1 overflow-auto">
           {meKPIs.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No M&E KPIs found for this objective.
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead>KPI</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Actual</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>End Date</TableHead>
-                  <TableHead>Tool</TableHead>
-                  <TableHead>Responsible</TableHead>
-                  <TableHead>MOV</TableHead>
-                  <TableHead>Folder Link</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="min-w-[14rem]">KPI</TableHead>
+                  <TableHead className="min-w-[5rem]">Target</TableHead>
+                  <TableHead className="min-w-[5rem]">Actual</TableHead>
+                  <TableHead className="min-w-[6rem]">Frequency</TableHead>
+                  <TableHead className="min-w-[6rem]">Start Date</TableHead>
+                  <TableHead className="min-w-[6rem]">End Date</TableHead>
+                  <TableHead className="min-w-[6rem]">Tool</TableHead>
+                  <TableHead className="min-w-[7rem]">Responsible</TableHead>
+                  <TableHead className="min-w-[8rem]">MOV</TableHead>
+                  <TableHead className="min-w-[6rem]">Folder Link</TableHead>
+                  <TableHead className="text-right min-w-[7rem]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {meKPIs.map((meObj) => {
-                  return (
+                {meKPIs.map((meObj) => (
                   <TableRow key={meObj.id}>
                     <TableCell className="font-medium">{meObj.kpi}</TableCell>
                     <TableCell className="text-right">
@@ -98,24 +102,12 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
                         ? Number(meObj.me_actual).toLocaleString()
                         : '—'}
                     </TableCell>
-                    <TableCell>
-                      {meObj.me_frequency || '—'}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(meObj.me_start_date)}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(meObj.me_end_date)}
-                    </TableCell>
-                    <TableCell>
-                      {meObj.me_tool || '—'}
-                    </TableCell>
-                    <TableCell>
-                      {meObj.me_responsible || '—'}
-                    </TableCell>
-                    <TableCell>
-                      {meObj.mov || '—'}
-                    </TableCell>
+                    <TableCell>{meObj.me_frequency || '—'}</TableCell>
+                    <TableCell>{formatDate(meObj.me_start_date)}</TableCell>
+                    <TableCell>{formatDate(meObj.me_end_date)}</TableCell>
+                    <TableCell>{meObj.me_tool || '—'}</TableCell>
+                    <TableCell>{meObj.me_responsible || '—'}</TableCell>
+                    <TableCell>{meObj.mov || '—'}</TableCell>
                     <TableCell>
                       {meObj.me_folder_link ? (
                         <a
@@ -160,8 +152,7 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
                       )}
                     </TableCell>
                   </TableRow>
-                  );
-                })}
+                ))}
               </TableBody>
             </Table>
           )}
@@ -172,4 +163,3 @@ const MEKPIsModal = ({ isOpen, onClose, objectiveKPI, objectiveActivity, meKPIs,
 };
 
 export default MEKPIsModal;
-

@@ -21,6 +21,10 @@
     "test:coverage:check": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=75 --coverage.thresholds.statements=80",
     "init-db": "node scripts/init-database.cjs",
     "migrate-strategic-topic-kpi": "node scripts/run-strategic-topic-kpi-schema.cjs",
+    "migrate-dept-objective-dates-topic-responsible": "node scripts/run-dept-objective-dates-topic-responsible-schema.cjs",
+    "migrate-strategic-topic-kpi-me": "node scripts/run-strategic-topic-kpi-me-schema.cjs",
+    "migrate-meal-content": "node scripts/run-meal-content-schema.cjs",
+    "init-cm-meal-kpi": "node scripts/run-cm-meal-kpi-schema.cjs",
     "create-users": "node scripts/create-users.cjs",
     "test-auth": "node scripts/test-auth.cjs",
     "import-wig": "node scripts/import-wig-data.cjs",
@@ -38,7 +42,7 @@
     "onedrive-proxy": "node onedrive-proxy.cjs",
     "wig-proxy": "node wig-proxy.cjs",
     "auth-proxy": "node auth-proxy.cjs",
-    "proxies": "concurrently -n proxy,onedrive,wig,auth,meal \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\" \"npm run auth-proxy\" \"npm run meal-api\""
+    "proxies": "concurrently -n proxy,onedrive,wig,auth \"npm run proxy\" \"npm run onedrive-proxy\" \"npm run wig-proxy\" \"npm run auth-proxy\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

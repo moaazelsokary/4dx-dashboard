@@ -1,0 +1,258 @@
+{
+  "version": 2,
+  "description": "قالب أعمدة المتطوعين (صف واحد: شخص + خدمة). العناوين الرسمية بعد التطابق تُحوَّل لأسماء يفهمها التحقق وsplit_nrc.",
+  "merge_column_aliases_json": true,
+  "columns": [
+    {
+      "id": "personal_identification_number",
+      "required": true,
+      "labels_ar": "الرقم الشخصي",
+      "labels_en": "Personal identification number",
+      "official_header": "personal_identification_number",
+      "match_names": [
+        "Personal Identification Number",
+        "Individual ID",
+        "Individual ID - الرقم الشخصي",
+        "الرقم الشخصي-رقم الباسبور-individual number",
+        "الرقم الشخصي-رقم الباسبور-Individual Number",
+        "individual number",
+        "Individual Number"
+      ],
+      "merge_aliases_from_json_keys": ["personal_identification_number"]
+    },
+    {
+      "id": "passport_number",
+      "required": false,
+      "labels_ar": "رقم الباسبور",
+      "labels_en": "Passport number",
+      "official_header": "Passport Number",
+      "match_names": ["Passport Number", "Passport Number - رقم الباسبور", "passport number"]
+    },
+    {
+      "id": "file_number",
+      "required": false,
+      "labels_ar": "رقم الملف",
+      "labels_en": "File number",
+      "official_header": "File Number",
+      "match_names": ["File Number", "File Number - رقم الملف"],
+      "merge_aliases_from_json_keys": ["File Number"]
+    },
+    {
+      "id": "national_id",
+      "required": false,
+      "labels_ar": "الرقم القومي",
+      "labels_en": "National ID",
+      "official_header": "national_id",
+      "match_names": ["Nationa ID", "National ID", "national_id", "الرقم القومي"],
+      "merge_aliases_from_json_keys": ["national_id"]
+    },
+    {
+      "id": "name",
+      "required": true,
+      "labels_ar": "الاسم",
+      "labels_en": "Name",
+      "official_header": "name",
+      "match_names": ["name", "Name"],
+      "merge_aliases_from_json_keys": ["name"]
+    },
+    {
+      "id": "nationality",
+      "required": true,
+      "labels_ar": "الجنسية",
+      "labels_en": "Nationality",
+      "official_header": "Nationality",
+      "match_names": ["Nationality", "Nationality - الجنسية"],
+      "merge_aliases_from_json_keys": ["Nationality"]
+    },
+    {
+      "id": "phone",
+      "required": true,
+      "labels_ar": "رقم التليفون",
+      "labels_en": "Phone",
+      "official_header": "phone",
+      "match_names": ["phone", "Phone", "phone - رقم التليفون"],
+      "merge_aliases_from_json_keys": ["phone"]
+    },
+    {
+      "id": "phone_alt",
+      "required": false,
+      "labels_ar": "تليفون بديل",
+      "labels_en": "Alternate phone",
+      "official_header": "phone_alt",
+      "match_names": ["phone alt", "alternate phone", "phone -  رقم تليفون بديل"]
+    },
+    {
+      "id": "age",
+      "required": true,
+      "labels_ar": "السن",
+      "labels_en": "Age",
+      "official_header": "age",
+      "match_names": ["age", "Age", "Age - السن"],
+      "merge_aliases_from_json_keys": ["age"]
+    },
+    {
+      "id": "gender",
+      "required": true,
+      "labels_ar": "النوع",
+      "labels_en": "Gender",
+      "official_header": "gender",
+      "match_names": ["gender", "Gender", "Gender - النوع الاجتماعي"],
+      "merge_aliases_from_json_keys": ["gender"]
+    },
+    {
+      "id": "education_type",
+      "required": false,
+      "labels_ar": "الشهادة التعليمية",
+      "labels_en": "Education type",
+      "official_header": "Education Type",
+      "match_names": ["Education Type", "Education Type - الشهادة التعليمية"],
+      "merge_aliases_from_json_keys": ["Education Type"]
+    },
+    {
+      "id": "social_status",
+      "required": false,
+      "labels_ar": "الوضع الاجتماعي",
+      "labels_en": "Social status",
+      "official_header": "Social Status",
+      "match_names": ["Social Status", "Social Status - الوضع الاجتماعي"],
+      "merge_aliases_from_json_keys": ["Social Status"]
+    },
+    {
+      "id": "state_governorate",
+      "required": true,
+      "labels_ar": "المحافظة",
+      "labels_en": "State (governorate)",
+      "official_header": "State",
+      "match_names": ["State", "State - المحافظة", "المحافظة", "governorate"]
+    },
+    {
+      "id": "zone",
+      "required": false,
+      "labels_ar": "المنطقة",
+      "labels_en": "Zone",
+      "official_header": "Zone",
+      "match_names": ["Zone", "Zone - المدينة"],
+      "merge_aliases_from_json_keys": ["Zone"]
+    },
+    {
+      "id": "street",
+      "required": false,
+      "labels_ar": "العنوان",
+      "labels_en": "Street",
+      "official_header": "Street",
+      "match_names": ["Street", "Street - العنوان بالتفصيل"]
+    },
+    {
+      "id": "product_category",
+      "required": false,
+      "labels_ar": "تصنيف المنتج",
+      "labels_en": "Product category",
+      "official_header": "product_category",
+      "match_names": ["product_category", "Product Category", "category"]
+    },
+    {
+      "id": "service_1",
+      "required": true,
+      "labels_ar": "المنتج / نوع الخدمة",
+      "labels_en": "Product / service type",
+      "official_header": "Product",
+      "match_names": ["product", "Product", "product name", "product type"]
+    },
+    {
+      "id": "state_service",
+      "required": false,
+      "labels_ar": "حالة الخدمة",
+      "labels_en": "Service state",
+      "official_header": "state",
+      "match_names": ["state"]
+    },
+    {
+      "id": "amount",
+      "required": true,
+      "labels_ar": "التكلفة الفعلية",
+      "labels_en": "Actual amount",
+      "official_header": "Actual Amount",
+      "match_names": ["actual_amount", "Actual Amount", "amount", "Cost"]
+    },
+    {
+      "id": "expected_amount_col",
+      "required": false,
+      "labels_ar": "المبلغ المتوقع",
+      "labels_en": "Expected amount",
+      "official_header": "expected_amount",
+      "match_names": ["expected_amount", "Expected Amount", "expected amount"]
+    },
+    {
+      "id": "actual_date",
+      "required": true,
+      "labels_ar": "تاريخ التنفيذ الفعلي",
+      "labels_en": "Actual date",
+      "official_header": "Actual Date",
+      "match_names": ["actual_date", "Actual Date", "Actual Date - تاريخ التنفيذ"]
+    },
+    {
+      "id": "expected_date",
+      "required": true,
+      "labels_ar": "التاريخ المتوقع",
+      "labels_en": "Expected date",
+      "official_header": "Expected Date",
+      "match_names": ["expected_date", "Expected Date"]
+    },
+    {
+      "id": "quantity",
+      "required": false,
+      "labels_ar": "الكمية",
+      "labels_en": "Quantity",
+      "official_header": "quantity",
+      "match_names": ["quantity", "Quantity", "qty", "number of units", "number of", "الكمية", "الكميه"]
+    },
+    {
+      "id": "interview_date",
+      "required": false,
+      "labels_ar": "تاريخ المقابلة",
+      "labels_en": "Interview date",
+      "official_header": "Interview_date",
+      "match_names": ["Interview-date - تاريخ المقابلة", "Interview-date", "Interview date", "Interview_date"]
+    },
+    {
+      "id": "is_refugees",
+      "required": false,
+      "labels_ar": "لاجئ؟",
+      "labels_en": "Is refugees",
+      "official_header": "IsRefugees",
+      "match_names": ["IsRefugees", "Is Refugees", "refugee", "لاجئ"]
+    },
+    {
+      "id": "bod",
+      "required": false,
+      "labels_ar": "تاريخ الميلاد",
+      "labels_en": "Date of birth",
+      "official_header": "BOD",
+      "match_names": ["BOD - تاريخ الميلاد", "BOD", "Date of birth"]
+    },
+    {
+      "id": "family_members",
+      "required": false,
+      "labels_ar": "أفراد الأسرة",
+      "labels_en": "Family members",
+      "official_header": "Family members",
+      "match_names": ["Family members - افراد الاسرة", "Family members"]
+    },
+    {
+      "id": "referral",
+      "required": false,
+      "labels_ar": "الإحالة",
+      "labels_en": "Referral",
+      "official_header": "Referral",
+      "match_names": ["Referral - الاحالة", "Referral"]
+    },
+    {
+      "id": "interval",
+      "required": false,
+      "labels_ar": "الفترة",
+      "labels_en": "Interval",
+      "official_header": "Interval",
+      "match_names": ["Interval - التكرار او الفترة", "Interval"]
+    }
+  ]
+}

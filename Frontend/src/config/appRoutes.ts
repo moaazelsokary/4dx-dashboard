@@ -23,6 +23,7 @@ export const APP_ROUTE_OPTIONS: { path: string; label: string }[] = [
   { path: '/admin/configuration', label: 'Configuration' },
   { path: '/pms-odoo-metrics', label: 'PMS & Odoo metrics' },
   { path: '/meal', label: 'MEAL' },
+  { path: '/cm-meal-kpis', label: 'CM & MEAL KPIs' },
   { path: '/access-denied', label: 'Access denied' },
 ];
 

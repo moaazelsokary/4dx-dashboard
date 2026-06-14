@@ -14,6 +14,9 @@ export interface User {
   editableStrategicTopic?: string | null;
   /** Legacy / API echo — merged into `editableStrategicTopic` in `getCurrentUser`. */
   editable_strategic_topic?: string | null;
+  /** Role `cm-meal-project`: assigned CM & MEAL project pillars (`||`-delimited). */
+  cmMealProjects?: string | null;
+  cm_meal_projects?: string | null;
   token?: string;
   /** Post-login path when set (e.g. /department-objectives) */
   defaultRoute?: string | null;
@@ -38,6 +41,8 @@ export interface AuthTokenPayload {
   powerbiDashboardIds?: string[] | null;
   editableStrategicTopic?: string | null;
   editable_strategic_topic?: string | null;
+  cmMealProjects?: string | null;
+  cm_meal_projects?: string | null;
   avatarKey?: string | null;
   exp?: number;
   iat?: number;
@@ -148,6 +153,10 @@ export const signIn = async (username: string, password: string): Promise<AuthRe
         if (fromJwt != null && String(fromJwt).trim() !== '') {
           userToStore.editableStrategicTopic = String(fromJwt).trim().toLowerCase();
         }
+        const fromJwtCmp = p.cmMealProjects ?? (p as AuthTokenPayload & { cm_meal_projects?: string }).cm_meal_projects;
+        if (fromJwtCmp != null && String(fromJwtCmp).trim() !== '') {
+          userToStore.cmMealProjects = String(fromJwtCmp).trim().toLowerCase();
+        }
         if (p.avatarKey) {
           userToStore.avatarKey = p.avatarKey;
         }
@@ -228,6 +237,11 @@ function hydrateUserFromStorageBlob(u: User): User {
       const pr = String(payload.role || '').trim().toLowerCase();
       if (pr === 'topic') out.role = 'topic';
       if (pr === 'department-topic') out.role = 'department-topic';
+      if (pr === 'cm-meal-project') out.role = 'cm-meal-project';
+      const jwtCmp = payload.cmMealProjects ?? payload.cm_meal_projects;
+      if (jwtCmp != null && String(jwtCmp).trim() !== '') {
+        out.cmMealProjects = String(jwtCmp).trim().toLowerCase();
+      }
       const jwtAvatar = payload.avatarKey;
       if (jwtAvatar != null && String(jwtAvatar).trim() !== '') {
         out.avatarKey = String(jwtAvatar).trim();
@@ -236,6 +250,14 @@ function hydrateUserFromStorageBlob(u: User): User {
   }
   if (out.avatarKey == null && out.avatar_key != null && String(out.avatar_key).trim() !== '') {
     out.avatarKey = String(out.avatar_key).trim();
+  }
+  const cmpSnake = out.cm_meal_projects;
+  if (
+    (out.cmMealProjects == null || String(out.cmMealProjects).trim() === '') &&
+    cmpSnake != null &&
+    String(cmpSnake).trim() !== ''
+  ) {
+    out.cmMealProjects = String(cmpSnake).trim().toLowerCase();
   }
   return out;
 }

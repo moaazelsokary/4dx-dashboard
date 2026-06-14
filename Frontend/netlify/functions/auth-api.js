@@ -262,6 +262,7 @@ const handler = rateLimiter('login')(async (event, context) => {
           allowed_routes,
           powerbi_dashboard_ids,
           editable_strategic_topic,
+          cm_meal_projects,
           avatar_key
         FROM users
         WHERE username = @username
@@ -374,6 +375,10 @@ const handler = rateLimiter('login')(async (event, context) => {
       user.editable_strategic_topic != null && String(user.editable_strategic_topic).trim()
         ? String(user.editable_strategic_topic).trim().toLowerCase()
         : null;
+    const cmMealProjects =
+      user.cm_meal_projects != null && String(user.cm_meal_projects).trim()
+        ? String(user.cm_meal_projects).trim().toLowerCase()
+        : null;
 
     const avatarKey =
       user.avatar_key != null && String(user.avatar_key).trim() !== ''
@@ -388,7 +393,9 @@ const handler = rateLimiter('login')(async (event, context) => {
         ? 'topic'
         : roleLower === 'department-topic'
           ? 'department-topic'
-          : roleRaw;
+          : roleLower === 'cm-meal-project'
+            ? 'cm-meal-project'
+            : roleRaw;
 
     // JWT payload: role `topic` must always carry `editableStrategicTopic` (even null) so wig-proxy
     // does not omit the claim — otherwise KPI writes fail with "assigned strategic topic" errors.
@@ -406,6 +413,11 @@ const handler = rateLimiter('login')(async (event, context) => {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
     } else if (editableStrategicTopic) {
       jwtPayload.editableStrategicTopic = editableStrategicTopic;
+    }
+    if (authRole === 'cm-meal-project') {
+      jwtPayload.cmMealProjects = cmMealProjects;
+    } else if (cmMealProjects) {
+      jwtPayload.cmMealProjects = cmMealProjects;
     }
 
     // Generate JWT token
@@ -429,6 +441,7 @@ const handler = rateLimiter('login')(async (event, context) => {
       allowedRoutes,
       powerbiDashboardIds,
       editableStrategicTopic,
+      cmMealProjects,
       avatarKey,
     };
 
