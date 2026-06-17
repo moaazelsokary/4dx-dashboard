@@ -3,6 +3,10 @@ import { hasPowerBINavigationAccess } from '@/config/powerbi';
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
 import { isMealRole, MEAL_PATH } from '@/config/mealAccess';
 import { CM_MEAL_KPIS_PATH, isCmMealProjectRole } from '@/config/cmMealAccess';
+import {
+  isCmMealEmployeeRole,
+  isCmMealManagerRole,
+} from '@/config/cmMealUserKpiAccess';
 import { STRATEGIC_TOPIC_PATHS } from '@/config/strategicTopics';
 import { isDepartmentLikeRole, isTopicLikeRole } from '@/config/userRoles';
 
@@ -61,6 +65,9 @@ export function getInheritedRoutesForUser(user: User): Set<string> {
     paths.add(CM_MEAL_KPIS_PATH);
   }
   if (isCmMealProjectRole(role)) {
+    paths.add(CM_MEAL_KPIS_PATH);
+  }
+  if (isCmMealEmployeeRole(role) || isCmMealManagerRole(role)) {
     paths.add(CM_MEAL_KPIS_PATH);
   }
 

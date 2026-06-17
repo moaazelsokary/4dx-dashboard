@@ -79,6 +79,7 @@ function formatDiff(target: number | null, actual: number | null): string {
 }
 
 type DraftRow = {
+  kpi: string;
   activity: string;
   target: string;
   actual: string;
@@ -87,6 +88,7 @@ type DraftRow = {
 };
 
 const emptyDraft = (): DraftRow => ({
+  kpi: '',
   activity: '',
   target: '',
   actual: '',
@@ -155,6 +157,7 @@ export default function CmMealKpisTab() {
       await createCmMealKpiRow({
         project_code: selectedProject,
         month_year: selectedMonth,
+        kpi: draft.kpi.trim() || null,
         activity,
         target: draft.target.trim() === '' ? null : Number(draft.target),
         actual: draft.actual.trim() === '' ? null : Number(draft.actual),
@@ -178,15 +181,17 @@ export default function CmMealKpisTab() {
 
   const handleCellBlur = async (
     row: CmMealKpiRow,
-    field: 'activity' | 'target' | 'actual' | 'responsible' | 'notes',
+    field: 'kpi' | 'activity' | 'target' | 'actual' | 'responsible' | 'notes',
     raw: string
   ) => {
     if (!canWrite) return;
     const patch: Record<string, string | number | null> = {};
-    if (field === 'activity') {
+    if (field === 'kpi' || field === 'activity') {
       const v = raw.trim();
-      if (!v || v === row.activity) return;
-      patch.activity = v;
+      const prev = field === 'kpi' ? row.kpi : row.activity;
+      if (field === 'activity' && !v) return;
+      if (v === (prev ?? '')) return;
+      patch[field] = v || null;
     } else if (field === 'target' || field === 'actual') {
       const trimmed = raw.trim();
       const next = trimmed === '' ? null : Number(trimmed);
@@ -284,9 +289,6 @@ export default function CmMealKpisTab() {
                 ))}
               </SelectContent>
             </Select>
-            {projectLocked ? (
-              <p className="text-[10px] text-muted-foreground">Project fixed to your assignment.</p>
-            ) : null}
           </div>
           {canWrite ? (
             <Button type="button" onClick={() => setAddOpen(true)} disabled={!selectedProject}>
@@ -311,6 +313,7 @@ export default function CmMealKpisTab() {
                   <TableRow>
                     <TableHead className="w-12">N</TableHead>
                     <TableHead className="min-w-[8rem]">Project</TableHead>
+                    <TableHead className="min-w-[10rem]">KPI</TableHead>
                     <TableHead className="min-w-[12rem]">Activity</TableHead>
                     <TableHead className="w-24 text-right">Target</TableHead>
                     <TableHead className="w-24 text-right">Actual</TableHead>
@@ -324,7 +327,7 @@ export default function CmMealKpisTab() {
                   {rows.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={canWrite ? 9 : 8}
+                        colSpan={canWrite ? 10 : 9}
                         className="text-center text-muted-foreground py-8"
                       >
                         No KPIs for {formatMonthLabel(selectedMonth)}.
@@ -339,6 +342,11 @@ export default function CmMealKpisTab() {
                           {CM_MEAL_PROJECT_LABELS[row.project_code as CmMealProjectCode] ??
                             row.project_code}
                         </TableCell>
+                        <EditableCell
+                          value={row.kpi ?? ''}
+                          disabled={!canWrite}
+                          onCommit={(v) => void handleCellBlur(row, 'kpi', v)}
+                        />
                         <EditableCell
                           value={row.activity}
                           disabled={!canWrite}
@@ -416,6 +424,13 @@ export default function CmMealKpisTab() {
                     ? CM_MEAL_PROJECT_LABELS[selectedProject as CmMealProjectCode]
                     : ''
                 }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>KPI</Label>
+              <Input
+                value={draft.kpi}
+                onChange={(e) => setDraft((d) => ({ ...d, kpi: e.target.value }))}
               />
             </div>
             <div className="space-y-1">

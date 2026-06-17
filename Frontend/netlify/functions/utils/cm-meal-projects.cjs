@@ -61,11 +61,15 @@ function validateCmMealProjectCode(code) {
 function normalizeCmMealProjectsInput(body) {
   if (body.cm_meal_projects !== undefined) {
     if (body.cm_meal_projects === null) return { value: null };
+    if (typeof body.cm_meal_projects === 'string') {
+      const pipe = toCmMealProjectsPipe(parseCmMealProjectsPipe(body.cm_meal_projects));
+      return { value: pipe || null };
+    }
     if (!Array.isArray(body.cm_meal_projects)) {
       return { error: 'cm_meal_projects must be an array of project codes' };
     }
     const pipe = toCmMealProjectsPipe(body.cm_meal_projects);
-    if (!pipe) return { error: 'cm_meal_projects must include at least one valid project code' };
+    if (!pipe) return { value: null };
     if (body.cm_meal_projects.length !== parseCmMealProjectsPipe(pipe).length) {
       return { error: `Invalid project code. Use: ${CM_MEAL_PROJECT_CODES.join(', ')}` };
     }

@@ -266,6 +266,7 @@ export interface CmMealKpiRow {
   id: number;
   project_code: string;
   month_year: string;
+  kpi: string | null;
   activity: string;
   target: number | null;
   actual: number | null;
@@ -280,5 +281,60 @@ export interface CmMealKpiRow {
 export type CmMealKpiRowInput = Omit<
   CmMealKpiRow,
   'id' | 'difference' | 'created_at' | 'updated_at' | 'sort_order'
+> & { sort_order?: number };
+
+export interface CmMealUserKpiRow {
+  id: number;
+  user_id: number;
+  username?: string | null;
+  kpi: string | null;
+  activity: string;
+  target: number | null;
+  actual: number | null;
+  difference: number | null;
+  responsible: string | null;
+  notes: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CmMealUserKpiTeamMember {
+  id: number;
+  username: string;
+  role: string;
+}
+
+export type CmMealUserKpiRowInput = Omit<
+  CmMealUserKpiRow,
+  'id' | 'difference' | 'username' | 'created_at' | 'updated_at' | 'sort_order'
+> & { sort_order?: number };
+
+export interface CmMealRoleSkill {
+  name: string;
+  exists: boolean;
+}
+
+export interface CmMealUserRoleRow {
+  id: number;
+  user_id: number;
+  username?: string | null;
+  kpi: string;
+  job_title: string;
+  responsibilities: string | null;
+  tasks: string | null;
+  workload_percent: number | null;
+  technical_skills: CmMealRoleSkill[];
+  soft_skills: CmMealRoleSkill[];
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type CmMealUserRoleRowInput = Omit<
+  CmMealUserRoleRow,
+  'id' | 'username' | 'created_at' | 'updated_at' | 'sort_order'
 > & { sort_order?: number };
 

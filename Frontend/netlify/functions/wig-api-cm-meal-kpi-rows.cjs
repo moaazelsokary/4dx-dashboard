@@ -10,6 +10,11 @@ const {
   isCmMealAdminLike,
   CM_MEAL_PROJECT_CODES,
 } = require('./utils/cm-meal-projects.cjs');
+const { isCmMealManagerRole } = require('./utils/user-roles.cjs');
+
+function isCmMealProjectScopedRole(role) {
+  return isCmMealProjectRole(role) || isCmMealManagerRole(role);
+}
 
 function normalizeRole(user) {
   return String(user?.role || user?.Role || '').trim();
@@ -18,7 +23,7 @@ function normalizeRole(user) {
 function canReadCmMealKpis(user) {
   if (!user) return false;
   if (isCmMealAdminLike(user.role)) return true;
-  if (isCmMealProjectRole(user.role) && userCmMealProjects(user).length > 0) return true;
+  if (isCmMealProjectScopedRole(user.role) && userCmMealProjects(user).length > 0) return true;
   const routes = user.allowedRoutes ?? user.allowed_routes;
   if (routes != null && Array.isArray(routes) && routes.some((p) => String(p).split('?')[0] === '/cm-meal-kpis')) {
     return true;
@@ -30,7 +35,7 @@ function canWriteCmMealKpi(user, projectCode) {
   if (!user) return false;
   const code = validateCmMealProjectCode(projectCode);
   if (isCmMealAdminLike(user.role)) return true;
-  if (isCmMealProjectRole(user.role)) {
+  if (isCmMealProjectScopedRole(user.role)) {
     return userCmMealProjects(user).includes(code);
   }
   return false;
@@ -38,7 +43,7 @@ function canWriteCmMealKpi(user, projectCode) {
 
 function allowedProjectsForUser(user) {
   if (isCmMealAdminLike(user?.role)) return [...CM_MEAL_PROJECT_CODES];
-  if (isCmMealProjectRole(user?.role)) return userCmMealProjects(user);
+  if (isCmMealProjectScopedRole(user?.role)) return userCmMealProjects(user);
   return [];
 }
 
@@ -54,6 +59,7 @@ function mapRow(row) {
     project_code: row.project_code,
     month_year: row.month_year,
     activity: row.activity,
+    kpi: row.kpi != null && String(row.kpi).trim() !== '' ? String(row.kpi).trim() : null,
     target: target,
     actual: actual,
     difference,
@@ -89,7 +95,7 @@ async function getCmMealKpiRows(pool, { project, month, user }) {
   req.input('project_code', sql.NVarChar(64), projectCode);
   req.input('month_year', sql.NVarChar(7), monthYear);
   const result = await req.query(`
-    SELECT id, project_code, month_year, activity, target_value, actual_value,
+    SELECT id, project_code, month_year, kpi, activity, target_value, actual_value,
            responsible, notes, sort_order, created_at, updated_at
     FROM dbo.cm_meal_kpi_rows
     WHERE project_code = @project_code AND month_year = @month_year
@@ -131,6 +137,10 @@ async function postCmMealKpiRow(pool, body, user) {
     throw err;
   }
 
+  const kpi = body.kpi !== undefined && body.kpi != null && String(body.kpi).trim() !== ''
+    ? String(body.kpi).trim()
+    : null;
+
   const maxReq = pool.request();
   maxReq.input('project_code', sql.NVarChar(64), projectCode);
   maxReq.input('month_year', sql.NVarChar(7), monthYear);
@@ -144,6 +154,7 @@ async function postCmMealKpiRow(pool, body, user) {
   ins.input('project_code', sql.NVarChar(64), projectCode);
   ins.input('month_year', sql.NVarChar(7), monthYear);
   ins.input('activity', sql.NVarChar(sql.MAX), activity);
+  ins.input('kpi', sql.NVarChar(1000), kpi);
   ins.input('target_value', sql.Decimal(18, 4), target);
   ins.input('actual_value', sql.Decimal(18, 4), actual);
   ins.input('responsible', sql.NVarChar(500), body.responsible ? String(body.responsible).trim() : null);
@@ -152,9 +163,9 @@ async function postCmMealKpiRow(pool, body, user) {
 
   const result = await ins.query(`
     INSERT INTO dbo.cm_meal_kpi_rows
-      (project_code, month_year, activity, target_value, actual_value, responsible, notes, sort_order)
+      (project_code, month_year, kpi, activity, target_value, actual_value, responsible, notes, sort_order)
     OUTPUT INSERTED.*
-    VALUES (@project_code, @month_year, @activity, @target_value, @actual_value, @responsible, @notes, @sort_order)
+    VALUES (@project_code, @month_year, @kpi, @activity, @target_value, @actual_value, @responsible, @notes, @sort_order)
   `);
   return mapRow(result.recordset[0]);
 }
@@ -170,7 +181,7 @@ async function putCmMealKpiRow(pool, id, body, user) {
   const existingReq = pool.request();
   existingReq.input('id', sql.Int, rowId);
   const existingRes = await existingReq.query(`
-    SELECT id, project_code, month_year, activity, target_value, actual_value, responsible, notes, sort_order
+    SELECT id, project_code, month_year, kpi, activity, target_value, actual_value, responsible, notes, sort_order
     FROM dbo.cm_meal_kpi_rows WHERE id = @id
   `);
   const existing = existingRes.recordset?.[0];
@@ -223,9 +234,18 @@ async function putCmMealKpiRow(pool, id, body, user) {
       : existing.responsible;
   const notes =
     body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : existing.notes;
+  const kpi =
+    body.kpi !== undefined
+      ? body.kpi
+        ? String(body.kpi).trim()
+        : null
+      : existing.kpi != null
+        ? String(existing.kpi).trim()
+        : null;
 
   const upd = pool.request();
   upd.input('id', sql.Int, rowId);
+  upd.input('kpi', sql.NVarChar(1000), kpi);
   upd.input('activity', sql.NVarChar(sql.MAX), activity);
   upd.input('target_value', sql.Decimal(18, 4), target);
   upd.input('actual_value', sql.Decimal(18, 4), actual);
@@ -234,7 +254,7 @@ async function putCmMealKpiRow(pool, id, body, user) {
 
   const result = await upd.query(`
     UPDATE dbo.cm_meal_kpi_rows
-    SET activity = @activity, target_value = @target_value, actual_value = @actual_value,
+    SET kpi = @kpi, activity = @activity, target_value = @target_value, actual_value = @actual_value,
         responsible = @responsible, notes = @notes, updated_at = SYSUTCDATETIME()
     OUTPUT INSERTED.*
     WHERE id = @id

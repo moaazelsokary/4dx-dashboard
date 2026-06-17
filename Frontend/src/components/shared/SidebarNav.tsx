@@ -11,6 +11,7 @@ import { canAccessAppPath } from '@/utils/routeAccess';
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from '@/config/refugeesBeneficiaries';
 import { MEAL_PATH, canAccessMeal } from '@/config/mealAccess';
 import { CM_MEAL_KPIS_PATH, canAccessCmMealKpis } from '@/config/cmMealAccess';
+import { canAccessCmMealUserKpis } from '@/config/cmMealUserKpiAccess';
 import { STRATEGIC_TOPIC_NAV_ITEMS } from '@/config/strategicTopics';
 
 const STRATEGIC_TOPIC_NAV = STRATEGIC_TOPIC_NAV_ITEMS.map((t) => ({
@@ -340,7 +341,7 @@ export default function SidebarNav({ user, expanded = false, title, subtitle, cl
   if (!caseWorker && canAccessMeal(user) && canNav(MEAL_PATH) && shouldShowButton(MEAL_PATH)) {
     items.push(navItem('meal', MEAL_PATH, 'MEAL', ClipboardCheck));
   }
-  if (!caseWorker && canAccessCmMealKpis(user) && canNav(CM_MEAL_KPIS_PATH) && shouldShowButton(CM_MEAL_KPIS_PATH)) {
+  if (!caseWorker && (canAccessCmMealKpis(user) || canAccessCmMealUserKpis(user)) && canNav(CM_MEAL_KPIS_PATH) && shouldShowButton(CM_MEAL_KPIS_PATH)) {
     items.push(navItem('cm-meal-kpis', CM_MEAL_KPIS_PATH, 'CM & MEAL KPIs', Table2));
   }
   if (!caseWorker && canNav('/powerbi') && shouldShowButton('/powerbi')) {

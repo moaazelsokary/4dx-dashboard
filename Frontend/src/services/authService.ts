@@ -14,9 +14,11 @@ export interface User {
   editableStrategicTopic?: string | null;
   /** Legacy / API echo — merged into `editableStrategicTopic` in `getCurrentUser`. */
   editable_strategic_topic?: string | null;
-  /** Role `cm-meal-project`: assigned CM & MEAL project pillars (`||`-delimited). */
+  /** Role `cm-meal-manager` (or legacy `cm-meal-project`): assigned CM & MEAL project pillars (`||`-delimited). */
   cmMealProjects?: string | null;
   cm_meal_projects?: string | null;
+  /** Numeric users.id from JWT. */
+  userId?: number;
   token?: string;
   /** Post-login path when set (e.g. /department-objectives) */
   defaultRoute?: string | null;
@@ -238,6 +240,11 @@ function hydrateUserFromStorageBlob(u: User): User {
       if (pr === 'topic') out.role = 'topic';
       if (pr === 'department-topic') out.role = 'department-topic';
       if (pr === 'cm-meal-project') out.role = 'cm-meal-project';
+      if (pr === 'cm-meal-employee') out.role = 'cm-meal-employee';
+      if (pr === 'cm-meal-manager') out.role = 'cm-meal-manager';
+      if (payload.userId != null && Number.isFinite(payload.userId)) {
+        out.userId = payload.userId;
+      }
       const jwtCmp = payload.cmMealProjects ?? payload.cm_meal_projects;
       if (jwtCmp != null && String(jwtCmp).trim() !== '') {
         out.cmMealProjects = String(jwtCmp).trim().toLowerCase();

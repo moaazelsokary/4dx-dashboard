@@ -235,8 +235,10 @@ export interface AccountUser {
   powerbi_dashboard_ids: string[] | null;
   /** Role `topic`: single strategic pillar this user may edit (view-only on others). */
   editable_strategic_topic?: string | null;
-  /** Role `cm-meal-project`: pipe-delimited project codes. */
+  /** Role `cm-meal-manager` (or legacy `cm-meal-project`): pipe-delimited project codes. */
   cm_meal_projects?: string | null;
+  /** Role `cm-meal-manager`: assigned employee user ids. */
+  cm_meal_managed_employee_ids?: number[];
   avatar_key?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -281,6 +283,8 @@ export interface AccountPayload {
   allowed_routes?: string[] | null;
   powerbi_dashboard_ids?: string[] | null;
   editable_strategic_topic?: string | null;
-  cm_meal_projects?: string | null;
+  /** Project pillar codes; stored in DB as `||`-delimited string. */
+  cm_meal_projects?: string[] | null;
+  cm_meal_managed_employee_ids?: number[];
   avatar_key?: string | null;
 }

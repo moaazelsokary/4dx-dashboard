@@ -395,7 +395,11 @@ const handler = rateLimiter('login')(async (event, context) => {
           ? 'department-topic'
           : roleLower === 'cm-meal-project'
             ? 'cm-meal-project'
-            : roleRaw;
+            : roleLower === 'cm-meal-employee'
+              ? 'cm-meal-employee'
+              : roleLower === 'cm-meal-manager'
+                ? 'cm-meal-manager'
+                : roleRaw;
 
     // JWT payload: role `topic` must always carry `editableStrategicTopic` (even null) so wig-proxy
     // does not omit the claim — otherwise KPI writes fail with "assigned strategic topic" errors.

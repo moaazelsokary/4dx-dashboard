@@ -7,6 +7,8 @@ const { collectJwtSecrets } = require('./netlify/functions/utils/jwt-secrets.cjs
 const strategicTopicKpiRows = require('./netlify/functions/wig-api-strategic-topic-kpi-rows.cjs');
 const strategicTopicContent = require('./netlify/functions/wig-api-strategic-topic-content.cjs');
 const cmMealKpiRows = require('./netlify/functions/wig-api-cm-meal-kpi-rows.cjs');
+const cmMealUserKpiRows = require('./netlify/functions/wig-api-cm-meal-user-kpi-rows.cjs');
+const cmMealUserRoleRows = require('./netlify/functions/wig-api-cm-meal-user-role-rows.cjs');
 const { canReadStrategicTopicApi } = require('./netlify/functions/utils/strategic-topic-wig-access.cjs');
 
 function getAuthorizationHeader(req) {
@@ -786,6 +788,172 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
     } catch (error) {
       if (error.statusCode) return sendTopicKpiStatus(res, error);
       handleError(res, error, 'Error deleting CM & MEAL KPI row');
+    }
+  });
+
+  app.get('/api/wig/cm-meal-user-kpi-rows', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      if (!cmMealUserKpiRows.canReadCmMealUserKpis(user)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+      const pool = await getPool();
+      const rows = await cmMealUserKpiRows.getCmMealUserKpiRows(pool, {
+        user_id: req.query.user_id,
+        user,
+      });
+      res.json(rows);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error loading CM & MEAL user KPI rows');
+    }
+  });
+
+  app.get('/api/wig/cm-meal-user-kpi-team', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const team = await cmMealUserKpiRows.getCmMealUserKpiTeam(pool, user);
+      res.json(team);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error loading CM & MEAL user KPI team');
+    }
+  });
+
+  app.post('/api/wig/cm-meal-user-kpi-rows', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const row = await cmMealUserKpiRows.postCmMealUserKpiRow(pool, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error creating CM & MEAL user KPI row');
+    }
+  });
+
+  app.put('/api/wig/cm-meal-user-kpi-rows/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const row = await cmMealUserKpiRows.putCmMealUserKpiRow(pool, id, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating CM & MEAL user KPI row');
+    }
+  });
+
+  app.delete('/api/wig/cm-meal-user-kpi-rows/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const result = await cmMealUserKpiRows.deleteCmMealUserKpiRow(pool, id, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error deleting CM & MEAL user KPI row');
+    }
+  });
+
+  app.post('/api/wig/cm-meal-user-kpi-rows/update-order', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const result = await cmMealUserKpiRows.updateCmMealUserKpiRowsOrder(pool, req.body, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating CM & MEAL user KPI order');
+    }
+  });
+
+  app.get('/api/wig/cm-meal-user-role-rows', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      if (!cmMealUserKpiRows.canReadCmMealUserKpis(user)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+      const pool = await getPool();
+      const rows = await cmMealUserRoleRows.getCmMealUserRoleRows(pool, {
+        user_id: req.query.user_id,
+        user,
+      });
+      res.json(rows);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error loading CM & MEAL user role rows');
+    }
+  });
+
+  app.post('/api/wig/cm-meal-user-role-rows', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const row = await cmMealUserRoleRows.postCmMealUserRoleRow(pool, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error creating CM & MEAL user role row');
+    }
+  });
+
+  app.put('/api/wig/cm-meal-user-role-rows/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const row = await cmMealUserRoleRows.putCmMealUserRoleRow(pool, id, req.body, user);
+      res.json(row);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating CM & MEAL user role row');
+    }
+  });
+
+  app.delete('/api/wig/cm-meal-user-role-rows/:id', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const result = await cmMealUserRoleRows.deleteCmMealUserRoleRow(pool, id, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error deleting CM & MEAL user role row');
+    }
+  });
+
+  app.post('/api/wig/cm-meal-user-role-rows/update-order', async (req, res) => {
+    try {
+      const user = wigUserFromJwt(req);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const pool = await getPool();
+      const result = await cmMealUserRoleRows.updateCmMealUserRoleRowsOrder(pool, req.body, user);
+      res.json(result);
+    } catch (error) {
+      if (error.statusCode) return sendTopicKpiStatus(res, error);
+      handleError(res, error, 'Error updating CM & MEAL user role order');
     }
   });
 };

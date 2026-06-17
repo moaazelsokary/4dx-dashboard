@@ -18,6 +18,11 @@ import type {
   StrategicTopicKpiRow,
   CmMealKpiRow,
   CmMealKpiRowInput,
+  CmMealUserKpiRow,
+  CmMealUserKpiRowInput,
+  CmMealUserKpiTeamMember,
+  CmMealUserRoleRow,
+  CmMealUserRoleRowInput,
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
@@ -476,6 +481,88 @@ export async function updateCmMealKpiRow(
 
 export async function deleteCmMealKpiRow(id: number): Promise<{ success: boolean }> {
   return fetchAPI<{ success: boolean }>(`/cm-meal-kpi-rows/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getCmMealUserKpiRows(userId?: number): Promise<CmMealUserKpiRow[]> {
+  const qs = userId != null ? `?user_id=${userId}` : '';
+  return fetchAPI<CmMealUserKpiRow[]>(`/cm-meal-user-kpi-rows${qs}`);
+}
+
+export async function getCmMealUserKpiTeam(): Promise<CmMealUserKpiTeamMember[]> {
+  return fetchAPI<CmMealUserKpiTeamMember[]>('/cm-meal-user-kpi-team');
+}
+
+export async function createCmMealUserKpiRow(
+  data: CmMealUserKpiRowInput
+): Promise<CmMealUserKpiRow> {
+  return fetchAPI<CmMealUserKpiRow>('/cm-meal-user-kpi-rows', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCmMealUserKpiRow(
+  id: number,
+  data: Partial<CmMealUserKpiRowInput>
+): Promise<CmMealUserKpiRow> {
+  return fetchAPI<CmMealUserKpiRow>(`/cm-meal-user-kpi-rows/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCmMealUserKpiRowsOrder(
+  items: { id: number; sort_order: number }[]
+): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>('/cm-meal-user-kpi-rows/update-order', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
+
+export async function deleteCmMealUserKpiRow(id: number): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>(`/cm-meal-user-kpi-rows/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getCmMealUserRoleRows(userId?: number): Promise<CmMealUserRoleRow[]> {
+  const qs = userId != null ? `?user_id=${userId}` : '';
+  return fetchAPI<CmMealUserRoleRow[]>(`/cm-meal-user-role-rows${qs}`);
+}
+
+export async function createCmMealUserRoleRow(
+  data: CmMealUserRoleRowInput
+): Promise<CmMealUserRoleRow> {
+  return fetchAPI<CmMealUserRoleRow>('/cm-meal-user-role-rows', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCmMealUserRoleRow(
+  id: number,
+  data: Partial<CmMealUserRoleRowInput>
+): Promise<CmMealUserRoleRow> {
+  return fetchAPI<CmMealUserRoleRow>(`/cm-meal-user-role-rows/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCmMealUserRoleRowsOrder(
+  items: { id: number; sort_order: number }[]
+): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>('/cm-meal-user-role-rows/update-order', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
+
+export async function deleteCmMealUserRoleRow(id: number): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>(`/cm-meal-user-role-rows/${id}`, {
     method: 'DELETE',
   });
 }

@@ -40,8 +40,25 @@ export function isCmMealProjectRole(role: string | null | undefined): boolean {
   return normalizeUserRole(role) === 'cm-meal-project';
 }
 
+export function isCmMealEmployeeRole(role: string | null | undefined): boolean {
+  return normalizeUserRole(role) === 'cm-meal-employee';
+}
+
+export function isCmMealManagerRole(role: string | null | undefined): boolean {
+  return normalizeUserRole(role) === 'cm-meal-manager';
+}
+
 export function roleRequiresCmMealProjects(role: string | null | undefined): boolean {
+  return isCmMealProjectRole(role) || isCmMealManagerRole(role);
+}
+
+/** Legacy `cm-meal-project` accounts must keep at least one project; managers may have none. */
+export function roleRequiresCmMealProjectsMandatory(role: string | null | undefined): boolean {
   return isCmMealProjectRole(role);
+}
+
+export function roleRequiresCmMealManagedEmployees(role: string | null | undefined): boolean {
+  return isCmMealManagerRole(role);
 }
 
 export function roleRequiresEditableTopics(role: string | null | undefined): boolean {

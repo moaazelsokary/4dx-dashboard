@@ -42,8 +42,24 @@ function isCmMealProjectRole(role) {
   return normalizeUserRole(role) === 'cm-meal-project';
 }
 
+function isCmMealEmployeeRole(role) {
+  return normalizeUserRole(role) === 'cm-meal-employee';
+}
+
+function isCmMealManagerRole(role) {
+  return normalizeUserRole(role) === 'cm-meal-manager';
+}
+
 function roleRequiresCmMealProjects(role) {
+  return isCmMealProjectRole(role) || isCmMealManagerRole(role);
+}
+
+function roleRequiresCmMealProjectsMandatory(role) {
   return isCmMealProjectRole(role);
+}
+
+function roleRequiresCmMealManagedEmployees(role) {
+  return isCmMealManagerRole(role);
 }
 
 module.exports = {
@@ -57,5 +73,9 @@ module.exports = {
   roleRequiresEditableTopics,
   roleRequiresDepartment,
   isCmMealProjectRole,
+  isCmMealEmployeeRole,
+  isCmMealManagerRole,
   roleRequiresCmMealProjects,
+  roleRequiresCmMealProjectsMandatory,
+  roleRequiresCmMealManagedEmployees,
 };

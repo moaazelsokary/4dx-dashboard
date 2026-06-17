@@ -14,8 +14,9 @@ const {
   TOPIC_CODES_LIST,
 } = require('./strategic-topics.cjs');
 const { normalizeEditableStrategicTopicInput } = require('./editable-strategic-topics.cjs');
-const { roleRequiresEditableTopics, roleRequiresCmMealProjects } = require('./user-roles.cjs');
+const { roleRequiresEditableTopics, roleRequiresCmMealProjects, roleRequiresCmMealProjectsMandatory, roleRequiresCmMealManagedEmployees, isCmMealManagerRole, isCmMealProjectRole } = require('./user-roles.cjs');
 const { normalizeCmMealProjectsInput } = require('./cm-meal-projects.cjs');
+const { replaceManagedEmployees, enrichAccountsWithManagedEmployees, getManagedEmployeeIds } = require('./cm-meal-manager-employees.cjs');
 
 /** Persist canonical lowercase for multi-word roles used in JWT / route checks. */
 function normalizeRoleForStorage(role) {
@@ -24,6 +25,8 @@ function normalizeRoleForStorage(role) {
   if (lower === 'topic') return 'topic';
   if (lower === 'department-topic') return 'department-topic';
   if (lower === 'cm-meal-project') return 'cm-meal-project';
+  if (lower === 'cm-meal-employee') return 'cm-meal-employee';
+  if (lower === 'cm-meal-manager') return 'cm-meal-manager';
   return s;
 }
 
@@ -187,7 +190,8 @@ async function handleAccountsCrud(opts) {
       ORDER BY username
     `);
     const data = result.recordset.map(mapUserAccountRow);
-    return { statusCode: 200, json: { success: true, data } };
+    const enriched = await enrichAccountsWithManagedEmployees(pool, data);
+    return { statusCode: 200, json: { success: true, data: enriched } };
   }
 
   if (method === 'POST' && !accountId) {
@@ -269,13 +273,15 @@ async function handleAccountsCrud(opts) {
       if (normCmp.error) {
         return { statusCode: 400, json: { success: false, error: normCmp.error } };
       }
-      if (!normCmp.value) {
+      if (!normCmp.skip && !normCmp.value && roleRequiresCmMealProjectsMandatory(roleTrim)) {
         return {
           statusCode: 400,
           json: { success: false, error: 'Role "cm-meal-project" requires at least one CM & MEAL project' },
         };
       }
-      cmMealProjectsVal = normCmp.value;
+      if (!normCmp.skip) {
+        cmMealProjectsVal = normCmp.value || null;
+      }
     }
 
     const avatarErr = normalizeAvatarKey(avatar_key);
@@ -316,7 +322,17 @@ async function handleAccountsCrud(opts) {
     `);
 
     const row = insertResult.recordset[0];
-    return { statusCode: 201, json: { success: true, data: mapUserAccountRow(row) } };
+    let managedIds = [];
+    if (roleRequiresCmMealManagedEmployees(roleTrim) && body.cm_meal_managed_employee_ids) {
+      managedIds = await replaceManagedEmployees(pool, row.id, body.cm_meal_managed_employee_ids);
+    } else if (!roleRequiresCmMealManagedEmployees(roleTrim)) {
+      await replaceManagedEmployees(pool, row.id, []);
+    }
+    const mapped = mapUserAccountRow(row);
+    if (isCmMealManagerRole(mapped.role)) {
+      mapped.cm_meal_managed_employee_ids = managedIds;
+    }
+    return { statusCode: 201, json: { success: true, data: mapped } };
   }
 
   if (method === 'PUT' && accountId) {
@@ -455,21 +471,27 @@ async function handleAccountsCrud(opts) {
           return { statusCode: 400, json: { success: false, error: normCmp.error } };
         }
         if (!normCmp.value) {
-          return {
-            statusCode: 400,
-            json: { success: false, error: 'CM & MEAL project role requires at least one project' },
-          };
+          if (roleRequiresCmMealProjectsMandatory(nextRole)) {
+            return {
+              statusCode: 400,
+              json: { success: false, error: 'CM & MEAL project role requires at least one project' },
+            };
+          }
+          nextCmMealProjectsSql = null;
+        } else {
+          nextCmMealProjectsSql = normCmp.value;
         }
-        nextCmMealProjectsSql = normCmp.value;
       } else {
         const existingCmp = ex.cm_meal_projects;
         if (existingCmp != null && String(existingCmp).trim()) {
           nextCmMealProjectsSql = String(existingCmp).trim().toLowerCase();
-        } else {
+        } else if (roleRequiresCmMealProjectsMandatory(nextRole)) {
           return {
             statusCode: 400,
             json: { success: false, error: 'CM & MEAL project role requires at least one project' },
           };
+        } else {
+          nextCmMealProjectsSql = null;
         }
       }
     }
@@ -527,20 +549,46 @@ async function handleAccountsCrud(opts) {
       sets.push('avatar_key = @avatar_key');
     }
 
-    if (sets.length === 0) {
+    if (sets.length === 0 && body.cm_meal_managed_employee_ids === undefined) {
       return { statusCode: 400, json: { success: false, error: 'No fields to update' } };
     }
 
     sets.push('updated_at = GETDATE()');
 
-    const updateResult = await upd.query(`
+    let updateResult;
+    if (sets.length > 1) {
+      updateResult = await upd.query(`
       UPDATE users SET ${sets.join(', ')}
       OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.departments, INSERTED.is_active, INSERTED.default_route, INSERTED.allowed_routes, INSERTED.powerbi_dashboard_ids, INSERTED.editable_strategic_topic, INSERTED.cm_meal_projects, INSERTED.avatar_key, INSERTED.created_at, INSERTED.updated_at
       WHERE id = @id
     `);
+    } else {
+      const fetchReq = pool.request();
+      fetchReq.input('id', sql.Int, accountId);
+      updateResult = await fetchReq.query(`
+        SELECT id, username, role, departments, is_active, default_route, allowed_routes, powerbi_dashboard_ids,
+          editable_strategic_topic, cm_meal_projects, avatar_key, created_at, updated_at
+        FROM users WHERE id = @id
+      `);
+    }
 
     if (!updateResult.recordset || updateResult.recordset.length === 0) {
       return { statusCode: 404, json: { success: false, error: 'User not found' } };
+    }
+
+    const nextRole =
+      role !== undefined ? String(role).trim() : String(updateResult.recordset[0].role || '').trim();
+    let managedIds = [];
+    if (body.cm_meal_managed_employee_ids !== undefined) {
+      if (roleRequiresCmMealManagedEmployees(nextRole)) {
+        managedIds = await replaceManagedEmployees(pool, accountId, body.cm_meal_managed_employee_ids);
+      } else {
+        await replaceManagedEmployees(pool, accountId, []);
+      }
+    } else if (role !== undefined && !roleRequiresCmMealManagedEmployees(nextRole)) {
+      await replaceManagedEmployees(pool, accountId, []);
+    } else if (roleRequiresCmMealManagedEmployees(nextRole)) {
+      managedIds = await getManagedEmployeeIds(pool, accountId);
     }
 
     if (typeof logActivity === 'function' && user) {
@@ -553,7 +601,12 @@ async function handleAccountsCrud(opts) {
       });
     }
 
-    return { statusCode: 200, json: { success: true, data: mapUserAccountRow(updateResult.recordset[0]) } };
+    const mapped = mapUserAccountRow(updateResult.recordset[0]);
+    if (isCmMealManagerRole(mapped.role)) {
+      mapped.cm_meal_managed_employee_ids = managedIds;
+    }
+
+    return { statusCode: 200, json: { success: true, data: mapped } };
   }
 
   return { statusCode: 404, json: { success: false, error: 'Accounts endpoint not found' } };

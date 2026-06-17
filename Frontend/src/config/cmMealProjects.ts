@@ -23,6 +23,7 @@ export const CM_MEAL_PROJECT_LABELS: Record<CmMealProjectCode, string> = {
 };
 
 export const ROLE_CM_MEAL_PROJECT = 'cm-meal-project' as const;
+/** @deprecated Standalone role removed from admin UI; use `cm-meal-manager` with project assignment. */
 export const ROLE_CM_MEAL_PROJECT_LABEL = 'CM & MEAL (by project)';
 
 export function isCmMealProjectCode(v: string): v is CmMealProjectCode {

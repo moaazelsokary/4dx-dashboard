@@ -14,6 +14,7 @@ import { canAccessAppPath } from "@/utils/routeAccess";
 import { isCaseWorkerRole, REFUGEES_CASE_STORY_PATH } from "@/config/refugeesBeneficiaries";
 import { topicRoleEditableCode } from "@/pages/strategic-topics/strategicTopicKpiUtils";
 import { isDepartmentTopicRole, isTopicRole } from "@/config/userRoles";
+import { isCmMealEmployeeRole, isCmMealManagerRole, CM_MEAL_USER_KPI_DEFAULT_ROUTE } from "@/config/cmMealUserKpiAccess";
 import OptimizedImage from "@/components/ui/OptimizedImage";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
@@ -50,8 +51,10 @@ const SignIn = () => {
 
         // Redirect: optional per-user default route, else role defaults
         const u = result.user;
-        if (u.defaultRoute && String(u.defaultRoute).trim() && canAccessAppPath(String(u.defaultRoute).trim(), u)) {
-          navigate(String(u.defaultRoute).trim());
+        const defaultRouteRaw = u.defaultRoute && String(u.defaultRoute).trim();
+        const defaultPath = defaultRouteRaw ? defaultRouteRaw.split('?')[0] : '';
+        if (defaultRouteRaw && canAccessAppPath(defaultPath, u)) {
+          navigate(defaultRouteRaw);
         } else if (isCaseWorkerRole(u.role)) {
           navigate(REFUGEES_CASE_STORY_PATH);
         } else if (u.role === "project") {
@@ -65,6 +68,8 @@ const SignIn = () => {
         } else if (isTopicRole(u.role)) {
           const t = topicRoleEditableCode(u);
           navigate(t ? `/main-plan/${t}` : "/main-plan");
+        } else if (isCmMealEmployeeRole(u.role) || isCmMealManagerRole(u.role)) {
+          navigate(CM_MEAL_USER_KPI_DEFAULT_ROUTE);
         } else {
           navigate("/dashboard");
         }

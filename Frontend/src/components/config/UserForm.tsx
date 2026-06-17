@@ -24,7 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
 import { APP_ROUTE_OPTIONS } from '@/config/appRoutes';
 import { mergePowerbiCatalogRows, getPowerbiRoutingCatalog } from '@/config/powerbi';
-import { getPowerbiDashboards, POWERBI_DASHBOARDS_QUERY_KEY } from '@/services/configService';
+import { getPowerbiDashboards, getAccounts, POWERBI_DASHBOARDS_QUERY_KEY } from '@/services/configService';
 import type { AccountUser, AccountPayload } from '@/types/config';
 import { getDepartments } from '@/services/wigService';
 import type { Department } from '@/types/wig';
@@ -45,15 +45,17 @@ import {
   roleRequiresDepartment,
   roleRequiresEditableTopics,
   roleRequiresCmMealProjects,
+  roleRequiresCmMealProjectsMandatory,
+  roleRequiresCmMealManagedEmployees,
+  isCmMealEmployeeRole,
+  isCmMealManagerRole,
 } from '@/config/userRoles';
+import { CM_MEAL_USER_KPI_DEFAULT_ROUTE } from '@/config/cmMealUserKpiAccess';
 import {
   CM_MEAL_PROJECT_CODES,
   CM_MEAL_PROJECT_LABELS,
-  ROLE_CM_MEAL_PROJECT,
-  ROLE_CM_MEAL_PROJECT_LABEL,
   type CmMealProjectCode,
   parseCmMealProjectsPipe,
-  toCmMealProjectsPipe,
 } from '@/config/cmMealProjects';
 
 const ROLE_OPTIONS = [
@@ -63,7 +65,8 @@ const ROLE_OPTIONS = [
   'department',
   'topic',
   ROLE_DEPARTMENT_TOPIC,
-  'cm-meal-project',
+  'cm-meal-manager',
+  'cm-meal-employee',
   'project',
   'Viewer',
   'case worker',
@@ -71,7 +74,8 @@ const ROLE_OPTIONS = [
 
 const ROLE_LABELS: Record<string, string> = {
   [ROLE_DEPARTMENT_TOPIC]: ROLE_DEPARTMENT_TOPIC_LABEL,
-  [ROLE_CM_MEAL_PROJECT]: ROLE_CM_MEAL_PROJECT_LABEL,
+  'cm-meal-employee': 'CM & MEAL employee',
+  'cm-meal-manager': 'CM & MEAL manager',
 };
 
 const DEPT_SELECT_NONE = '__none__';
@@ -115,6 +119,7 @@ export default function UserForm({
   /** Role `topic`: pillars this user may edit (stored as `||`-delimited codes). */
   const [selectedEditableTopics, setSelectedEditableTopics] = useState<StrategicTopicCode[]>([]);
   const [selectedCmMealProjects, setSelectedCmMealProjects] = useState<CmMealProjectCode[]>([]);
+  const [selectedManagedEmployees, setSelectedManagedEmployees] = useState<number[]>([]);
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('man');
   const [submitting, setSubmitting] = useState(false);
 
@@ -131,6 +136,21 @@ export default function UserForm({
     enabled: open,
     staleTime: 60_000,
   });
+
+  const { data: allAccounts = [], isLoading: accountsLoading } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: getAccounts,
+    enabled: open && roleRequiresCmMealManagedEmployees(role),
+    staleTime: 60_000,
+  });
+
+  const cmMealEmployeeOptions = useMemo(
+    () =>
+      allAccounts.filter(
+        (a) => a.is_active && isCmMealEmployeeRole(a.role) && a.id !== account?.id
+      ),
+    [allAccounts, account?.id]
+  );
 
   const pbiDashboards = useMemo(() => {
     if (pbiRows && pbiRows.length > 0) {
@@ -179,6 +199,11 @@ export default function UserForm({
       } else {
         setSelectedCmMealProjects([]);
       }
+      if (roleRequiresCmMealManagedEmployees(account.role)) {
+        setSelectedManagedEmployees(account.cm_meal_managed_employee_ids ?? []);
+      } else {
+        setSelectedManagedEmployees([]);
+      }
       const ak = account.avatar_key;
       setAvatarKey(isAvatarKey(ak) ? ak : 'man');
     } else {
@@ -194,6 +219,7 @@ export default function UserForm({
       setSelectedPbi([]);
       setSelectedEditableTopics([]);
       setSelectedCmMealProjects([]);
+      setSelectedManagedEmployees([]);
       setAvatarKey('man');
     }
   }, [open, accountSyncKey]);
@@ -241,7 +267,7 @@ export default function UserForm({
         setSubmitting(false);
         return;
       }
-      if (roleRequiresCmMealProjects(role) && selectedCmMealProjects.length === 0) {
+      if (roleRequiresCmMealProjectsMandatory(role) && selectedCmMealProjects.length === 0) {
         toast({
           title: 'CM & MEAL project required',
           description: 'Choose at least one project for this role.',
@@ -263,10 +289,14 @@ export default function UserForm({
           roleRequiresEditableTopics(role) && selectedEditableTopics.length > 0
             ? toPipeList(selectedEditableTopics)
             : null,
-        cm_meal_projects:
-          roleRequiresCmMealProjects(role) && selectedCmMealProjects.length > 0
-            ? toCmMealProjectsPipe(selectedCmMealProjects)
-            : null,
+        cm_meal_projects: roleRequiresCmMealProjects(role)
+          ? selectedCmMealProjects.length > 0
+            ? [...selectedCmMealProjects]
+            : null
+          : null,
+        cm_meal_managed_employee_ids: roleRequiresCmMealManagedEmployees(role)
+          ? [...selectedManagedEmployees]
+          : [],
         avatar_key: avatarKey,
       };
 
@@ -349,12 +379,14 @@ export default function UserForm({
                       setDepartmentValue(DEPT_SELECT_NONE);
                     } else if (v === 'department') {
                       setSelectedEditableTopics([]);
-                    } else if (v === ROLE_CM_MEAL_PROJECT) {
+                    } else if (isCmMealManagerRole(v)) {
                       setDepartmentValue(DEPT_SELECT_NONE);
                       setSelectedEditableTopics([]);
                     }
                     if (String(v).toLowerCase() === 'case worker') {
                       setDefaultRoute('/main-plan/refugees/case-story');
+                    } else if (isCmMealEmployeeRole(v) || isCmMealManagerRole(v)) {
+                      setDefaultRoute(CM_MEAL_USER_KPI_DEFAULT_ROUTE);
                     }
                   }}
                 >
@@ -442,7 +474,44 @@ export default function UserForm({
                     ))}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    User can view and edit KPI rows only for the selected project(s). With one project, the project column is fixed automatically.
+                    {roleRequiresCmMealManagedEmployees(role)
+                      ? 'Manager can view and edit Project KPI rows for selected project(s). With one project, the project column is fixed automatically.'
+                      : 'User can view and edit KPI rows only for the selected project(s). With one project, the project column is fixed automatically.'}
+                  </p>
+                </div>
+              )}
+              {roleRequiresCmMealManagedEmployees(role) && (
+                <div className="space-y-2 rounded-md border border-border p-3">
+                  <Label>Managed employees</Label>
+                  {accountsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground min-h-11">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Loading employees…
+                    </div>
+                  ) : cmMealEmployeeOptions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No active users with the cm-meal-employee role yet.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                      {cmMealEmployeeOptions.map((emp) => (
+                        <label key={emp.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={selectedManagedEmployees.includes(emp.id)}
+                            onCheckedChange={(v) => {
+                              setSelectedManagedEmployees((prev) => {
+                                if (v) return prev.includes(emp.id) ? prev : [...prev, emp.id];
+                                return prev.filter((id) => id !== emp.id);
+                              });
+                            }}
+                          />
+                          {emp.username}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    Manager can view and edit KPI rows for selected employees on the Users KPIs tab.
                   </p>
                 </div>
               )}

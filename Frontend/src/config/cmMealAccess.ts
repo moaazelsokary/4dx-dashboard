@@ -7,11 +7,17 @@ import {
   ROLE_CM_MEAL_PROJECT,
 } from '@/config/cmMealProjects';
 import { isMealRole } from '@/config/mealAccess';
+import { isCmMealManagerRole } from '@/config/userRoles';
 
 export const CM_MEAL_KPIS_PATH = '/cm-meal-kpis';
 
 export function isCmMealProjectRole(role: string | undefined | null): boolean {
   return String(role ?? '').trim().toLowerCase() === ROLE_CM_MEAL_PROJECT;
+}
+
+/** Legacy project role or manager with assigned project pillars. */
+export function isCmMealProjectScopedRole(role: string | undefined | null): boolean {
+  return isCmMealProjectRole(role) || isCmMealManagerRole(role);
 }
 
 export function userCmMealProjectCodes(user: User | null | undefined): CmMealProjectCode[] {
@@ -22,7 +28,8 @@ export function userCmMealProjectCodes(user: User | null | undefined): CmMealPro
 
 export function canAccessCmMealKpis(user: User | null | undefined): boolean {
   if (!user) return false;
-  if (isMealRole(user.role) || isCmMealProjectRole(user.role)) return true;
+  if (isMealRole(user.role)) return true;
+  if (isCmMealProjectScopedRole(user.role) && userCmMealProjectCodes(user).length > 0) return true;
   const routes = user.allowedRoutes;
   if (routes != null && Array.isArray(routes)) {
     return routes.some((p) => {
@@ -41,14 +48,14 @@ export function canManageAllCmMealProjects(user: User | null | undefined): boole
 export function allowedCmMealProjectsForUser(user: User | null | undefined): CmMealProjectCode[] {
   if (!user) return [];
   if (canManageAllCmMealProjects(user)) return [...CM_MEAL_PROJECT_CODES];
-  if (isCmMealProjectRole(user.role)) return userCmMealProjectCodes(user);
+  if (isCmMealProjectScopedRole(user.role)) return userCmMealProjectCodes(user);
   return [];
 }
 
 export function canWriteCmMealKpi(user: User | null | undefined, projectCode: string): boolean {
   if (!user) return false;
   if (canManageAllCmMealProjects(user)) return isCmMealProjectCode(projectCode);
-  if (isCmMealProjectRole(user.role)) {
+  if (isCmMealProjectScopedRole(user.role)) {
     return userCmMealProjectCodes(user).includes(projectCode as CmMealProjectCode);
   }
   return false;

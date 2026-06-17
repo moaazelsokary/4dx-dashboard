@@ -5,6 +5,8 @@ const authMiddleware = require('./utils/auth-middleware');
 const strategicHandlers = require('./wig-api-strategic-handlers.cjs');
 const strategicTopicKpiRows = require('./wig-api-strategic-topic-kpi-rows.cjs');
 const cmMealKpiRows = require('./wig-api-cm-meal-kpi-rows.cjs');
+const cmMealUserKpiRows = require('./wig-api-cm-meal-user-kpi-rows.cjs');
+const cmMealUserRoleRows = require('./wig-api-cm-meal-user-role-rows.cjs');
 const strategicTopicContent = require('./wig-api-strategic-topic-content.cjs');
 const mealContent = require('./wig-api-meal-content.cjs');
 const mealLearningPoints = require('./wig-api-meal-learning-points.cjs');
@@ -278,8 +280,17 @@ const handler = rateLimiter('general')(
         path === '/meal-learning-points' ||
         /^\/meal-learning-points\/\d+$/.test(path) ||
         path === '/meal-learning-points/update-order';
-      const writeRoles = pathAllowsTopicWriter
-        ? ['CEO', 'Admin', 'department', 'topic', 'department-topic', 'M&E', 'cm-meal-project']
+      const pathAllowsCmMealUserKpiWriter =
+        path === '/cm-meal-user-kpi-rows' ||
+        path === '/cm-meal-user-kpi-rows/update-order' ||
+        /^\/cm-meal-user-kpi-rows\/\d+$/.test(path) ||
+        path === '/cm-meal-user-role-rows' ||
+        path === '/cm-meal-user-role-rows/update-order' ||
+        /^\/cm-meal-user-role-rows\/\d+$/.test(path);
+      const writeRoles = pathAllowsCmMealUserKpiWriter
+        ? ['CEO', 'Admin', 'M&E', 'cm-meal-employee', 'cm-meal-manager']
+        : pathAllowsTopicWriter
+        ? ['CEO', 'Admin', 'department', 'topic', 'department-topic', 'M&E', 'cm-meal-project', 'cm-meal-manager']
         : ['CEO', 'Admin', 'department'];
       if (!writeRoles.some((w) => w.toLowerCase() === userRoleLower)) {
         return {
@@ -527,6 +538,77 @@ const handler = rateLimiter('general')(
     } else if (/^\/cm-meal-kpi-rows\/\d+$/.test(path) && method === 'DELETE') {
       const id = parseInt(path.split('/')[2], 10);
       result = await cmMealKpiRows.deleteCmMealKpiRow(pool, id, event.user);
+    }
+    // CM & MEAL user KPI rows (per employee, date-ranged)
+    else if (path === '/cm-meal-user-kpi-rows' && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      if (!cmMealUserKpiRows.canReadCmMealUserKpis(event.user)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      result = await cmMealUserKpiRows.getCmMealUserKpiRows(pool, {
+        user_id: queryParams.user_id,
+        user: event.user,
+      });
+    } else if (path === '/cm-meal-user-kpi-team' && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      result = await cmMealUserKpiRows.getCmMealUserKpiTeam(pool, event.user);
+    } else if (path === '/cm-meal-user-kpi-rows' && method === 'POST') {
+      result = await cmMealUserKpiRows.postCmMealUserKpiRow(pool, body, event.user);
+    } else if (/^\/cm-meal-user-kpi-rows\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await cmMealUserKpiRows.putCmMealUserKpiRow(pool, id, body, event.user);
+    } else if (/^\/cm-meal-user-kpi-rows\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await cmMealUserKpiRows.deleteCmMealUserKpiRow(pool, id, event.user);
+    } else if (path === '/cm-meal-user-kpi-rows/update-order' && method === 'POST') {
+      result = await cmMealUserKpiRows.updateCmMealUserKpiRowsOrder(pool, body, event.user);
+    }
+    // CM & MEAL user role rows (roles & responsibilities per employee)
+    else if (path === '/cm-meal-user-role-rows' && method === 'GET') {
+      if (!event.user) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ error: 'Authentication required' }),
+        };
+      }
+      if (!cmMealUserKpiRows.canReadCmMealUserKpis(event.user)) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Insufficient permissions' }),
+        };
+      }
+      result = await cmMealUserRoleRows.getCmMealUserRoleRows(pool, {
+        user_id: queryParams.user_id,
+        user: event.user,
+      });
+    } else if (path === '/cm-meal-user-role-rows' && method === 'POST') {
+      result = await cmMealUserRoleRows.postCmMealUserRoleRow(pool, body, event.user);
+    } else if (/^\/cm-meal-user-role-rows\/\d+$/.test(path) && method === 'PUT') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await cmMealUserRoleRows.putCmMealUserRoleRow(pool, id, body, event.user);
+    } else if (/^\/cm-meal-user-role-rows\/\d+$/.test(path) && method === 'DELETE') {
+      const id = parseInt(path.split('/')[2], 10);
+      result = await cmMealUserRoleRows.deleteCmMealUserRoleRow(pool, id, event.user);
+    } else if (path === '/cm-meal-user-role-rows/update-order' && method === 'POST') {
+      result = await cmMealUserRoleRows.updateCmMealUserRoleRowsOrder(pool, body, event.user);
     }
     // Strategic topic content folder (files per pillar)
     else if (path === '/strategic-topic-content' && method === 'GET') {
