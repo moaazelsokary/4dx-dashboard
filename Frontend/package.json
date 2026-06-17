@@ -27,6 +27,8 @@
     "migrate-meal-learning-points": "node scripts/run-meal-learning-points-schema.cjs",
     "migrate-cm-meal-user-kpis": "node scripts/run-cm-meal-user-kpi-schema.cjs",
     "migrate-cm-meal-user-roles": "node scripts/run-cm-meal-user-role-schema.cjs",
+    "migrate-cm-meal-user-role-task-items": "node scripts/run-cm-meal-user-role-task-items.cjs",
+    "migrate-cm-meal-user-kpi-kpi-items": "node scripts/run-cm-meal-user-kpi-kpi-items.cjs",
     "migrate-cm-meal-kpi-kpi-column": "node scripts/run-cm-meal-kpi-add-kpi-column.cjs",
     "init-cm-meal-kpi": "node scripts/run-cm-meal-kpi-schema.cjs",
     "create-users": "node scripts/create-users.cjs",

@@ -20,6 +20,16 @@ function parseSkillsJson(raw) {
   }
 }
 
+function normalizeSkillsArray(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((s) => ({
+      name: String(s?.name ?? '').trim(),
+      exists: Boolean(s?.exists),
+    }))
+    .filter((s) => s.name);
+}
+
 function normalizeSkillsInput(raw) {
   if (raw == null) return null;
   if (!Array.isArray(raw)) {
@@ -27,13 +37,174 @@ function normalizeSkillsInput(raw) {
     err.statusCode = 400;
     throw err;
   }
-  const out = raw
-    .map((s) => ({
-      name: String(s?.name ?? '').trim(),
-      exists: Boolean(s?.exists),
-    }))
-    .filter((s) => s.name);
+  const out = normalizeSkillsArray(raw);
   return out.length ? JSON.stringify(out) : null;
+}
+
+function parseTaskItemsJson(raw) {
+  if (raw == null || raw === '') return [];
+  let parsed;
+  if (Array.isArray(raw)) {
+    parsed = raw;
+  } else {
+    try {
+      parsed = JSON.parse(String(raw));
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((item) => ({
+      task: String(item?.task ?? '').trim(),
+      workload_percent:
+        item?.workload_percent === '' || item?.workload_percent == null || item?.workload_percent === undefined
+          ? null
+          : Number(item.workload_percent),
+      technical_skills: normalizeSkillsArray(item?.technical_skills),
+      soft_skills: normalizeSkillsArray(item?.soft_skills),
+    }))
+    .filter((item) => item.task);
+}
+
+function reconcileTaskItems(parsedItems, row) {
+  const legacyItems = legacyTaskItemsFromRow(row);
+  if (!parsedItems.length) return legacyItems;
+  if (legacyItems.length <= parsedItems.length) return parsedItems;
+
+  return legacyItems.map((legacy, index) => {
+    const current = parsedItems[index];
+    if (!current) return legacy;
+    return {
+      task: legacy.task,
+      workload_percent: current.workload_percent ?? legacy.workload_percent,
+      technical_skills: current.technical_skills?.length ? current.technical_skills : legacy.technical_skills,
+      soft_skills: current.soft_skills?.length ? current.soft_skills : legacy.soft_skills,
+    };
+  });
+}
+
+function parseTaskLines(tasks) {
+  if (!tasks?.trim()) return [];
+  return String(tasks)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function legacyTaskItemsFromRow(row) {
+  const lines = parseTaskLines(row.tasks);
+  const technical = parseSkillsJson(row.technical_skills);
+  const soft = parseSkillsJson(row.soft_skills);
+  const workload = row.workload_percent != null ? Number(row.workload_percent) : null;
+  if (!lines.length) {
+    if (workload == null && !technical.length && !soft.length) return [];
+    return [
+      {
+        task: '—',
+        workload_percent: workload,
+        technical_skills: technical,
+        soft_skills: soft,
+      },
+    ];
+  }
+  return lines.map((task, index) => ({
+    task,
+    workload_percent: index === 0 ? workload : null,
+    technical_skills: index === 0 ? technical : [],
+    soft_skills: index === 0 ? soft : [],
+  }));
+}
+
+function normalizeTaskItemsInput(body) {
+  if (body.task_items != null) {
+    if (!Array.isArray(body.task_items)) {
+      const err = new Error('task_items must be an array');
+      err.statusCode = 400;
+      throw err;
+    }
+    const items = body.task_items
+      .map((item, index) => {
+        const task = String(item?.task ?? '').trim();
+        if (!task) {
+          if (body.task_items.length > 1) {
+            const err = new Error(`Task ${index + 1} requires a name`);
+            err.statusCode = 400;
+            throw err;
+          }
+          return null;
+        }
+        let workload = item?.workload_percent;
+        if (workload === '' || workload == null || workload === undefined) workload = null;
+        else {
+          workload = parseWorkloadPercent(workload);
+        }
+        return {
+          task,
+          workload_percent: workload,
+          technical_skills: normalizeSkillsArray(item?.technical_skills),
+          soft_skills: normalizeSkillsArray(item?.soft_skills),
+        };
+      })
+      .filter(Boolean);
+    if (!items.length) {
+      const err = new Error('At least one task is required');
+      err.statusCode = 400;
+      throw err;
+    }
+    return items;
+  }
+
+  const tasks = body.tasks ? parseTaskLines(String(body.tasks)) : [];
+  const workload = body.workload_percent !== undefined ? parseWorkloadPercent(body.workload_percent) : null;
+  const technical = normalizeSkillsArray(body.technical_skills);
+  const soft = normalizeSkillsArray(body.soft_skills);
+  if (!tasks.length) {
+    const err = new Error('At least one task is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  return tasks.map((task, index) => ({
+    task,
+    workload_percent: index === 0 ? workload : null,
+    technical_skills: index === 0 ? technical : [],
+    soft_skills: index === 0 ? soft : [],
+  }));
+}
+
+function taskItemsToJson(items) {
+  return JSON.stringify(items);
+}
+
+function firstLegacyTaskFields(items) {
+  const first = items[0] || {};
+  return {
+    tasks: items.map((i) => i.task).join('\n') || null,
+    workload_percent: first.workload_percent ?? null,
+    technical_skills: first.technical_skills?.length ? JSON.stringify(first.technical_skills) : null,
+    soft_skills: first.soft_skills?.length ? JSON.stringify(first.soft_skills) : null,
+  };
+}
+
+function mapRow(row) {
+  const taskItems = reconcileTaskItems(parseTaskItemsJson(row.task_items), row);
+  const legacy = firstLegacyTaskFields(taskItems);
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    username: row.username ?? null,
+    kpi: String(row.kpi || '').trim(),
+    job_title: String(row.job_title || '').trim(),
+    responsibilities: row.responsibilities ?? null,
+    task_items: taskItems,
+    tasks: legacy.tasks,
+    workload_percent: legacy.workload_percent,
+    technical_skills: parseSkillsJson(legacy.technical_skills ?? row.technical_skills),
+    soft_skills: parseSkillsJson(legacy.soft_skills ?? row.soft_skills),
+    sort_order: row.sort_order ?? 0,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
 function parseWorkloadPercent(raw) {
@@ -50,24 +221,6 @@ function parseWorkloadPercent(raw) {
     throw err;
   }
   return n;
-}
-
-function mapRow(row) {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    username: row.username ?? null,
-    kpi: String(row.kpi || '').trim(),
-    job_title: String(row.job_title || '').trim(),
-    responsibilities: row.responsibilities ?? null,
-    tasks: row.tasks ?? null,
-    workload_percent: row.workload_percent != null ? Number(row.workload_percent) : null,
-    technical_skills: parseSkillsJson(row.technical_skills),
-    soft_skills: parseSkillsJson(row.soft_skills),
-    sort_order: row.sort_order ?? 0,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
 }
 
 async function getCmMealUserRoleRows(pool, { user_id: filterUserId, user }) {
@@ -93,7 +246,8 @@ async function getCmMealUserRoleRows(pool, { user_id: filterUserId, user }) {
   const idList = targetIds.join(',');
   const result = await pool.request().query(`
     SELECT r.id, r.user_id, u.username, r.kpi, r.job_title, r.responsibilities, r.tasks,
-           r.workload_percent, r.technical_skills, r.soft_skills, r.sort_order, r.created_at, r.updated_at
+           r.workload_percent, r.technical_skills, r.soft_skills, r.task_items,
+           r.sort_order, r.created_at, r.updated_at
     FROM dbo.cm_meal_user_role_rows r
     INNER JOIN users u ON u.id = r.user_id
     WHERE r.user_id IN (${idList})
@@ -116,20 +270,16 @@ async function postCmMealUserRoleRow(pool, body, user) {
     throw err;
   }
 
-  const kpi = String(body.kpi || '').trim();
+  const kpi = String(body.kpi || '').trim() || '—';
   const jobTitle = String(body.job_title || '').trim();
-  if (!kpi) {
-    const err = new Error('kpi is required');
-    err.statusCode = 400;
-    throw err;
-  }
   if (!jobTitle) {
     const err = new Error('job_title is required');
     err.statusCode = 400;
     throw err;
   }
 
-  const workload = parseWorkloadPercent(body.workload_percent);
+  const taskItems = normalizeTaskItemsInput(body);
+  const legacy = firstLegacyTaskFields(taskItems);
 
   const maxReq = pool.request();
   maxReq.input('user_id', sql.Int, ownerId);
@@ -143,17 +293,18 @@ async function postCmMealUserRoleRow(pool, body, user) {
   ins.input('kpi', sql.NVarChar(1000), kpi);
   ins.input('job_title', sql.NVarChar(500), jobTitle);
   ins.input('responsibilities', sql.NVarChar(sql.MAX), body.responsibilities ? String(body.responsibilities).trim() : null);
-  ins.input('tasks', sql.NVarChar(sql.MAX), body.tasks ? String(body.tasks).trim() : null);
-  ins.input('workload_percent', sql.Decimal(5, 2), workload);
-  ins.input('technical_skills', sql.NVarChar(sql.MAX), normalizeSkillsInput(body.technical_skills));
-  ins.input('soft_skills', sql.NVarChar(sql.MAX), normalizeSkillsInput(body.soft_skills));
+  ins.input('tasks', sql.NVarChar(sql.MAX), legacy.tasks);
+  ins.input('workload_percent', sql.Decimal(5, 2), legacy.workload_percent);
+  ins.input('technical_skills', sql.NVarChar(sql.MAX), legacy.technical_skills);
+  ins.input('soft_skills', sql.NVarChar(sql.MAX), legacy.soft_skills);
+  ins.input('task_items', sql.NVarChar(sql.MAX), taskItemsToJson(taskItems));
   ins.input('sort_order', sql.Int, body.sort_order != null ? Number(body.sort_order) : nextSort);
 
   const result = await ins.query(`
     INSERT INTO dbo.cm_meal_user_role_rows
-      (user_id, kpi, job_title, responsibilities, tasks, workload_percent, technical_skills, soft_skills, sort_order)
+      (user_id, kpi, job_title, responsibilities, tasks, workload_percent, technical_skills, soft_skills, task_items, sort_order)
     OUTPUT INSERTED.*
-    VALUES (@user_id, @kpi, @job_title, @responsibilities, @tasks, @workload_percent, @technical_skills, @soft_skills, @sort_order)
+    VALUES (@user_id, @kpi, @job_title, @responsibilities, @tasks, @workload_percent, @technical_skills, @soft_skills, @task_items, @sort_order)
   `);
   const row = result.recordset[0];
   const userRes = await pool.request().input('id', sql.Int, ownerId).query(`SELECT username FROM users WHERE id = @id`);
@@ -188,24 +339,23 @@ async function putCmMealUserRoleRow(pool, id, body, user) {
     throw err;
   }
 
-  const kpi = body.kpi !== undefined ? String(body.kpi).trim() : String(existing.kpi).trim();
+  const kpi =
+    body.kpi !== undefined ? String(body.kpi).trim() || '—' : String(existing.kpi || '—').trim() || '—';
   const jobTitle =
     body.job_title !== undefined ? String(body.job_title).trim() : String(existing.job_title).trim();
-  if (!kpi) {
-    const err = new Error('kpi is required');
-    err.statusCode = 400;
-    throw err;
-  }
   if (!jobTitle) {
     const err = new Error('job_title is required');
     err.statusCode = 400;
     throw err;
   }
 
-  let workload = existing.workload_percent;
-  if (body.workload_percent !== undefined) {
-    workload = parseWorkloadPercent(body.workload_percent);
+  let taskItems;
+  if (body.task_items != null || body.tasks !== undefined) {
+    taskItems = normalizeTaskItemsInput(body);
+  } else {
+    taskItems = reconcileTaskItems(parseTaskItemsJson(existing.task_items), existing);
   }
+  const legacy = firstLegacyTaskFields(taskItems);
 
   const responsibilities =
     body.responsibilities !== undefined
@@ -213,30 +363,23 @@ async function putCmMealUserRoleRow(pool, id, body, user) {
         ? String(body.responsibilities).trim()
         : null
       : existing.responsibilities;
-  const tasks =
-    body.tasks !== undefined ? (body.tasks ? String(body.tasks).trim() : null) : existing.tasks;
-  const technicalSkills =
-    body.technical_skills !== undefined
-      ? normalizeSkillsInput(body.technical_skills)
-      : existing.technical_skills;
-  const softSkills =
-    body.soft_skills !== undefined ? normalizeSkillsInput(body.soft_skills) : existing.soft_skills;
 
   const upd = pool.request();
   upd.input('id', sql.Int, rowId);
   upd.input('kpi', sql.NVarChar(1000), kpi);
   upd.input('job_title', sql.NVarChar(500), jobTitle);
   upd.input('responsibilities', sql.NVarChar(sql.MAX), responsibilities);
-  upd.input('tasks', sql.NVarChar(sql.MAX), tasks);
-  upd.input('workload_percent', sql.Decimal(5, 2), workload);
-  upd.input('technical_skills', sql.NVarChar(sql.MAX), technicalSkills);
-  upd.input('soft_skills', sql.NVarChar(sql.MAX), softSkills);
+  upd.input('tasks', sql.NVarChar(sql.MAX), legacy.tasks);
+  upd.input('workload_percent', sql.Decimal(5, 2), legacy.workload_percent);
+  upd.input('technical_skills', sql.NVarChar(sql.MAX), legacy.technical_skills);
+  upd.input('soft_skills', sql.NVarChar(sql.MAX), legacy.soft_skills);
+  upd.input('task_items', sql.NVarChar(sql.MAX), taskItemsToJson(taskItems));
 
   const result = await upd.query(`
     UPDATE dbo.cm_meal_user_role_rows
     SET kpi = @kpi, job_title = @job_title, responsibilities = @responsibilities, tasks = @tasks,
         workload_percent = @workload_percent, technical_skills = @technical_skills, soft_skills = @soft_skills,
-        updated_at = SYSUTCDATETIME()
+        task_items = @task_items, updated_at = SYSUTCDATETIME()
     OUTPUT INSERTED.*
     WHERE id = @id
   `);

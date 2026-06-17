@@ -283,22 +283,31 @@ export type CmMealKpiRowInput = Omit<
   'id' | 'difference' | 'created_at' | 'updated_at' | 'sort_order'
 > & { sort_order?: number };
 
+export interface CmMealUserKpiItem {
+  kpi: string;
+  target: number | null;
+  actual: number | null;
+  notes: string | null;
+}
+
 export interface CmMealUserKpiRow {
   id: number;
   user_id: number;
   username?: string | null;
-  kpi: string | null;
   activity: string;
-  target: number | null;
-  actual: number | null;
-  difference: number | null;
-  responsible: string | null;
-  notes: string | null;
   start_date: string | null;
   end_date: string | null;
+  kpi_items: CmMealUserKpiItem[];
   sort_order: number;
   created_at?: string;
   updated_at?: string;
+  /** @deprecated First KPI item — kept for legacy consumers */
+  kpi?: string | null;
+  target?: number | null;
+  actual?: number | null;
+  difference?: number | null;
+  responsible?: string | null;
+  notes?: string | null;
 }
 
 export interface CmMealUserKpiTeamMember {
@@ -307,34 +316,53 @@ export interface CmMealUserKpiTeamMember {
   role: string;
 }
 
-export type CmMealUserKpiRowInput = Omit<
-  CmMealUserKpiRow,
-  'id' | 'difference' | 'username' | 'created_at' | 'updated_at' | 'sort_order'
-> & { sort_order?: number };
+export type CmMealUserKpiRowInput = {
+  user_id: number;
+  activity: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  kpi_items: CmMealUserKpiItem[];
+  responsible?: string | null;
+  sort_order?: number;
+};
 
 export interface CmMealRoleSkill {
   name: string;
   exists: boolean;
 }
 
+export interface CmMealRoleTaskItem {
+  task: string;
+  workload_percent: number | null;
+  technical_skills: CmMealRoleSkill[];
+  soft_skills: CmMealRoleSkill[];
+}
+
 export interface CmMealUserRoleRow {
   id: number;
   user_id: number;
   username?: string | null;
-  kpi: string;
+  /** @deprecated Legacy column — no longer shown in UI */
+  kpi?: string;
   job_title: string;
   responsibilities: string | null;
-  tasks: string | null;
-  workload_percent: number | null;
-  technical_skills: CmMealRoleSkill[];
-  soft_skills: CmMealRoleSkill[];
+  task_items: CmMealRoleTaskItem[];
   sort_order: number;
   created_at?: string;
   updated_at?: string;
+  /** @deprecated Synced from task_items for legacy consumers */
+  tasks?: string | null;
+  workload_percent?: number | null;
+  technical_skills?: CmMealRoleSkill[];
+  soft_skills?: CmMealRoleSkill[];
 }
 
-export type CmMealUserRoleRowInput = Omit<
-  CmMealUserRoleRow,
-  'id' | 'username' | 'created_at' | 'updated_at' | 'sort_order'
-> & { sort_order?: number };
+export type CmMealUserRoleRowInput = {
+  user_id: number;
+  job_title: string;
+  responsibilities?: string | null;
+  task_items: CmMealRoleTaskItem[];
+  kpi?: string;
+  sort_order?: number;
+};
 

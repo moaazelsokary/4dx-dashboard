@@ -57,29 +57,162 @@ async function canWriteCmMealUserKpi(pool, user, targetUserId) {
   return false;
 }
 
-function mapRow(row) {
+function parseKpiItemsJson(raw) {
+  if (raw == null || String(raw).trim() === '') return [];
+  try {
+    const parsed = JSON.parse(String(raw));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        kpi: String(item?.kpi ?? '').trim(),
+        target:
+          item?.target === '' || item?.target == null || item?.target === undefined
+            ? null
+            : Number(item.target),
+        actual:
+          item?.actual === '' || item?.actual == null || item?.actual === undefined
+            ? null
+            : Number(item.actual),
+        notes: item?.notes != null ? String(item.notes).trim() || null : null,
+      }))
+      .filter((item) => item.kpi);
+  } catch {
+    return [];
+  }
+}
+
+function legacyKpiItemsFromRow(row) {
+  const kpi = row.kpi != null ? String(row.kpi).trim() : '';
+  if (!kpi) return [];
   const target = row.target_value != null ? Number(row.target_value) : null;
   const actual = row.actual_value != null ? Number(row.actual_value) : null;
+  return [
+    {
+      kpi,
+      target: target != null && !Number.isNaN(target) ? target : null,
+      actual: actual != null && !Number.isNaN(actual) ? actual : null,
+      notes: row.notes != null ? String(row.notes).trim() || null : null,
+    },
+  ];
+}
+
+function normalizeKpiItemsInput(body) {
+  if (body.kpi_items != null) {
+    if (!Array.isArray(body.kpi_items)) {
+      const err = new Error('kpi_items must be an array');
+      err.statusCode = 400;
+      throw err;
+    }
+    const items = body.kpi_items
+      .map((item) => {
+        const kpi = String(item?.kpi ?? '').trim();
+        if (!kpi) return null;
+        let target = item?.target;
+        if (target === '' || target == null || target === undefined) target = null;
+        else {
+          target = Number(target);
+          if (Number.isNaN(target)) {
+            const err = new Error('target must be a number');
+            err.statusCode = 400;
+            throw err;
+          }
+        }
+        let actual = item?.actual;
+        if (actual === '' || actual == null || actual === undefined) actual = null;
+        else {
+          actual = Number(actual);
+          if (Number.isNaN(actual)) {
+            const err = new Error('actual must be a number');
+            err.statusCode = 400;
+            throw err;
+          }
+        }
+        const notes = item?.notes != null ? String(item.notes).trim() || null : null;
+        return { kpi, target, actual, notes };
+      })
+      .filter(Boolean);
+    if (!items.length) {
+      const err = new Error('At least one KPI is required');
+      err.statusCode = 400;
+      throw err;
+    }
+    return items;
+  }
+
+  const kpi = body.kpi != null ? String(body.kpi).trim() : '';
+  if (!kpi) {
+    const err = new Error('At least one KPI is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  const targetRaw = body.target ?? body.target_value;
+  const actualRaw = body.actual ?? body.actual_value;
+  const target =
+    targetRaw === '' || targetRaw == null || targetRaw === undefined ? null : Number(targetRaw);
+  const actual =
+    actualRaw === '' || actualRaw == null || actualRaw === undefined ? null : Number(actualRaw);
+  if (target != null && Number.isNaN(target)) {
+    const err = new Error('target must be a number');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (actual != null && Number.isNaN(actual)) {
+    const err = new Error('actual must be a number');
+    err.statusCode = 400;
+    throw err;
+  }
+  return [
+    {
+      kpi,
+      target,
+      actual,
+      notes: body.notes ? String(body.notes).trim() : null,
+    },
+  ];
+}
+
+function kpiItemsToJson(items) {
+  return JSON.stringify(items);
+}
+
+function firstLegacyFields(items) {
+  const first = items[0] || {};
+  const target = first.target ?? null;
+  const actual = first.actual ?? null;
   const difference =
     target != null && actual != null && !Number.isNaN(target) && !Number.isNaN(actual)
       ? target - actual
       : null;
   return {
+    kpi: first.kpi || null,
+    target,
+    actual,
+    difference,
+    notes: first.notes ?? null,
+  };
+}
+
+function mapRow(row) {
+  let kpiItems = parseKpiItemsJson(row.kpi_items);
+  if (!kpiItems.length) kpiItems = legacyKpiItemsFromRow(row);
+  const legacy = firstLegacyFields(kpiItems);
+  return {
     id: row.id,
     user_id: row.user_id,
     username: row.username ?? null,
     activity: row.activity,
-    kpi: row.kpi != null && String(row.kpi).trim() !== '' ? String(row.kpi).trim() : null,
-    target,
-    actual,
-    difference,
-    responsible: row.responsible,
-    notes: row.notes,
     start_date: formatDateOut(row.start_date),
     end_date: formatDateOut(row.end_date),
+    kpi_items: kpiItems,
     sort_order: row.sort_order ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    kpi: legacy.kpi,
+    target: legacy.target,
+    actual: legacy.actual,
+    difference: legacy.difference,
+    responsible: row.responsible,
+    notes: legacy.notes,
   };
 }
 
@@ -106,7 +239,7 @@ async function getCmMealUserKpiRows(pool, { user_id: filterUserId, user }) {
   const idList = targetIds.join(',');
   const result = await pool.request().query(`
     SELECT r.id, r.user_id, u.username, r.kpi, r.activity, r.target_value, r.actual_value,
-           r.responsible, r.notes, r.start_date, r.end_date, r.sort_order, r.created_at, r.updated_at
+           r.responsible, r.notes, r.start_date, r.end_date, r.kpi_items, r.sort_order, r.created_at, r.updated_at
     FROM dbo.cm_meal_user_kpi_rows r
     INNER JOIN users u ON u.id = r.user_id
     WHERE r.user_id IN (${idList})
@@ -136,29 +269,8 @@ async function postCmMealUserKpiRow(pool, body, user) {
     throw err;
   }
 
-  const targetRaw = body.target ?? body.target_value;
-  const actualRaw = body.actual ?? body.actual_value;
-  const target =
-    targetRaw === '' || targetRaw == null || targetRaw === undefined ? null : Number(targetRaw);
-  const actual =
-    actualRaw === '' || actualRaw == null || actualRaw === undefined ? null : Number(actualRaw);
-  if (target != null && Number.isNaN(target)) {
-    const err = new Error('target must be a number');
-    err.statusCode = 400;
-    throw err;
-  }
-  if (actual != null && Number.isNaN(actual)) {
-    const err = new Error('actual must be a number');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const kpi =
-    body.kpi !== undefined
-      ? body.kpi
-        ? String(body.kpi).trim()
-        : null
-      : null;
+  const kpiItems = normalizeKpiItemsInput(body);
+  const legacy = firstLegacyFields(kpiItems);
 
   const startDate = body.start_date !== undefined && body.start_date !== null && String(body.start_date).trim() !== ''
     ? parseDateField(body.start_date)
@@ -176,21 +288,22 @@ async function postCmMealUserKpiRow(pool, body, user) {
 
   const ins = pool.request();
   ins.input('user_id', sql.Int, ownerId);
-  ins.input('kpi', sql.NVarChar(1000), kpi);
+  ins.input('kpi', sql.NVarChar(1000), legacy.kpi);
   ins.input('activity', sql.NVarChar(sql.MAX), activity);
-  ins.input('target_value', sql.Decimal(18, 4), target);
-  ins.input('actual_value', sql.Decimal(18, 4), actual);
+  ins.input('target_value', sql.Decimal(18, 4), legacy.target);
+  ins.input('actual_value', sql.Decimal(18, 4), legacy.actual);
   ins.input('responsible', sql.NVarChar(500), body.responsible ? String(body.responsible).trim() : null);
-  ins.input('notes', sql.NVarChar(sql.MAX), body.notes ? String(body.notes).trim() : null);
+  ins.input('notes', sql.NVarChar(sql.MAX), legacy.notes);
+  ins.input('kpi_items', sql.NVarChar(sql.MAX), kpiItemsToJson(kpiItems));
   ins.input('start_date', sql.Date, startDate);
   ins.input('end_date', sql.Date, endDate);
   ins.input('sort_order', sql.Int, body.sort_order != null ? Number(body.sort_order) : nextSort);
 
   const result = await ins.query(`
     INSERT INTO dbo.cm_meal_user_kpi_rows
-      (user_id, kpi, activity, target_value, actual_value, responsible, notes, start_date, end_date, sort_order)
+      (user_id, kpi, activity, target_value, actual_value, responsible, notes, kpi_items, start_date, end_date, sort_order)
     OUTPUT INSERTED.*
-    VALUES (@user_id, @kpi, @activity, @target_value, @actual_value, @responsible, @notes, @start_date, @end_date, @sort_order)
+    VALUES (@user_id, @kpi, @activity, @target_value, @actual_value, @responsible, @notes, @kpi_items, @start_date, @end_date, @sort_order)
   `);
   const row = result.recordset[0];
   const userRes = await pool.request().input('id', sql.Int, ownerId).query(`SELECT username FROM users WHERE id = @id`);
@@ -232,38 +345,15 @@ async function putCmMealUserKpiRow(pool, id, body, user) {
     throw err;
   }
 
-  let target = existing.target_value;
-  if (body.target !== undefined || body.target_value !== undefined) {
-    const raw = body.target ?? body.target_value;
-    target = raw === '' || raw == null ? null : Number(raw);
-    if (target != null && Number.isNaN(target)) {
-      const err = new Error('target must be a number');
-      err.statusCode = 400;
-      throw err;
-    }
+  let kpiItems;
+  if (body.kpi_items != null || body.kpi !== undefined) {
+    kpiItems = normalizeKpiItemsInput(body);
+  } else {
+    kpiItems = parseKpiItemsJson(existing.kpi_items);
+    if (!kpiItems.length) kpiItems = legacyKpiItemsFromRow(existing);
   }
+  const legacy = firstLegacyFields(kpiItems);
 
-  let actual = existing.actual_value;
-  if (body.actual !== undefined || body.actual_value !== undefined) {
-    const raw = body.actual ?? body.actual_value;
-    actual = raw === '' || raw == null ? null : Number(raw);
-    if (actual != null && Number.isNaN(actual)) {
-      const err = new Error('actual must be a number');
-      err.statusCode = 400;
-      throw err;
-    }
-  }
-
-  const kpi =
-    body.kpi !== undefined
-      ? body.kpi
-        ? String(body.kpi).trim()
-        : null
-      : existing.kpi != null
-        ? String(existing.kpi).trim()
-        : null;
-  const notes =
-    body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : existing.notes;
   const startDate =
     body.start_date !== undefined
       ? parseDateField(body.start_date)
@@ -273,18 +363,19 @@ async function putCmMealUserKpiRow(pool, id, body, user) {
 
   const upd = pool.request();
   upd.input('id', sql.Int, rowId);
-  upd.input('kpi', sql.NVarChar(1000), kpi);
+  upd.input('kpi', sql.NVarChar(1000), legacy.kpi);
   upd.input('activity', sql.NVarChar(sql.MAX), activity);
-  upd.input('target_value', sql.Decimal(18, 4), target);
-  upd.input('actual_value', sql.Decimal(18, 4), actual);
-  upd.input('notes', sql.NVarChar(sql.MAX), notes);
+  upd.input('target_value', sql.Decimal(18, 4), legacy.target);
+  upd.input('actual_value', sql.Decimal(18, 4), legacy.actual);
+  upd.input('notes', sql.NVarChar(sql.MAX), legacy.notes);
+  upd.input('kpi_items', sql.NVarChar(sql.MAX), kpiItemsToJson(kpiItems));
   upd.input('start_date', sql.Date, startDate);
   upd.input('end_date', sql.Date, endDate);
 
   const result = await upd.query(`
     UPDATE dbo.cm_meal_user_kpi_rows
     SET kpi = @kpi, activity = @activity, target_value = @target_value, actual_value = @actual_value,
-        notes = @notes, start_date = @start_date, end_date = @end_date,
+        notes = @notes, kpi_items = @kpi_items, start_date = @start_date, end_date = @end_date,
         updated_at = SYSUTCDATETIME()
     OUTPUT INSERTED.*
     WHERE id = @id

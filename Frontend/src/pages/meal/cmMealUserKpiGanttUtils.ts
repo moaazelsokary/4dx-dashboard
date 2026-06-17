@@ -1,5 +1,5 @@
 import { parseISO, startOfDay } from 'date-fns';
-import type { CmMealUserKpiRow } from '@/types/wig';
+import type { CmMealUserKpiItem, CmMealUserKpiRow } from '@/types/wig';
 
 export type UserKpiBarState = 'done' | 'overdue' | 'in_progress' | 'scheduled';
 
@@ -13,19 +13,20 @@ export function parseKpiDate(s: string | null | undefined): Date | null {
   }
 }
 
-export function deriveUserKpiBarState(row: CmMealUserKpiRow): UserKpiBarState | 'unscheduled' {
+export function deriveUserKpiBarState(row: CmMealUserKpiRow, item?: CmMealUserKpiItem): UserKpiBarState | 'unscheduled' {
   const sd = parseKpiDate(row.start_date);
   const ed = parseKpiDate(row.end_date);
   if (!sd || !ed || ed < sd) return 'unscheduled';
-  if (row.actual != null) return 'done';
+  const actual = item?.actual ?? row.actual;
+  if (actual != null) return 'done';
   const today = startOfDay(new Date());
   if (ed < today) return 'overdue';
   if (today >= sd && today <= ed) return 'in_progress';
   return 'scheduled';
 }
 
-export function rowLaneLabel(row: CmMealUserKpiRow, showEmployee: boolean): string {
-  const kpi = (row.kpi || '').trim() || 'Untitled KPI';
+export function rowLaneLabel(row: CmMealUserKpiRow, showEmployee: boolean, item?: CmMealUserKpiItem): string {
+  const kpi = (item?.kpi || row.kpi || '').trim() || 'Untitled KPI';
   if (showEmployee && row.username) return `${row.username} · ${kpi}`;
   return kpi;
 }
@@ -45,8 +46,8 @@ export function userKpiBarStateLabel(state: UserKpiBarState | 'unscheduled'): st
   }
 }
 
-export function employeeKpiLaneKey(row: CmMealUserKpiRow): string {
-  const kpi = (row.kpi || '').trim() || 'Untitled KPI';
+export function employeeKpiLaneKey(row: CmMealUserKpiRow, item?: CmMealUserKpiItem): string {
+  const kpi = (item?.kpi || row.kpi || '').trim() || 'Untitled KPI';
   return `${row.user_id}|${kpi}`;
 }
 

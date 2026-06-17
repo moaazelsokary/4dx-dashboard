@@ -30,6 +30,8 @@ import BidirectionalText from '@/components/ui/BidirectionalText';
 import { cn } from '@/lib/utils';
 import { showEmployeeScopeFilter } from '@/config/cmMealUserKpiAccess';
 import { getCurrentUser } from '@/services/authService';
+import { getKpiItems } from './cmMealUserKpiItems';
+import type { CmMealUserKpiItem } from '@/types/wig';
 import {
   barStateClassName,
   deriveUserKpiBarState,
@@ -67,31 +69,43 @@ export default function CmMealUserKpisGantt({
   }, [rows, employeeScope]);
 
   const { datedBars, unscheduled, min, max, lanes } = useMemo(() => {
-    type Bar = { row: CmMealUserKpiRow; lane: string; start: Date; end: Date };
+    type Bar = {
+      row: CmMealUserKpiRow;
+      item: CmMealUserKpiItem;
+      itemIndex: number;
+      lane: string;
+      start: Date;
+      end: Date;
+    };
     const bars: Bar[] = [];
     const unsched: CmMealUserKpiRow[] = [];
     const laneSet = new Set<string>();
 
     for (const r of scopedRows) {
+      const items = getKpiItems(r);
       const sd = parseKpiDate(r.start_date);
       const ed = parseKpiDate(r.end_date);
-      if (!sd || !ed || ed < sd) {
+      if (!sd || !ed || ed < sd || !items.length) {
         unsched.push(r);
         continue;
       }
-      const lane = employeeKpiLaneKey(r);
-      laneSet.add(lane);
-      bars.push({ row: r, lane, start: sd, end: ed });
+      items.forEach((item, itemIndex) => {
+        const lane = employeeKpiLaneKey(r, item);
+        laneSet.add(lane);
+        bars.push({ row: r, item, itemIndex, lane, start: sd, end: ed });
+      });
     }
 
     unsched.sort((a, b) => rowSortKey(a) - rowSortKey(b));
     const laneList = [...laneSet].sort((a, b) => {
       const ra = bars.find((x) => x.lane === a)?.row;
       const rb = bars.find((x) => x.lane === b)?.row;
+      const ia = bars.find((x) => x.lane === a)?.item;
+      const ib = bars.find((x) => x.lane === b)?.item;
       if (!ra || !rb) return a.localeCompare(b);
       const emp = (ra.username || '').localeCompare(rb.username || '');
       if (emp !== 0) return emp;
-      const kpi = (ra.kpi || '').localeCompare(rb.kpi || '');
+      const kpi = (ia?.kpi || '').localeCompare(ib?.kpi || '');
       if (kpi !== 0) return kpi;
       return rowSortKey(ra) - rowSortKey(rb);
     });
@@ -159,7 +173,7 @@ export default function CmMealUserKpisGantt({
   const laneLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const b of datedBars) {
-      map.set(b.lane, rowLaneLabel(b.row, showEmployeeInLane));
+      map.set(b.lane, rowLaneLabel(b.row, showEmployeeInLane, b.item));
     }
     return map;
   }, [datedBars, showEmployeeInLane]);
@@ -251,7 +265,8 @@ export default function CmMealUserKpisGantt({
                       >
                         <div className="font-medium truncate">
                           <BidirectionalText>
-                            {laneLabelByKey.get(lane) ?? rowLaneLabel(firstBar.row, showEmployeeInLane)}
+                            {laneLabelByKey.get(lane) ??
+                              rowLaneLabel(firstBar.row, showEmployeeInLane, firstBar.item)}
                           </BidirectionalText>
                         </div>
                       </div>
@@ -269,12 +284,12 @@ export default function CmMealUserKpisGantt({
                         <TooltipProvider delayDuration={200}>
                           {laneBars.map((bar, barIndex) => {
                             const { left, width } = barGeometry(bar.start, bar.end);
-                            const state = deriveUserKpiBarState(bar.row);
+                            const state = deriveUserKpiBarState(bar.row, bar.item);
                             const stateLabel = userKpiBarStateLabel(state);
                             const top = padTop + barIndex * (barH + barGap);
 
                             return (
-                              <Tooltip key={bar.row.id}>
+                              <Tooltip key={`${bar.row.id}-${bar.itemIndex}`}>
                                 <TooltipTrigger asChild>
                                   <div
                                     className={cn(
@@ -295,12 +310,12 @@ export default function CmMealUserKpisGantt({
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-xs text-xs">
-                                  <div className="font-semibold">{bar.row.kpi || 'Untitled KPI'}</div>
+                                  <div className="font-semibold">{bar.item.kpi || 'Untitled KPI'}</div>
                                   <div className="text-muted-foreground">{bar.row.activity}</div>
                                   <div className="text-muted-foreground mt-1 space-y-0.5">
                                     {bar.row.username ? <div>Employee: {bar.row.username}</div> : null}
                                     <div>
-                                      Target: {bar.row.target ?? '—'} · Actual: {bar.row.actual ?? '—'}
+                                      Target: {bar.item.target ?? '—'} · Actual: {bar.item.actual ?? '—'}
                                     </div>
                                     <div>
                                       {format(bar.start, 'PP')} → {format(bar.end, 'PP')}
@@ -347,19 +362,25 @@ export default function CmMealUserKpisGantt({
               <CardContent className="pt-0 pb-4">
                 <ScrollArea className="h-[40vh] max-h-[22rem] rounded-md border bg-muted/20">
                   <ul className="p-3 space-y-2 text-sm">
-                    {unscheduled.map((r) => (
+                    {unscheduled.map((r) => {
+                      const items = getKpiItems(r);
+                      const kpiLabel = items.length
+                        ? items.map((i) => i.kpi.trim() || 'Untitled KPI').join(', ')
+                        : 'Untitled KPI';
+                      return (
                       <li
                         key={r.id}
                         className="rounded-md border border-border/60 bg-card px-3 py-2 text-muted-foreground"
                       >
                         <span className="font-medium text-foreground">
                           {r.username ? `${r.username} · ` : ''}
-                          {r.kpi?.trim() || 'Untitled KPI'}
+                          {kpiLabel}
                           {' — '}
                         </span>
                         <BidirectionalText className="inline">{r.activity}</BidirectionalText>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 </ScrollArea>
               </CardContent>

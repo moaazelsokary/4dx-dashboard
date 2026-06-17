@@ -2,14 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Loader2, Plus, RefreshCw, Search, Edit2, Trash2, X } from 'lucide-react';
+import { GripVertical, Loader2, Plus, RefreshCw, Search, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -42,13 +40,23 @@ import {
   updateCmMealUserRoleRow,
   updateCmMealUserRoleRowsOrder,
 } from '@/services/wigService';
-import type { CmMealRoleSkill, CmMealUserKpiTeamMember, CmMealUserRoleRow } from '@/types/wig';
+import type { CmMealUserKpiTeamMember, CmMealUserRoleRow } from '@/types/wig';
 import {
   canWriteCmMealUserKpiForTarget,
   isCmMealManagerRole,
   showEmployeeScopeFilter,
   userIdFromUser,
 } from '@/config/cmMealUserKpiAccess';
+import { AlignedStack, NestedTreeItemCard } from './cmMealNestedTree';
+import { getRoleTaskItems, roleRowSearchText } from './cmMealRoleTasks';
+import {
+  TaskItemsEditor,
+  SkillChip,
+  draftItemsFromRow,
+  emptyDraftTaskItem,
+  parseDraftTaskItems,
+  type DraftTaskItem,
+} from './CmMealRoleTaskItemsEditor';
 
 type Props = {
   rows: CmMealUserRoleRow[];
@@ -62,116 +70,117 @@ type Props = {
 
 type DraftRole = {
   user_id: string;
-  kpi: string;
   job_title: string;
   responsibilities: string;
-  tasks: string;
-  workload_percent: string;
-  technical_skills: CmMealRoleSkill[];
-  soft_skills: CmMealRoleSkill[];
+  task_items: DraftTaskItem[];
 };
 
 function emptyDraft(defaultUserId: string): DraftRole {
   return {
     user_id: defaultUserId,
-    kpi: '',
     job_title: '',
     responsibilities: '',
-    tasks: '',
-    workload_percent: '',
-    technical_skills: [],
-    soft_skills: [],
+    task_items: [emptyDraftTaskItem()],
   };
 }
 
 function draftFromRow(row: CmMealUserRoleRow): DraftRole {
   return {
     user_id: String(row.user_id),
-    kpi: row.kpi,
     job_title: row.job_title,
     responsibilities: row.responsibilities ?? '',
-    tasks: row.tasks ?? '',
-    workload_percent: row.workload_percent == null ? '' : String(row.workload_percent),
-    technical_skills: [...(row.technical_skills ?? [])],
-    soft_skills: [...(row.soft_skills ?? [])],
+    task_items: draftItemsFromRow(getRoleTaskItems(row)),
   };
 }
 
-function parseWorkloadPercentInput(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed);
-  if (Number.isNaN(n)) return Number.NaN;
-  if (n <= 0 || n >= 101) return Number.NaN;
-  return n;
-}
+function RoleTaskDetailsTableCells({ row }: { row: CmMealUserRoleRow }) {
+  const items = getRoleTaskItems(row);
+  const count = items.length;
+  const cellClass = 'align-top border-r border-border/50 text-xs py-2';
+  const nestUnderResponsibilities = Boolean(row.responsibilities?.trim()) && count > 0;
+  const nestClass = nestUnderResponsibilities ? 'ml-2 pl-3 border-l-2 border-primary/25' : '';
 
-function SkillsCell({ skills }: { skills: CmMealRoleSkill[] }) {
-  if (!skills.length) return <span className="text-muted-foreground">—</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {skills.map((s, i) => (
-        <Badge
-          key={`${s.name}-${i}`}
-          variant={s.exists ? 'default' : 'outline'}
-          className={cn('text-[10px] font-normal', !s.exists && 'text-muted-foreground')}
-        >
-          <BidirectionalText>{s.name}</BidirectionalText>
-          {!s.exists ? ' · N' : ''}
-        </Badge>
-      ))}
-    </div>
-  );
-}
-
-function SkillsEditor({
-  label,
-  skills,
-  onChange,
-}: {
-  label: string;
-  skills: CmMealRoleSkill[];
-  onChange: (next: CmMealRoleSkill[]) => void;
-}) {
-  const add = () => onChange([...skills, { name: '', exists: true }]);
-  const update = (index: number, patch: Partial<CmMealRoleSkill>) => {
-    onChange(skills.map((s, i) => (i === index ? { ...s, ...patch } : s)));
-  };
-  const remove = (index: number) => onChange(skills.filter((_, i) => i !== index));
+  if (!count) {
+    return (
+      <>
+        <TableCell className={cellClass} style={{ minWidth: 140 }}>
+          <span className="text-muted-foreground">—</span>
+        </TableCell>
+        <TableCell className={cn(cellClass, 'tabular-nums')} style={{ minWidth: 90 }}>
+          <span className="text-muted-foreground">—</span>
+        </TableCell>
+        <TableCell className={cellClass} style={{ minWidth: 160 }}>
+          <span className="text-muted-foreground">—</span>
+        </TableCell>
+        <TableCell className={cellClass} style={{ minWidth: 160 }}>
+          <span className="text-muted-foreground">—</span>
+        </TableCell>
+      </>
+    );
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs">{label}</Label>
-        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={add}>
-          <Plus className="h-3 w-3 mr-1" />
-          Add
-        </Button>
-      </div>
-      {skills.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground">No skills yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {skills.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <Input
-                className="h-8 text-xs flex-1"
-                placeholder="Skill name"
-                value={s.name}
-                onChange={(e) => update(i, { name: e.target.value })}
-              />
-              <label className="flex items-center gap-1.5 text-xs shrink-0">
-                <Checkbox checked={s.exists} onCheckedChange={(v) => update(i, { exists: v === true })} />
-                Exists
-              </label>
-              <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => remove(i)}>
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+    <>
+      <TableCell className={cellClass} style={{ minWidth: 140 }}>
+        <div className={cn('space-y-2 py-0.5', nestClass)}>
+          {items.map((item, idx) => (
+            <NestedTreeItemCard key={`task-${idx}`} className="min-h-0">
+              <BidirectionalText className="text-xs whitespace-normal break-words">{item.task}</BidirectionalText>
+            </NestedTreeItemCard>
           ))}
         </div>
-      )}
-    </div>
+      </TableCell>
+      <TableCell className={cn(cellClass, 'tabular-nums')} style={{ minWidth: 90 }}>
+        <div className={cn('py-0.5', nestClass)}>
+          <AlignedStack
+            count={count}
+            render={(idx) =>
+              items[idx].workload_percent == null ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <span className="font-medium text-foreground">{items[idx].workload_percent}%</span>
+              )
+            }
+          />
+        </div>
+      </TableCell>
+      <TableCell className={cellClass} style={{ minWidth: 160 }}>
+        <div className={cn('py-0.5', nestClass)}>
+          <AlignedStack
+            count={count}
+            render={(idx) =>
+              items[idx].technical_skills.length === 0 ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {items[idx].technical_skills.map((skill, i) => (
+                    <SkillChip key={`${skill.name}-${i}`} skill={skill} />
+                  ))}
+                </div>
+              )
+            }
+          />
+        </div>
+      </TableCell>
+      <TableCell className={cellClass} style={{ minWidth: 160 }}>
+        <div className={cn('py-0.5', nestClass)}>
+          <AlignedStack
+            count={count}
+            render={(idx) =>
+              items[idx].soft_skills.length === 0 ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {items[idx].soft_skills.map((skill, i) => (
+                    <SkillChip key={`${skill.name}-${i}`} skill={skill} />
+                  ))}
+                </div>
+              )
+            }
+          />
+        </div>
+      </TableCell>
+    </>
   );
 }
 
@@ -207,7 +216,7 @@ function SortableRoleRow({
         transition,
         opacity: isDragging ? 0.55 : 1,
       }}
-      className={isDragging ? 'bg-muted/40' : undefined}
+      className={cn(isDragging && 'bg-muted/40', 'group')}
     >
       <TableCell className="w-9 p-1 align-top">
         {canReorder && canWrite ? (
@@ -230,29 +239,15 @@ function SortableRoleRow({
           <BidirectionalText>{row.username?.trim() || row.user_id}</BidirectionalText>
         </TableCell>
       ) : null}
-      <TableCell className="align-top border-r border-border/50">
-        <Badge variant="outline" className="text-xs font-normal">
-          <BidirectionalText>{row.kpi}</BidirectionalText>
-        </Badge>
-      </TableCell>
       <TableCell className="align-top border-r border-border/50 text-xs">
         <BidirectionalText>{row.job_title}</BidirectionalText>
       </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs whitespace-normal break-words max-w-[12rem]">
-        <BidirectionalText>{row.responsibilities?.trim() || '—'}</BidirectionalText>
+      <TableCell className="align-top border-r border-border/50 text-xs whitespace-normal break-words bg-muted/[0.06] group-hover:bg-muted/10">
+        <BidirectionalText className="font-medium text-foreground">
+          {row.responsibilities?.trim() || '—'}
+        </BidirectionalText>
       </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs whitespace-normal break-words max-w-[12rem]">
-        <BidirectionalText>{row.tasks?.trim() || '—'}</BidirectionalText>
-      </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs text-right tabular-nums">
-        {row.workload_percent == null ? '—' : `${row.workload_percent}%`}
-      </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs min-w-[8rem]">
-        <SkillsCell skills={row.technical_skills} />
-      </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs min-w-[8rem]">
-        <SkillsCell skills={row.soft_skills} />
-      </TableCell>
+      <RoleTaskDetailsTableCells row={row} />
       <TableCell className="w-[4.5rem] align-top">
         {canWrite ? (
           <div className="flex items-center gap-1">
@@ -329,20 +324,7 @@ export default function CmMealUserRolesTab({
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((row) => {
-      const hay = [
-        row.username,
-        row.kpi,
-        row.job_title,
-        row.responsibilities,
-        row.tasks,
-        row.technical_skills.map((s) => s.name).join(' '),
-        row.soft_skills.map((s) => s.name).join(' '),
-      ]
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
-    });
+    return rows.filter((row) => roleRowSearchText(row).includes(q));
   }, [rows, search]);
 
   const openAddForm = () => {
@@ -364,52 +346,36 @@ export default function CmMealUserRolesTab({
   };
 
   const handleFormSave = async () => {
-    const kpi = draft.kpi.trim();
     const jobTitle = draft.job_title.trim();
-    if (!kpi) {
-      toast({ title: 'KPI is required', variant: 'destructive' });
-      return;
-    }
     if (!jobTitle) {
       toast({ title: 'Job title is required', variant: 'destructive' });
       return;
     }
 
-    const workload = parseWorkloadPercentInput(draft.workload_percent);
-    if (draft.workload_percent.trim() !== '' && Number.isNaN(workload)) {
-      toast({
-        title: 'Invalid workload %',
-        description: 'Enter a number greater than 0 and less than 101.',
-        variant: 'destructive',
-      });
+    const parsedItems = parseDraftTaskItems(draft.task_items);
+    if ('error' in parsedItems) {
+      toast({ title: parsedItems.error, variant: 'destructive' });
       return;
     }
 
-    const technical = draft.technical_skills.filter((s) => s.name.trim());
-    const soft = draft.soft_skills.filter((s) => s.name.trim());
     const payload = {
-      kpi,
+      kpi: '—',
       job_title: jobTitle,
       responsibilities: draft.responsibilities.trim() || null,
-      tasks: draft.tasks.trim() || null,
-      workload_percent: workload,
-      technical_skills: technical,
-      soft_skills: soft,
+      task_items: parsedItems,
     };
 
     if (editingRow) {
       if (!canWriteForRow(editingRow)) return;
       setSavingForm(true);
       try {
-        const updated = await updateCmMealUserRoleRow(editingRow.id, payload);
-        const next = rows.map((r) => (r.id === updated.id ? updated : r));
-        if (onRowsChange) onRowsChange(next);
-        else await onReload();
+        await updateCmMealUserRoleRow(editingRow.id, payload);
+        await onReload();
         closeForm();
-        toast({ title: 'Role updated' });
+        toast({ title: 'Saved' });
       } catch (e) {
         toast({
-          title: 'Could not update role',
+          title: 'Could not save',
           description: e instanceof Error ? e.message : 'Request failed',
           variant: 'destructive',
         });
@@ -427,14 +393,13 @@ export default function CmMealUserRolesTab({
 
     setSavingForm(true);
     try {
-      const created = await createCmMealUserRoleRow({ user_id: ownerId, ...payload });
-      if (onRowsChange) onRowsChange([...rows, created]);
-      else await onReload();
+      await createCmMealUserRoleRow({ user_id: ownerId, ...payload });
+      await onReload();
       closeForm();
-      toast({ title: 'Role added' });
+      toast({ title: 'Saved' });
     } catch (e) {
       toast({
-        title: 'Could not add role',
+        title: 'Could not save',
         description: e instanceof Error ? e.message : 'Request failed',
         variant: 'destructive',
       });
@@ -493,7 +458,7 @@ export default function CmMealUserRolesTab({
     }
   };
 
-  const colCount = 2 + (showEmployeeColumn ? 1 : 0) + 8 + 1;
+  const colCount = 2 + (showEmployeeColumn ? 1 : 0) + 6 + 1;
 
   return (
     <Card className="text-xs">
@@ -502,7 +467,7 @@ export default function CmMealUserRolesTab({
           <div>
             <CardTitle className="text-sm font-semibold">Roles & Responsibilities</CardTitle>
             <CardDescription className="text-[11px] leading-snug mt-0.5">
-              Define KPIs, job titles, tasks, and skills per employee. KPIs defined here appear in the KPIs tab.
+              Define job titles, responsibilities, tasks, workload, and skills per employee.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -561,7 +526,6 @@ export default function CmMealUserRolesTab({
                     <TableHead className="w-9" />
                     <TableHead className="w-10 text-center">N</TableHead>
                     {showEmployeeColumn ? <TableHead>Employee</TableHead> : null}
-                    <TableHead>KPI</TableHead>
                     <TableHead>Job Title</TableHead>
                     <TableHead>Responsibilities</TableHead>
                     <TableHead>Tasks</TableHead>
@@ -576,7 +540,7 @@ export default function CmMealUserRolesTab({
                     {filteredRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={colCount} className="text-center text-muted-foreground py-8">
-                          {rows.length === 0 ? 'No roles yet. Add one to define KPIs for this employee.' : 'No rows match your search.'}
+                          {rows.length === 0 ? 'No roles yet. Add one to get started.' : 'No rows match your search.'}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -626,10 +590,6 @@ export default function CmMealUserRolesTab({
               </div>
             ) : null}
             <div className="space-y-1">
-              <Label className="text-xs">KPI</Label>
-              <Input className="h-8 text-xs" value={draft.kpi} onChange={(e) => setDraft((p) => ({ ...p, kpi: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
               <Label className="text-xs">Job Title</Label>
               <Input className="h-8 text-xs" value={draft.job_title} onChange={(e) => setDraft((p) => ({ ...p, job_title: e.target.value }))} />
             </div>
@@ -637,33 +597,9 @@ export default function CmMealUserRolesTab({
               <Label className="text-xs">Responsibilities</Label>
               <Textarea rows={2} className="text-xs" value={draft.responsibilities} onChange={(e) => setDraft((p) => ({ ...p, responsibilities: e.target.value }))} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Tasks</Label>
-              <Textarea rows={2} className="text-xs" value={draft.tasks} onChange={(e) => setDraft((p) => ({ ...p, tasks: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">% of Workload</Label>
-              <Input
-                className="h-8 text-xs"
-                type="number"
-                min={0.01}
-                max={100.99}
-                step="0.01"
-                inputMode="decimal"
-                value={draft.workload_percent}
-                onChange={(e) => setDraft((p) => ({ ...p, workload_percent: e.target.value }))}
-              />
-              <p className="text-[10px] text-muted-foreground">Must be greater than 0 and less than 101.</p>
-            </div>
-            <SkillsEditor
-              label="Technical skills"
-              skills={draft.technical_skills}
-              onChange={(technical_skills) => setDraft((p) => ({ ...p, technical_skills }))}
-            />
-            <SkillsEditor
-              label="Soft skills"
-              skills={draft.soft_skills}
-              onChange={(soft_skills) => setDraft((p) => ({ ...p, soft_skills }))}
+            <TaskItemsEditor
+              items={draft.task_items}
+              onChange={(task_items) => setDraft((p) => ({ ...p, task_items }))}
             />
           </div>
           <DialogFooter>

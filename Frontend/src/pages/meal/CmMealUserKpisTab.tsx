@@ -11,11 +11,9 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Loader2, Plus, RefreshCw, Search, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -65,20 +63,28 @@ import {
   showEmployeeScopeFilter,
   userIdFromUser,
 } from '@/config/cmMealUserKpiAccess';
+import { getKpiItems, rowSearchText, formatNumber } from './cmMealUserKpiItems';
+import {
+  KpiItemsEditor,
+  KpiItemsTableCells,
+  draftItemsFromRow,
+  emptyDraftKpiItem,
+  parseDraftKpiItems,
+  type DraftKpiItem,
+} from './CmMealUserKpiItemsEditor';
 
 const FILTER_STORAGE_KEY = 'cm-meal-user-kpis-table-filters';
 const COLUMN_WIDTHS_STORAGE_KEY = 'cm-meal-user-kpis-column-widths';
 
 const DEFAULT_COLUMN_WIDTHS = {
   employee: 140,
-  kpi: 170,
   activity: 210,
-  target: 90,
-  actual: 90,
-  difference: 95,
   start_date: 100,
   end_date: 100,
-  notes: 200,
+  kpi: 160,
+  target: 80,
+  actual: 80,
+  notes: 160,
 } as const;
 
 type DataColumnKey = keyof typeof DEFAULT_COLUMN_WIDTHS;
@@ -91,30 +97,23 @@ type Props = {
   employeeScope: 'all' | number;
   onEmployeeScopeChange: (scope: 'all' | number) => void;
   onRowsChange?: (rows: CmMealUserKpiRow[]) => void;
-  roleKpiOptions?: { value: string; label: string; userId: number }[];
 };
 
 type DraftRow = {
   user_id: string;
-  kpi: string;
   activity: string;
-  target: string;
-  actual: string;
   start_date: string;
   end_date: string;
-  notes: string;
+  kpi_items: DraftKpiItem[];
 };
 
 function emptyDraft(defaultUserId: string): DraftRow {
   return {
     user_id: defaultUserId,
-    kpi: '',
     activity: '',
-    target: '',
-    actual: '',
     start_date: '',
     end_date: '',
-    notes: '',
+    kpi_items: [emptyDraftKpiItem()],
   };
 }
 
@@ -128,16 +127,13 @@ function formatDate(value: string | null | undefined): string {
   return normalizeDate(value) ?? '—';
 }
 
-function formatNumber(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return '—';
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
-function rowDifference(row: CmMealUserKpiRow): number | null {
-  if (row.difference != null) return row.difference;
-  if (row.target == null || row.actual == null) return null;
-  return row.target - row.actual;
+function kpiColumnFilterText(row: CmMealUserKpiRow, field: 'kpi' | 'target' | 'actual' | 'notes'): string {
+  const items = getKpiItems(row);
+  if (!items.length) return '—';
+  if (field === 'kpi') return items.map((i) => i.kpi.trim() || '—').join(', ');
+  if (field === 'target') return items.map((i) => formatNumber(i.target)).join(', ');
+  if (field === 'actual') return items.map((i) => formatNumber(i.actual)).join(', ');
+  return items.map((i) => i.notes?.trim() || '—').join(', ');
 }
 
 function loadColumnWidths(): Record<DataColumnKey, number> {
@@ -224,13 +220,10 @@ function matchesFilter(
 function draftFromRow(row: CmMealUserKpiRow): DraftRow {
   return {
     user_id: String(row.user_id),
-    kpi: row.kpi ?? '',
     activity: row.activity,
-    target: row.target == null ? '' : String(row.target),
-    actual: row.actual == null ? '' : String(row.actual),
     start_date: normalizeDate(row.start_date) ?? '',
     end_date: normalizeDate(row.end_date) ?? '',
-    notes: row.notes ?? '',
+    kpi_items: draftItemsFromRow(getKpiItems(row)),
   };
 }
 
@@ -266,7 +259,7 @@ function SortableKpiRow({
   };
 
   return (
-    <TableRow ref={setNodeRef} style={style} className={isDragging ? 'bg-muted/40' : undefined}>
+    <TableRow ref={setNodeRef} style={style} className={cn(isDragging && 'bg-muted/40', 'group')}>
       <TableCell className="w-9 p-1 align-top">
         {canReorder && canWrite ? (
           <button
@@ -291,45 +284,27 @@ function SortableKpiRow({
           <BidirectionalText className="text-xs">{row.username?.trim() || row.user_id}</BidirectionalText>
         </TableCell>
       ) : null}
-      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.kpi)}>
-        {row.kpi?.trim() ? (
-          <Badge variant="outline" className="text-xs font-normal">
-            <BidirectionalText>{row.kpi}</BidirectionalText>
-          </Badge>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+      <TableCell className="align-top border-r border-border/50 bg-muted/[0.06] group-hover:bg-muted/10" style={colWidthStyle(columnWidths.activity)}>
+        <BidirectionalText className="text-xs font-medium whitespace-normal break-words text-foreground py-0.5 pr-1">
+          {row.activity || '—'}
+        </BidirectionalText>
       </TableCell>
-      <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.activity)}>
-        <BidirectionalText className="text-xs whitespace-normal break-words">{row.activity || '—'}</BidirectionalText>
-      </TableCell>
-      <TableCell
-        className="align-top border-r border-border/50 text-right tabular-nums text-xs"
-        style={colWidthStyle(columnWidths.target)}
-      >
-        {formatNumber(row.target)}
-      </TableCell>
-      <TableCell
-        className="align-top border-r border-border/50 text-right tabular-nums text-xs"
-        style={colWidthStyle(columnWidths.actual)}
-      >
-        {formatNumber(row.actual)}
-      </TableCell>
-      <TableCell
-        className="align-top border-r border-border/50 text-right tabular-nums text-xs text-muted-foreground"
-        style={colWidthStyle(columnWidths.difference)}
-      >
-        {formatNumber(rowDifference(row))}
-      </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs tabular-nums" style={colWidthStyle(columnWidths.start_date)}>
+      <TableCell className="align-top border-r border-border/50 text-xs tabular-nums bg-muted/[0.06] group-hover:bg-muted/10" style={colWidthStyle(columnWidths.start_date)}>
         {formatDate(row.start_date)}
       </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs tabular-nums" style={colWidthStyle(columnWidths.end_date)}>
+      <TableCell className="align-top border-r border-border/50 text-xs tabular-nums bg-muted/[0.06] group-hover:bg-muted/10" style={colWidthStyle(columnWidths.end_date)}>
         {formatDate(row.end_date)}
       </TableCell>
-      <TableCell className="align-top border-r border-border/50 text-xs whitespace-normal break-words" style={colWidthStyle(columnWidths.notes)}>
-        <BidirectionalText>{row.notes?.trim() || '—'}</BidirectionalText>
-      </TableCell>
+      <KpiItemsTableCells
+        items={getKpiItems(row)}
+        columnWidths={{
+          kpi: columnWidths.kpi,
+          target: columnWidths.target,
+          actual: columnWidths.actual,
+          notes: columnWidths.notes,
+        }}
+        colWidthStyle={colWidthStyle}
+      />
       <TableCell className="w-[4.5rem] align-top">
         {canWrite ? (
           <div className="flex items-center gap-1">
@@ -369,7 +344,6 @@ export default function CmMealUserKpisTab({
   employeeScope,
   onEmployeeScopeChange,
   onRowsChange,
-  roleKpiOptions = [],
 }: Props) {
   const user = useMemo(() => getCurrentUser(), []);
   const selfId = userIdFromUser(user);
@@ -481,44 +455,35 @@ export default function CmMealUserKpisTab({
     [employees, user, teamIds]
   );
 
-  const kpiOptionsForDraft = useMemo(() => {
-    const ownerId = Number.parseInt(draft.user_id, 10);
-    if (!ownerId) return roleKpiOptions;
-    return roleKpiOptions.filter((o) => o.userId === ownerId);
-  }, [roleKpiOptions, draft.user_id]);
-
   const uniqueValues = useMemo(() => {
     const employee = new Set<string>();
-    const kpi = new Set<string>();
     const activity = new Set<string>();
-    const target = new Set<string>();
-    const actual = new Set<string>();
-    const difference = new Set<string>();
     const startDate = new Set<string>();
     const endDate = new Set<string>();
+    const kpi = new Set<string>();
+    const target = new Set<string>();
+    const actual = new Set<string>();
     const notes = new Set<string>();
 
     for (const row of rows) {
       employee.add(row.username?.trim() || String(row.user_id));
-      kpi.add(row.kpi?.trim() || '—');
       activity.add(row.activity?.trim() || '—');
-      target.add(formatNumber(row.target));
-      actual.add(formatNumber(row.actual));
-      difference.add(formatNumber(rowDifference(row)));
       startDate.add(formatDate(row.start_date));
       endDate.add(formatDate(row.end_date));
-      notes.add(row.notes?.trim() || '—');
+      kpi.add(kpiColumnFilterText(row, 'kpi'));
+      target.add(kpiColumnFilterText(row, 'target'));
+      actual.add(kpiColumnFilterText(row, 'actual'));
+      notes.add(kpiColumnFilterText(row, 'notes'));
     }
 
     return {
       employee: [...employee].sort(),
-      kpi: [...kpi].sort(),
       activity: [...activity].sort(),
-      target: [...target].sort(),
-      actual: [...actual].sort(),
-      difference: [...difference].sort(),
       start_date: [...startDate].sort(),
       end_date: [...endDate].sort(),
+      kpi: [...kpi].sort(),
+      target: [...target].sort(),
+      actual: [...actual].sort(),
       notes: [...notes].sort(),
     };
   }, [rows]);
@@ -527,39 +492,23 @@ export default function CmMealUserKpisTab({
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
       const employeeText = row.username?.trim() || String(row.user_id);
-      const kpiText = row.kpi?.trim() || '—';
       const activityText = row.activity?.trim() || '—';
-      const targetText = formatNumber(row.target);
-      const actualText = formatNumber(row.actual);
-      const diffNum = rowDifference(row);
-      const differenceText = formatNumber(diffNum);
       const startDateText = formatDate(row.start_date);
       const endDateText = formatDate(row.end_date);
-      const notesText = row.notes?.trim() || '—';
+      const kpiText = kpiColumnFilterText(row, 'kpi');
+      const targetText = kpiColumnFilterText(row, 'target');
+      const actualText = kpiColumnFilterText(row, 'actual');
+      const notesText = kpiColumnFilterText(row, 'notes');
 
-      if (
-        q &&
-        !employeeText.toLowerCase().includes(q) &&
-        !kpiText.toLowerCase().includes(q) &&
-        !activityText.toLowerCase().includes(q) &&
-        !targetText.toLowerCase().includes(q) &&
-        !actualText.toLowerCase().includes(q) &&
-        !differenceText.toLowerCase().includes(q) &&
-        !startDateText.toLowerCase().includes(q) &&
-        !endDateText.toLowerCase().includes(q) &&
-        !notesText.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
+      if (q && !rowSearchText(row).includes(q)) return false;
 
       if (showEmployeeColumn && !matchesFilter(filterState, 'employee', employeeText, 'text')) return false;
-      if (!matchesFilter(filterState, 'kpi', kpiText, 'text')) return false;
       if (!matchesFilter(filterState, 'activity', activityText, 'text')) return false;
-      if (!matchesFilter(filterState, 'target', targetText, 'number', row.target)) return false;
-      if (!matchesFilter(filterState, 'actual', actualText, 'number', row.actual)) return false;
-      if (!matchesFilter(filterState, 'difference', differenceText, 'number', diffNum)) return false;
       if (!matchesFilter(filterState, 'start_date', startDateText, 'date')) return false;
       if (!matchesFilter(filterState, 'end_date', endDateText, 'date')) return false;
+      if (!matchesFilter(filterState, 'kpi', kpiText, 'text')) return false;
+      if (!matchesFilter(filterState, 'target', targetText, 'text')) return false;
+      if (!matchesFilter(filterState, 'actual', actualText, 'text')) return false;
       if (!matchesFilter(filterState, 'notes', notesText, 'text')) return false;
 
       return true;
@@ -581,29 +530,16 @@ export default function CmMealUserKpisTab({
       toast({ title: 'Activity is required', variant: 'destructive' });
       return;
     }
-    const kpi = draft.kpi.trim();
-    if (!kpi) {
-      toast({ title: 'KPI is required', description: 'Choose a KPI from Roles & Responsibilities.', variant: 'destructive' });
-      return;
-    }
 
-    const target = draft.target.trim() === '' ? null : Number(draft.target);
-    const actual = draft.actual.trim() === '' ? null : Number(draft.actual);
-    if (draft.target.trim() !== '' && Number.isNaN(target)) {
-      toast({ title: 'Target must be a number', variant: 'destructive' });
-      return;
-    }
-    if (draft.actual.trim() !== '' && Number.isNaN(actual)) {
-      toast({ title: 'Actual must be a number', variant: 'destructive' });
+    const parsedItems = parseDraftKpiItems(draft.kpi_items);
+    if ('error' in parsedItems) {
+      toast({ title: parsedItems.error, variant: 'destructive' });
       return;
     }
 
     const payload = {
-      kpi,
       activity,
-      target,
-      actual,
-      notes: draft.notes.trim() || null,
+      kpi_items: parsedItems,
       start_date: normalizeDate(draft.start_date),
       end_date: normalizeDate(draft.end_date),
     };
@@ -611,28 +547,18 @@ export default function CmMealUserKpisTab({
     if (editingRow) {
       if (!canWriteForRow(editingRow)) return;
 
-      const previousRows = rows;
-      const optimisticRows = rows.map((r) => (r.id === editingRow.id ? { ...r, ...payload } : r));
-
       setSavingForm(true);
       try {
-        if (onRowsChange) onRowsChange(optimisticRows);
-        const updated = await updateCmMealUserKpiRow(editingRow.id, payload);
-        if (onRowsChange) {
-          onRowsChange(optimisticRows.map((r) => (r.id === updated.id ? updated : r)));
-        } else {
-          await onReload();
-        }
+        await updateCmMealUserKpiRow(editingRow.id, payload);
+        await onReload();
         closeForm();
-        toast({ title: 'KPI updated' });
+        toast({ title: 'Saved' });
       } catch (e) {
-        if (onRowsChange) onRowsChange(previousRows);
         toast({
-          title: 'Could not update KPI',
+          title: 'Could not save',
           description: e instanceof Error ? e.message : 'Request failed',
           variant: 'destructive',
         });
-        if (!onRowsChange) await onReload();
       } finally {
         setSavingForm(false);
       }
@@ -647,23 +573,18 @@ export default function CmMealUserKpisTab({
 
     setSavingForm(true);
     try {
-      const created = await createCmMealUserKpiRow({
+      await createCmMealUserKpiRow({
         user_id: ownerId,
         ...payload,
         responsible: null,
       });
 
-      if (onRowsChange) {
-        onRowsChange([...rows, created]);
-      } else {
-        await onReload();
-      }
-
+      await onReload();
       closeForm();
-      toast({ title: 'KPI added' });
+      toast({ title: 'Saved' });
     } catch (e) {
       toast({
-        title: 'Could not add KPI',
+        title: 'Could not save',
         description: e instanceof Error ? e.message : 'Request failed',
         variant: 'destructive',
       });
@@ -732,7 +653,7 @@ export default function CmMealUserKpisTab({
     }
   };
 
-  const colCount = 2 + (showEmployeeColumn ? 1 : 0) + 8 + 1;
+  const colCount = 2 + (showEmployeeColumn ? 1 : 0) + 7 + 1;
 
   return (
     <Card className="text-xs">
@@ -826,24 +747,6 @@ export default function CmMealUserKpisTab({
                         </div>
                       </ResizableTableHead>
                     ) : null}
-                    <ResizableTableHead columnKey="kpi" width={columnWidths.kpi} onResizeStart={handleResizeStart}>
-                      <div className="flex items-center gap-1 pr-1">
-                        KPI
-                        <ColumnFilter
-                          columnKey="kpi"
-                          columnLabel="KPI"
-                          filterId="cm-user-kpi-kpi"
-                          columnType="text"
-                          uniqueValues={uniqueValues.kpi}
-                          selectedValues={getListSelected(filterState, 'kpi')}
-                          onListChange={(v) => updateListFilter('kpi', v)}
-                          condition={getCondition(filterState, 'kpi')}
-                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, kpi: { mode: 'condition', ...c } }))}
-                          openFilterId={openFilterId}
-                          onOpenFilterChange={setOpenFilterId}
-                        />
-                      </div>
-                    </ResizableTableHead>
                     <ResizableTableHead columnKey="activity" width={columnWidths.activity} onResizeStart={handleResizeStart}>
                       <div className="flex items-center gap-1 pr-1">
                         Activity
@@ -857,60 +760,6 @@ export default function CmMealUserKpisTab({
                           onListChange={(v) => updateListFilter('activity', v)}
                           condition={getCondition(filterState, 'activity')}
                           onConditionChange={(c) => setFilterState((prev) => ({ ...prev, activity: { mode: 'condition', ...c } }))}
-                          openFilterId={openFilterId}
-                          onOpenFilterChange={setOpenFilterId}
-                        />
-                      </div>
-                    </ResizableTableHead>
-                    <ResizableTableHead columnKey="target" width={columnWidths.target} onResizeStart={handleResizeStart}>
-                      <div className="flex items-center gap-1 pr-1">
-                        Target
-                        <ColumnFilter
-                          columnKey="target"
-                          columnLabel="Target"
-                          filterId="cm-user-kpi-target"
-                          columnType="number"
-                          uniqueValues={uniqueValues.target}
-                          selectedValues={getListSelected(filterState, 'target')}
-                          onListChange={(v) => updateListFilter('target', v)}
-                          condition={getCondition(filterState, 'target')}
-                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, target: { mode: 'condition', ...c } }))}
-                          openFilterId={openFilterId}
-                          onOpenFilterChange={setOpenFilterId}
-                        />
-                      </div>
-                    </ResizableTableHead>
-                    <ResizableTableHead columnKey="actual" width={columnWidths.actual} onResizeStart={handleResizeStart}>
-                      <div className="flex items-center gap-1 pr-1">
-                        Actual
-                        <ColumnFilter
-                          columnKey="actual"
-                          columnLabel="Actual"
-                          filterId="cm-user-kpi-actual"
-                          columnType="number"
-                          uniqueValues={uniqueValues.actual}
-                          selectedValues={getListSelected(filterState, 'actual')}
-                          onListChange={(v) => updateListFilter('actual', v)}
-                          condition={getCondition(filterState, 'actual')}
-                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, actual: { mode: 'condition', ...c } }))}
-                          openFilterId={openFilterId}
-                          onOpenFilterChange={setOpenFilterId}
-                        />
-                      </div>
-                    </ResizableTableHead>
-                    <ResizableTableHead columnKey="difference" width={columnWidths.difference} onResizeStart={handleResizeStart}>
-                      <div className="flex items-center gap-1 pr-1">
-                        Difference
-                        <ColumnFilter
-                          columnKey="difference"
-                          columnLabel="Difference"
-                          filterId="cm-user-kpi-difference"
-                          columnType="number"
-                          uniqueValues={uniqueValues.difference}
-                          selectedValues={getListSelected(filterState, 'difference')}
-                          onListChange={(v) => updateListFilter('difference', v)}
-                          condition={getCondition(filterState, 'difference')}
-                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, difference: { mode: 'condition', ...c } }))}
                           openFilterId={openFilterId}
                           onOpenFilterChange={setOpenFilterId}
                         />
@@ -947,6 +796,60 @@ export default function CmMealUserKpisTab({
                           onListChange={(v) => updateListFilter('end_date', v)}
                           condition={getCondition(filterState, 'end_date')}
                           onConditionChange={(c) => setFilterState((prev) => ({ ...prev, end_date: { mode: 'condition', ...c } }))}
+                          openFilterId={openFilterId}
+                          onOpenFilterChange={setOpenFilterId}
+                        />
+                      </div>
+                    </ResizableTableHead>
+                    <ResizableTableHead columnKey="kpi" width={columnWidths.kpi} onResizeStart={handleResizeStart}>
+                      <div className="flex items-center gap-1 pr-1">
+                        KPI
+                        <ColumnFilter
+                          columnKey="kpi"
+                          columnLabel="KPI"
+                          filterId="cm-user-kpi-kpi"
+                          columnType="text"
+                          uniqueValues={uniqueValues.kpi}
+                          selectedValues={getListSelected(filterState, 'kpi')}
+                          onListChange={(v) => updateListFilter('kpi', v)}
+                          condition={getCondition(filterState, 'kpi')}
+                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, kpi: { mode: 'condition', ...c } }))}
+                          openFilterId={openFilterId}
+                          onOpenFilterChange={setOpenFilterId}
+                        />
+                      </div>
+                    </ResizableTableHead>
+                    <ResizableTableHead columnKey="target" width={columnWidths.target} onResizeStart={handleResizeStart}>
+                      <div className="flex items-center gap-1 pr-1">
+                        Target
+                        <ColumnFilter
+                          columnKey="target"
+                          columnLabel="Target"
+                          filterId="cm-user-kpi-target"
+                          columnType="text"
+                          uniqueValues={uniqueValues.target}
+                          selectedValues={getListSelected(filterState, 'target')}
+                          onListChange={(v) => updateListFilter('target', v)}
+                          condition={getCondition(filterState, 'target')}
+                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, target: { mode: 'condition', ...c } }))}
+                          openFilterId={openFilterId}
+                          onOpenFilterChange={setOpenFilterId}
+                        />
+                      </div>
+                    </ResizableTableHead>
+                    <ResizableTableHead columnKey="actual" width={columnWidths.actual} onResizeStart={handleResizeStart}>
+                      <div className="flex items-center gap-1 pr-1">
+                        Actual
+                        <ColumnFilter
+                          columnKey="actual"
+                          columnLabel="Actual"
+                          filterId="cm-user-kpi-actual"
+                          columnType="text"
+                          uniqueValues={uniqueValues.actual}
+                          selectedValues={getListSelected(filterState, 'actual')}
+                          onListChange={(v) => updateListFilter('actual', v)}
+                          condition={getCondition(filterState, 'actual')}
+                          onConditionChange={(c) => setFilterState((prev) => ({ ...prev, actual: { mode: 'condition', ...c } }))}
                           openFilterId={openFilterId}
                           onOpenFilterChange={setOpenFilterId}
                         />
@@ -1018,9 +921,9 @@ export default function CmMealUserKpisTab({
           else setFormOpen(true);
         }}
       >
-        <DialogContent className="text-xs">
+        <DialogContent className="text-xs max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-sm">{editingRow ? 'Edit KPI' : 'Add KPI'}</DialogTitle>
+            <DialogTitle className="text-sm">{editingRow ? 'Edit activity' : 'Add activity'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
             {editingRow ? (
@@ -1053,70 +956,12 @@ export default function CmMealUserKpisTab({
               </div>
             ) : null}
             <div className="space-y-1">
-              <Label className="text-xs">KPI</Label>
-              {kpiOptionsForDraft.length > 0 ? (
-                <Select
-                  value={draft.kpi || '__none__'}
-                  onValueChange={(v) => setDraft((prev) => ({ ...prev, kpi: v === '__none__' ? '' : v }))}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select KPI from roles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— Select KPI —</SelectItem>
-                    {editingRow?.kpi?.trim() &&
-                    !kpiOptionsForDraft.some((o) => o.value === editingRow.kpi?.trim()) ? (
-                      <SelectItem value={editingRow.kpi.trim()}>{editingRow.kpi.trim()}</SelectItem>
-                    ) : null}
-                    {kpiOptionsForDraft.map((o) => (
-                      <SelectItem key={`${o.userId}-${o.value}`} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <>
-                  <Input
-                    className="h-8 text-xs"
-                    value={draft.kpi}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, kpi: e.target.value }))}
-                    disabled
-                    placeholder="Add roles in Roles & Responsibilities first"
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Define KPIs in the Roles & Responsibilities tab for this employee first.
-                  </p>
-                </>
-              )}
-            </div>
-            <div className="space-y-1">
               <Label className="text-xs">Activity</Label>
               <Input
                 className="h-8 text-xs"
                 value={draft.activity}
                 onChange={(e) => setDraft((prev) => ({ ...prev, activity: e.target.value }))}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Target</Label>
-                <Input
-                  className="h-8 text-xs"
-                  inputMode="decimal"
-                  value={draft.target}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, target: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Actual</Label>
-                <Input
-                  className="h-8 text-xs"
-                  inputMode="decimal"
-                  value={draft.actual}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, actual: e.target.value }))}
-                />
-              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -1138,15 +983,10 @@ export default function CmMealUserKpisTab({
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Notes</Label>
-              <Textarea
-                rows={3}
-                className="text-xs"
-                value={draft.notes}
-                onChange={(e) => setDraft((prev) => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
+            <KpiItemsEditor
+              items={draft.kpi_items}
+              onChange={(kpi_items) => setDraft((prev) => ({ ...prev, kpi_items }))}
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={closeForm}>

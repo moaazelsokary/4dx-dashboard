@@ -142,52 +142,6 @@ export default function CmMealUserKpisSection() {
 
 
 
-  const roleKpiOptions = useMemo(() => {
-
-    const ownerId =
-
-      employeeScope === 'all'
-
-        ? null
-
-        : employeeScope;
-
-    const scoped = ownerId == null ? roleRows : roleRows.filter((r) => r.user_id === ownerId);
-
-    const seen = new Set<string>();
-
-    const out: { value: string; label: string; userId: number }[] = [];
-
-    for (const r of scoped) {
-
-      const kpi = r.kpi?.trim();
-
-      if (!kpi) continue;
-
-      const key = `${r.user_id}|${kpi}`;
-
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-
-      out.push({
-
-        value: kpi,
-
-        label: employeeScope === 'all' && r.username ? `${r.username} · ${kpi}` : kpi,
-
-        userId: r.user_id,
-
-      });
-
-    }
-
-    return out;
-
-  }, [roleRows, employeeScope]);
-
-
-
   const setView = (view: ViewTab) => {
 
     const next = new URLSearchParams(searchParams);
@@ -239,8 +193,6 @@ export default function CmMealUserKpisSection() {
           onEmployeeScopeChange={setEmployeeScope}
 
           onRowsChange={setRows}
-
-          roleKpiOptions={roleKpiOptions}
 
         />
 
