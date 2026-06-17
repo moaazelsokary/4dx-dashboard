@@ -2,6 +2,7 @@
 import type { User } from '@/services/authService';
 import { getEffectivePowerbiDashboardIds } from '@/services/authService';
 import type { PowerbiDashboardRecord } from '@/types/config';
+import { isCmMealEmployeeRole } from '@/config/userRoles';
 
 export interface DashboardConfig {
   id: string;
@@ -107,6 +108,7 @@ export const getAccessibleDashboards = (
   userDepartments: string[],
   catalog: DashboardConfig[] = getPowerbiRoutingCatalog()
 ): DashboardConfig[] => {
+  if (isCmMealEmployeeRole(userRole)) return [];
   return catalog.filter((dashboard) => canAccessDashboard(dashboard, userRole, userDepartments));
 };
 
@@ -121,6 +123,9 @@ export const hasPowerBIAccess = (
 export function hasPowerBINavigationAccess(user: User, catalog?: DashboardConfig[]): boolean {
   const cat = catalog ?? getPowerbiRoutingCatalog();
   const ids = getEffectivePowerbiDashboardIds(user);
+  if (isCmMealEmployeeRole(user.role)) {
+    return Array.isArray(ids) && ids.length > 0;
+  }
   if (ids === null || ids === undefined) {
     return hasPowerBIAccess(user.role, user.departments || [], cat);
   }

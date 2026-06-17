@@ -386,7 +386,11 @@ export default function UserForm({
                     }
                     if (String(v).toLowerCase() === 'case worker') {
                       setDefaultRoute('/main-plan/refugees/case-story');
-                    } else if (isCmMealEmployeeRole(v) || isCmMealManagerRole(v)) {
+                    } else if (isCmMealEmployeeRole(v)) {
+                      setDefaultRoute(CM_MEAL_USER_KPI_DEFAULT_ROUTE);
+                      setPbiInherit(false);
+                      setSelectedPbi([]);
+                    } else if (isCmMealManagerRole(v)) {
                       setDefaultRoute(CM_MEAL_USER_KPI_DEFAULT_ROUTE);
                     }
                   }}
@@ -627,6 +631,11 @@ export default function UserForm({
                     </label>
                   </div>
                 </div>
+                {isCmMealEmployeeRole(role) && pbiInherit ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    CM &amp; MEAL employees have no Power BI access by default. Turn off inherit and select dashboards to grant access.
+                  </p>
+                ) : null}
                 {!pbiInherit && (
                   <>
                     <p className="text-[10px] text-muted-foreground">
