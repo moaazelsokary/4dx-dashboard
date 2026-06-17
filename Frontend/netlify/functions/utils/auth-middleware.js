@@ -6,7 +6,7 @@
 const jwt = require('jsonwebtoken');
 const logger = require('./logger');
 const { collectJwtSecrets } = require('./jwt-secrets.cjs');
-const { isDepartmentTopicRole, isDepartmentLikeRole, isTopicLikeRole } = require('./user-roles.cjs');
+const { isDepartmentTopicRole, isDepartmentLikeRole, isTopicLikeRole, isCmMealEmployeeRole, isCmMealManagerRole, isCmMealProjectRole } = require('./user-roles.cjs');
 
 /**
  * Extract JWT token from Authorization header
@@ -156,6 +156,16 @@ function hasPermission(user, resource, action) {
   /** M&E staff: read-only WIG/MEAL APIs (validation proxy uses action read). */
   if (roleNorm === 'm&e') {
     return action === 'read';
+  }
+
+  /** CM & MEAL user KPI roles — handlers enforce row-level scope. */
+  if (isCmMealEmployeeRole(roleNorm) || isCmMealManagerRole(roleNorm) || isCmMealProjectRole(roleNorm)) {
+    return action === 'read' || action === 'create' || action === 'update' || action === 'delete';
+  }
+
+  const routes = user.allowedRoutes ?? user.allowed_routes;
+  if (Array.isArray(routes) && routes.some((p) => String(p).split('?')[0] === '/cm-meal-kpis')) {
+    return action === 'read' || action === 'create' || action === 'update' || action === 'delete';
   }
 
   return false;

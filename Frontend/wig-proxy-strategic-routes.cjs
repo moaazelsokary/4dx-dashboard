@@ -475,9 +475,13 @@ module.exports = function registerStrategicWigRoutes(app, { sql, getPool, setNoC
     const decoded = decodeWigUser(req, jwt);
     if (!decoded) return null;
     const rawRole = String(decoded.role ?? decoded.Role ?? '').trim();
+    const roleLower = rawRole.toLowerCase();
     let roleOut = rawRole;
-    if (rawRole.toLowerCase() === 'topic') roleOut = 'topic';
-    else if (rawRole.toLowerCase() === 'cm-meal-project') roleOut = 'cm-meal-project';
+    if (roleLower === 'topic') roleOut = 'topic';
+    else if (roleLower === 'department-topic') roleOut = 'department-topic';
+    else if (roleLower === 'cm-meal-project') roleOut = 'cm-meal-project';
+    else if (roleLower === 'cm-meal-employee') roleOut = 'cm-meal-employee';
+    else if (roleLower === 'cm-meal-manager') roleOut = 'cm-meal-manager';
     const cmMealProjects =
       decoded.cmMealProjects ??
       decoded.cm_meal_projects ??
