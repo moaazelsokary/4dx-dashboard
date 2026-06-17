@@ -48,6 +48,10 @@ export function isCmMealManagerRole(role: string | null | undefined): boolean {
   return normalizeUserRole(role) === 'cm-meal-manager';
 }
 
+export function isCmMealManagedMemberRole(role: string | null | undefined): boolean {
+  return isCmMealEmployeeRole(role) || isCmMealManagerRole(role);
+}
+
 export function roleRequiresCmMealProjects(role: string | null | undefined): boolean {
   return isCmMealProjectRole(role) || isCmMealManagerRole(role);
 }

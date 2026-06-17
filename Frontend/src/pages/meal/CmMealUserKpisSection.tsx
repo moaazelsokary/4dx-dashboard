@@ -188,6 +188,8 @@ export default function CmMealUserKpisSection() {
 
           employees={employees}
 
+          roleRows={roleRows}
+
           employeeScope={employeeScope}
 
           onEmployeeScopeChange={setEmployeeScope}

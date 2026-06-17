@@ -19,6 +19,10 @@ function isCmMealManagerRole(role) {
   return normalizeRole(role) === ROLE_CM_MEAL_MANAGER;
 }
 
+function isCmMealManagedMemberRole(role) {
+  return isCmMealEmployeeRole(role) || isCmMealManagerRole(role);
+}
+
 function isCmMealUserKpiAdminLike(role) {
   return isMealRole(role);
 }
@@ -34,6 +38,7 @@ module.exports = {
   ROLE_CM_MEAL_MANAGER,
   isCmMealEmployeeRole,
   isCmMealManagerRole,
+  isCmMealManagedMemberRole,
   isCmMealUserKpiAdminLike,
   userIdFromUser,
 };

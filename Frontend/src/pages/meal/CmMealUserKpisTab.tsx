@@ -56,7 +56,7 @@ import {
   updateCmMealUserKpiRow,
   updateCmMealUserKpiRowsOrder,
 } from '@/services/wigService';
-import type { CmMealUserKpiRow, CmMealUserKpiTeamMember } from '@/types/wig';
+import type { CmMealUserKpiRow, CmMealUserKpiTeamMember, CmMealUserRoleRow } from '@/types/wig';
 import {
   canWriteCmMealUserKpiForTarget,
   isCmMealManagerRole,
@@ -72,6 +72,7 @@ import {
   parseDraftKpiItems,
   type DraftKpiItem,
 } from './CmMealUserKpiItemsEditor';
+import { responsibilityOptionsForUser } from './cmMealRoleResponsibilities';
 
 const FILTER_STORAGE_KEY = 'cm-meal-user-kpis-table-filters';
 const COLUMN_WIDTHS_STORAGE_KEY = 'cm-meal-user-kpis-column-widths';
@@ -94,6 +95,7 @@ type Props = {
   loading: boolean;
   onReload: () => Promise<void>;
   employees: CmMealUserKpiTeamMember[];
+  roleRows: CmMealUserRoleRow[];
   employeeScope: 'all' | number;
   onEmployeeScopeChange: (scope: 'all' | number) => void;
   onRowsChange?: (rows: CmMealUserKpiRow[]) => void;
@@ -341,6 +343,7 @@ export default function CmMealUserKpisTab({
   loading,
   onReload,
   employees,
+  roleRows,
   employeeScope,
   onEmployeeScopeChange,
   onRowsChange,
@@ -374,6 +377,17 @@ export default function CmMealUserKpisTab({
   }, [employeeScope, selfId, employees]);
 
   const [draft, setDraft] = useState<DraftRow>(() => emptyDraft(defaultAddUserId));
+
+  const formUserId = useMemo(() => {
+    if (editingRow) return editingRow.user_id;
+    const id = Number.parseInt(draft.user_id, 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }, [editingRow, draft.user_id]);
+
+  const responsibilityOptions = useMemo(() => {
+    if (!formUserId) return [];
+    return responsibilityOptionsForUser(roleRows, formUserId, draft.activity.trim() || undefined);
+  }, [roleRows, formUserId, draft.activity]);
 
   useEffect(() => {
     setDraft((prev) => (prev.user_id ? prev : emptyDraft(defaultAddUserId)));
@@ -527,7 +541,15 @@ export default function CmMealUserKpisTab({
   const handleFormSave = async () => {
     const activity = draft.activity.trim();
     if (!activity) {
-      toast({ title: 'Activity is required', variant: 'destructive' });
+      toast({ title: 'Responsibility is required', variant: 'destructive' });
+      return;
+    }
+    if (formUserId && responsibilityOptions.length === 0) {
+      toast({
+        title: 'No responsibilities defined',
+        description: 'Add responsibilities in Roles & Responsibilities for this employee first.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -749,10 +771,10 @@ export default function CmMealUserKpisTab({
                     ) : null}
                     <ResizableTableHead columnKey="activity" width={columnWidths.activity} onResizeStart={handleResizeStart}>
                       <div className="flex items-center gap-1 pr-1">
-                        Activity
+                        Responsibility
                         <ColumnFilter
                           columnKey="activity"
-                          columnLabel="Activity"
+                          columnLabel="Responsibility"
                           filterId="cm-user-kpi-activity"
                           columnType="text"
                           uniqueValues={uniqueValues.activity}
@@ -923,7 +945,7 @@ export default function CmMealUserKpisTab({
       >
         <DialogContent className="text-xs max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-sm">{editingRow ? 'Edit activity' : 'Add activity'}</DialogTitle>
+            <DialogTitle className="text-sm">{editingRow ? 'Edit KPI row' : 'Add KPI row'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
             {editingRow ? (
@@ -940,7 +962,17 @@ export default function CmMealUserKpisTab({
                 <Label className="text-xs">Employee</Label>
                 <Select
                   value={draft.user_id}
-                  onValueChange={(value) => setDraft((prev) => ({ ...prev, user_id: value }))}
+                  onValueChange={(value) => {
+                    const ownerId = Number.parseInt(value, 10);
+                    const opts = Number.isFinite(ownerId)
+                      ? responsibilityOptionsForUser(roleRows, ownerId)
+                      : [];
+                    setDraft((prev) => ({
+                      ...prev,
+                      user_id: value,
+                      activity: opts.includes(prev.activity.trim()) ? prev.activity : '',
+                    }));
+                  }}
                 >
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select employee" />
@@ -956,12 +988,28 @@ export default function CmMealUserKpisTab({
               </div>
             ) : null}
             <div className="space-y-1">
-              <Label className="text-xs">Activity</Label>
-              <Input
-                className="h-8 text-xs"
-                value={draft.activity}
-                onChange={(e) => setDraft((prev) => ({ ...prev, activity: e.target.value }))}
-              />
+              <Label className="text-xs">Responsibility</Label>
+              {responsibilityOptions.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground rounded-md border border-dashed border-border/60 px-2.5 py-2">
+                  No responsibilities for this employee yet. Add them under Roles &amp; Responsibilities first.
+                </p>
+              ) : (
+                <Select
+                  value={draft.activity || undefined}
+                  onValueChange={(value) => setDraft((prev) => ({ ...prev, activity: value }))}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select responsibility" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {responsibilityOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

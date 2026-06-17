@@ -49,6 +49,7 @@ import {
   roleRequiresCmMealManagedEmployees,
   isCmMealEmployeeRole,
   isCmMealManagerRole,
+  isCmMealManagedMemberRole,
 } from '@/config/userRoles';
 import { CM_MEAL_USER_KPI_DEFAULT_ROUTE } from '@/config/cmMealUserKpiAccess';
 import {
@@ -144,10 +145,10 @@ export default function UserForm({
     staleTime: 60_000,
   });
 
-  const cmMealEmployeeOptions = useMemo(
+  const cmMealManagedMemberOptions = useMemo(
     () =>
       allAccounts.filter(
-        (a) => a.is_active && isCmMealEmployeeRole(a.role) && a.id !== account?.id
+        (a) => a.is_active && isCmMealManagedMemberRole(a.role) && a.id !== account?.id
       ),
     [allAccounts, account?.id]
   );
@@ -482,36 +483,41 @@ export default function UserForm({
               )}
               {roleRequiresCmMealManagedEmployees(role) && (
                 <div className="space-y-2 rounded-md border border-border p-3">
-                  <Label>Managed employees</Label>
+                  <Label>Managed team</Label>
                   {accountsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground min-h-11">
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      Loading employees…
+                      Loading team members…
                     </div>
-                  ) : cmMealEmployeeOptions.length === 0 ? (
+                  ) : cmMealManagedMemberOptions.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      No active users with the cm-meal-employee role yet.
+                      No active CM & MEAL employees or managers to assign yet.
                     </p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                      {cmMealEmployeeOptions.map((emp) => (
-                        <label key={emp.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      {cmMealManagedMemberOptions.map((member) => (
+                        <label key={member.id} className="flex items-center gap-2 text-sm cursor-pointer">
                           <Checkbox
-                            checked={selectedManagedEmployees.includes(emp.id)}
+                            checked={selectedManagedEmployees.includes(member.id)}
                             onCheckedChange={(v) => {
                               setSelectedManagedEmployees((prev) => {
-                                if (v) return prev.includes(emp.id) ? prev : [...prev, emp.id];
-                                return prev.filter((id) => id !== emp.id);
+                                if (v) return prev.includes(member.id) ? prev : [...prev, member.id];
+                                return prev.filter((id) => id !== member.id);
                               });
                             }}
                           />
-                          {emp.username}
+                          <span>
+                            {member.username}
+                            {isCmMealManagerRole(member.role) ? (
+                              <span className="text-muted-foreground"> (Manager)</span>
+                            ) : null}
+                          </span>
                         </label>
                       ))}
                     </div>
                   )}
                   <p className="text-[10px] text-muted-foreground">
-                    Manager can view and edit KPI rows for selected employees on the Users KPIs tab.
+                    Manager can view and edit Users KPIs for selected employees and other managers.
                   </p>
                 </div>
               )}

@@ -237,7 +237,7 @@ export interface AccountUser {
   editable_strategic_topic?: string | null;
   /** Role `cm-meal-manager` (or legacy `cm-meal-project`): pipe-delimited project codes. */
   cm_meal_projects?: string | null;
-  /** Role `cm-meal-manager`: assigned employee user ids. */
+  /** Role `cm-meal-manager`: assigned employee/manager user ids for Users KPIs scope. */
   cm_meal_managed_employee_ids?: number[];
   avatar_key?: string | null;
   created_at?: string;

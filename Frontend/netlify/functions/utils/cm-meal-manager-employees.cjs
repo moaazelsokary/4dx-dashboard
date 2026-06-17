@@ -3,7 +3,7 @@
  */
 
 const sql = require('mssql');
-const { isCmMealManagerRole, isCmMealEmployeeRole } = require('./cm-meal-user-kpi-access.cjs');
+const { isCmMealManagerRole, isCmMealManagedMemberRole } = require('./cm-meal-user-kpi-access.cjs');
 
 async function getManagedEmployeeIds(pool, managerUserId) {
   const id = parseInt(String(managerUserId), 10);
@@ -39,8 +39,8 @@ async function replaceManagedEmployees(pool, managerUserId, employeeIds) {
       throw err;
     }
     for (const row of rows) {
-      if (!isCmMealEmployeeRole(row.role)) {
-        const err = new Error('Managed users must have cm-meal-employee role');
+      if (!isCmMealManagedMemberRole(row.role)) {
+        const err = new Error('Managed users must have cm-meal-employee or cm-meal-manager role');
         err.statusCode = 400;
         throw err;
       }

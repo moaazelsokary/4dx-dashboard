@@ -311,7 +311,7 @@ export default function CmMealUserKpisGantt({
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-xs text-xs">
                                   <div className="font-semibold">{bar.item.kpi || 'Untitled KPI'}</div>
-                                  <div className="text-muted-foreground">{bar.row.activity}</div>
+                                  <div className="text-muted-foreground">Responsibility: {bar.row.activity}</div>
                                   <div className="text-muted-foreground mt-1 space-y-0.5">
                                     {bar.row.username ? <div>Employee: {bar.row.username}</div> : null}
                                     <div>
@@ -346,7 +346,7 @@ export default function CmMealUserKpisGantt({
                 <p className="text-sm text-muted-foreground">
                   <span className="font-semibold text-foreground tabular-nums">{unscheduled.length}</span>
                   {' · '}
-                  activities need valid start and end dates before they appear on the timeline.
+                  responsibilities need valid start and end dates before they appear on the timeline.
                 </p>
               </div>
               <CollapsibleTrigger asChild>
