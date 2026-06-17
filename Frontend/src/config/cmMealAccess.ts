@@ -7,7 +7,7 @@ import {
   ROLE_CM_MEAL_PROJECT,
 } from '@/config/cmMealProjects';
 import { isMealRole } from '@/config/mealAccess';
-import { isCmMealManagerRole } from '@/config/userRoles';
+import { isCmMealEmployeeRole, isCmMealManagerRole } from '@/config/userRoles';
 
 export const CM_MEAL_KPIS_PATH = '/cm-meal-kpis';
 
@@ -30,6 +30,14 @@ export function canAccessCmMealKpis(user: User | null | undefined): boolean {
   if (!user) return false;
   if (isMealRole(user.role)) return true;
   if (isCmMealProjectScopedRole(user.role) && userCmMealProjectCodes(user).length > 0) return true;
+  // Employees and managers without assigned project pillars can open the Users KPIs tab,
+  // but must not see Project KPIs.
+  if (
+    (isCmMealEmployeeRole(user.role) || isCmMealManagerRole(user.role)) &&
+    userCmMealProjectCodes(user).length === 0
+  ) {
+    return false;
+  }
   const routes = user.allowedRoutes;
   if (routes != null && Array.isArray(routes)) {
     return routes.some((p) => {
