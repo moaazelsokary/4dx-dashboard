@@ -22,6 +22,12 @@ export interface MealLearningPoint {
   corrective_action: string | null;
   status: MealLearningPointStatus;
   end_date: string | null;
+  department_code: string | null;
+  department_codes?: string[];
+  attachment_url: string | null;
+  attachment_file_name: string | null;
+  attachment_mime_type: string | null;
+  has_attachment_file?: boolean;
   sort_order: number;
   activity_links: MealLearningActivityLink[];
   created_at?: string;
@@ -66,7 +72,7 @@ export function formatTopicsFromLinks(links: MealLearningActivityLink[]): string
   return [...topics].sort((a, b) => a.localeCompare(b)).join('\n');
 }
 
-/** Distinct department codes from linked activities. */
+/** Distinct department codes from linked activities (legacy display helper). */
 export function formatDepartmentsFromLinks(links: MealLearningActivityLink[]): string {
   const depts = new Set<string>();
   for (const l of links || []) {
@@ -79,6 +85,40 @@ export function formatDepartmentsFromLinks(links: MealLearningActivityLink[]): s
   }
   if (!depts.size) return '—';
   return [...depts].sort((a, b) => a.localeCompare(b)).join('\n');
+}
+
+export function formatLearningPointDepartment(
+  row: MealLearningPoint,
+  nameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const codes = row.department_codes?.length
+    ? row.department_codes
+    : row.department_code
+      ? [row.department_code]
+      : [];
+  if (!codes.length) return '—';
+
+  const lookup = (code: string): string => {
+    if (!nameByCode) return code;
+    if (nameByCode instanceof Map) {
+      return nameByCode.get(code) ?? nameByCode.get(code.toLowerCase()) ?? code;
+    }
+    return nameByCode[code] ?? nameByCode[code.toLowerCase()] ?? code;
+  };
+
+  return [...new Set(codes.map(lookup))]
+    .sort((a, b) => a.localeCompare(b))
+    .join('\n');
+}
+
+export function learningPointHasAttachment(row: MealLearningPoint): boolean {
+  return Boolean(row.attachment_url?.trim() || row.has_attachment_file);
+}
+
+export function formatLearningPointAttachment(row: MealLearningPoint): string {
+  if (row.attachment_url?.trim()) return 'URL';
+  if (row.has_attachment_file) return row.attachment_file_name?.trim() || 'File';
+  return '—';
 }
 
 /** Table / filter display: always numbered from 1. */

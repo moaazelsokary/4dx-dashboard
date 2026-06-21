@@ -5,11 +5,9 @@ import type {
   MealContentItem,
 } from '@/types/mealContent';
 import { getAuthHeader } from '@/services/authService';
+import { downloadBlob, fetchAuthenticatedFile, getWigApiBaseUrl, type FetchedFile } from '@/lib/fileAttachment';
 
-const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-const isLocalWigProxy =
-  hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
-const API_BASE_URL = isLocalWigProxy ? '/api/wig' : '/.netlify/functions/wig-api';
+const API_BASE_URL = getWigApiBaseUrl();
 
 export const MAX_MEAL_CONTENT_BYTES = 24 * 1024 * 1024;
 
@@ -124,36 +122,11 @@ export async function deleteMealContentItem(id: number): Promise<{ success: bool
   return fetchMealAPI<{ success: boolean }>(`/meal-content/${id}`, { method: 'DELETE' });
 }
 
+export async function fetchMealContentFile(id: number): Promise<FetchedFile> {
+  return fetchAuthenticatedFile(`${API_BASE_URL}/meal-content/${id}/download`, `file-${id}`);
+}
+
 export async function downloadMealContentFile(id: number): Promise<void> {
-  const authHeaders = getAuthHeader();
-  const url = `${API_BASE_URL}/meal-content/${id}/download?_t=${Date.now()}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { ...authHeaders, 'Cache-Control': 'no-cache' },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(text || `Download failed (${response.status})`);
-  }
-  let filename = `file-${id}`;
-  const cd = response.headers.get('Content-Disposition');
-  const m = cd?.match(/filename\*=UTF-8''([^;\s]+)/);
-  if (m?.[1]) {
-    try {
-      filename = decodeURIComponent(m[1]);
-    } catch {
-      /* keep default */
-    }
-  }
-  const blob = await response.blob();
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = filename;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(href);
+  const file = await fetchMealContentFile(id);
+  downloadBlob(file.blob, file.filename);
 }

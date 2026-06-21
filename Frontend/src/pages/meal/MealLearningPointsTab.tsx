@@ -35,21 +35,26 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ColumnFilter } from '@/components/ui/column-filter';
 import BidirectionalText from '@/components/ui/BidirectionalText';
+import FileAttachmentActions from '@/components/ui/FileAttachmentActions';
 import { toast } from '@/hooks/use-toast';
 import type { User } from '@/services/authService';
 import { canManageMealContent } from '@/config/mealAccess';
 import {
   createMealLearningPoint,
   deleteMealLearningPoint,
+  fetchMealLearningPointAttachment,
   getMealLearningPoints,
   updateMealLearningPoint,
   updateMealLearningPointsOrder,
 } from '@/services/mealLearningService';
+import { getDepartments } from '@/services/wigService';
 import type { MealLearningPoint, MealLearningPointStatus } from '@/types/mealLearning';
 import {
   formatActivityLinksSummary,
-  formatDepartmentsFromLinks,
+  formatLearningPointAttachment,
+  formatLearningPointDepartment,
   formatTopicsFromLinks,
+  learningPointHasAttachment,
   mealLearningStatusLabel,
 } from '@/types/mealLearning';
 import {
@@ -72,6 +77,7 @@ const DEFAULT_COLUMN_WIDTHS = {
   relative_activity: 280,
   topic: 110,
   department: 110,
+  attachment: 180,
   status: 90,
   end_date: 95,
 } as const;
@@ -129,6 +135,10 @@ type Props = {
   user: User;
 };
 
+function attachmentCacheKey(row: MealLearningPoint): string {
+  return `${row.id}-${row.updated_at ?? ''}-${row.attachment_file_name ?? ''}-${row.attachment_url ?? ''}-${row.attachment_mime_type ?? ''}`;
+}
+
 function formatDate(s: string | null | undefined): string {
   if (!s) return '—';
   return String(s).slice(0, 10);
@@ -172,12 +182,14 @@ function SortableLearningRow({
   row,
   canWrite,
   columnWidths,
+  departmentNameByCode,
   onEdit,
   onDelete,
 }: {
   row: MealLearningPoint;
   canWrite: boolean;
   columnWidths: Record<LearningColumnKey, number>;
+  departmentNameByCode: Map<string, string>;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -193,7 +205,7 @@ function SortableLearningRow({
 
   const activityText = formatActivityLinksSummary(row.activity_links);
   const topicText = formatTopicsFromLinks(row.activity_links);
-  const departmentText = formatDepartmentsFromLinks(row.activity_links);
+  const departmentText = formatLearningPointDepartment(row, departmentNameByCode);
   const statusText = mealLearningStatusLabel(row.status);
   const endDateText = formatDate(row.end_date);
 
@@ -237,6 +249,30 @@ function SortableLearningRow({
           {departmentText}
         </BidirectionalText>
       </TableCell>
+      <TableCell className="align-top border-r border-border/50 min-w-0" style={colWidthStyle(columnWidths.attachment)}>
+        {!learningPointHasAttachment(row) ? (
+          <span className="text-muted-foreground">—</span>
+        ) : row.attachment_url?.trim() ? (
+          <FileAttachmentActions
+            key={attachmentCacheKey(row)}
+            cacheKey={attachmentCacheKey(row)}
+            wrapLabel
+            label="URL"
+            externalUrl={row.attachment_url}
+            fileName="Link"
+          />
+        ) : (
+          <FileAttachmentActions
+            key={attachmentCacheKey(row)}
+            cacheKey={attachmentCacheKey(row)}
+            wrapLabel
+            label={row.attachment_file_name?.trim() || 'Attachment'}
+            fileName={row.attachment_file_name}
+            mimeType={row.attachment_mime_type}
+            fetchFile={() => fetchMealLearningPointAttachment(row.id)}
+          />
+        )}
+      </TableCell>
       <TableCell className="align-top border-r border-border/50" style={colWidthStyle(columnWidths.status)}>
         <Badge variant={statusBadgeVariant(row.status)} className="text-[10px] px-1.5 py-0 font-normal">
           {statusText}
@@ -279,6 +315,27 @@ export default function MealLearningPointsTab({ user }: Props) {
   const [resizingColumn, setResizingColumn] = useState<LearningColumnKey | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  const [departmentNameByCode, setDepartmentNameByCode] = useState<Map<string, string>>(() => new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    getDepartments()
+      .then((depts) => {
+        if (cancelled) return;
+        const map = new Map<string, string>();
+        for (const d of depts) {
+          map.set(d.code, d.name);
+          map.set(d.code.toLowerCase(), d.name);
+        }
+        setDepartmentNameByCode(map);
+      })
+      .catch(() => {
+        /* table still works with codes */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleResizeStart = useCallback((column: LearningColumnKey, e: ReactMouseEvent) => {
     e.preventDefault();
@@ -350,6 +407,7 @@ export default function MealLearningPointsTab({ user }: Props) {
     const endDate = new Set<string>();
     const topic = new Set<string>();
     const department = new Set<string>();
+    const attachment = new Set<string>();
     const activity = new Set<string>();
     for (const r of rows) {
       learning.add(r.learning_point?.trim() || '—');
@@ -357,7 +415,8 @@ export default function MealLearningPointsTab({ user }: Props) {
       status.add(mealLearningStatusLabel(r.status));
       endDate.add(formatDate(r.end_date));
       topic.add(formatTopicsFromLinks(r.activity_links));
-      department.add(formatDepartmentsFromLinks(r.activity_links));
+      department.add(formatLearningPointDepartment(r, departmentNameByCode));
+      attachment.add(formatLearningPointAttachment(r));
       activity.add(formatActivityLinksSummary(r.activity_links));
     }
     return {
@@ -367,9 +426,10 @@ export default function MealLearningPointsTab({ user }: Props) {
       end_date: [...endDate].sort(),
       topic: [...topic].sort(),
       department: [...department].sort(),
+      attachment: [...attachment].sort(),
       relative_activity: [...activity].sort(),
     };
-  }, [rows]);
+  }, [rows, departmentNameByCode]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -379,7 +439,8 @@ export default function MealLearningPointsTab({ user }: Props) {
       const st = mealLearningStatusLabel(r.status);
       const ed = formatDate(r.end_date);
       const top = formatTopicsFromLinks(r.activity_links);
-      const dept = formatDepartmentsFromLinks(r.activity_links);
+      const dept = formatLearningPointDepartment(r, departmentNameByCode);
+      const attach = formatLearningPointAttachment(r);
       const act = formatActivityLinksSummary(r.activity_links);
 
       if (
@@ -389,6 +450,7 @@ export default function MealLearningPointsTab({ user }: Props) {
         !st.toLowerCase().includes(q) &&
         !top.toLowerCase().includes(q) &&
         !dept.toLowerCase().includes(q) &&
+        !attach.toLowerCase().includes(q) &&
         !act.toLowerCase().includes(q)
       ) {
         return false;
@@ -400,10 +462,11 @@ export default function MealLearningPointsTab({ user }: Props) {
       if (!matchesColumnFilter(filterState, 'end_date', ed, 'date')) return false;
       if (!matchesColumnFilter(filterState, 'topic', top)) return false;
       if (!matchesColumnFilter(filterState, 'department', dept)) return false;
+      if (!matchesColumnFilter(filterState, 'attachment', attach)) return false;
       if (!matchesColumnFilter(filterState, 'relative_activity', act)) return false;
       return true;
     });
-  }, [rows, search, filterState]);
+  }, [rows, search, filterState, departmentNameByCode]);
 
   const sortedIds = useMemo(() => filteredRows.map((r) => String(r.id)), [filteredRows]);
 
@@ -477,7 +540,7 @@ export default function MealLearningPointsTab({ user }: Props) {
     }));
   };
 
-  const colCount = canWrite ? 9 : 8;
+  const colCount = canWrite ? 10 : 9;
 
   return (
     <Card className="text-xs">
@@ -486,7 +549,7 @@ export default function MealLearningPointsTab({ user }: Props) {
           <div>
             <CardTitle className="text-sm font-semibold">Learning points</CardTitle>
             <CardDescription className="text-[11px] leading-snug mt-0.5">
-              Capture lessons learned, corrective actions, and link them to strategic topic or department activities.
+              Capture lessons learned, corrective actions, link them to objectives, and assign a relative department.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -638,10 +701,10 @@ export default function MealLearningPointsTab({ user }: Props) {
                       onResizeStart={handleResizeStart}
                     >
                       <div className="flex items-center gap-1 pr-1">
-                        Department
+                        Relative department
                         <ColumnFilter
                           columnKey="department"
-                          columnLabel="Department"
+                          columnLabel="Relative department"
                           filterId="lp-department"
                           columnType="text"
                           uniqueValues={uniqueValues.department}
@@ -650,6 +713,30 @@ export default function MealLearningPointsTab({ user }: Props) {
                           condition={getCondition(filterState, 'department')}
                           onConditionChange={(c) =>
                             setFilterState((prev) => ({ ...prev, department: { mode: 'condition', ...c } }))
+                          }
+                          openFilterId={openFilterId}
+                          onOpenFilterChange={setOpenFilterId}
+                        />
+                      </div>
+                    </ResizableTableHead>
+                    <ResizableTableHead
+                      columnKey="attachment"
+                      width={columnWidths.attachment}
+                      onResizeStart={handleResizeStart}
+                    >
+                      <div className="flex items-center gap-1 pr-1">
+                        Learning attachment
+                        <ColumnFilter
+                          columnKey="attachment"
+                          columnLabel="Learning attachment"
+                          filterId="lp-attachment"
+                          columnType="text"
+                          uniqueValues={uniqueValues.attachment}
+                          selectedValues={getListSelected(filterState, 'attachment')}
+                          onListChange={(v) => updateListFilter('attachment', v)}
+                          condition={getCondition(filterState, 'attachment')}
+                          onConditionChange={(c) =>
+                            setFilterState((prev) => ({ ...prev, attachment: { mode: 'condition', ...c } }))
                           }
                           openFilterId={openFilterId}
                           onOpenFilterChange={setOpenFilterId}
@@ -721,6 +808,7 @@ export default function MealLearningPointsTab({ user }: Props) {
                           row={row}
                           canWrite={canWrite}
                           columnWidths={columnWidths}
+                          departmentNameByCode={departmentNameByCode}
                           onEdit={() => {
                             setEditing(row);
                             setFormOpen(true);

@@ -29,30 +29,34 @@ import {
   createMealFile,
   createMealFolder,
   deleteMealContentItem,
-  downloadMealContentFile,
+  fetchMealContentFile,
   getMealContentBreadcrumb,
   getMealContentList,
   MAX_MEAL_CONTENT_BYTES,
   moveMealContentItem,
   updateMealContentItem,
 } from '@/services/mealContentService';
+import FileAttachmentActions from '@/components/ui/FileAttachmentActions';
 import { toast } from '@/hooks/use-toast';
 import {
   ArrowLeft,
   ChevronRight,
-  Download,
   ExternalLink,
   File,
   Folder,
   FolderOpen,
   FolderPlus,
   Home,
-  Loader2,
   FolderInput,
+  Loader2,
   Pencil,
   Plus,
   Trash2,
 } from 'lucide-react';
+
+function contentFileCacheKey(row: MealContentItem): string {
+  return `${row.id}-${row.updated_at ?? ''}-${row.original_file_name ?? ''}-${row.mime_type ?? ''}`;
+}
 
 function fmtDt(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -349,18 +353,6 @@ export default function MealContentFolderTab({ category, title, description, use
     } catch (e) {
       toast({
         title: 'Delete failed',
-        description: e instanceof Error ? e.message : 'Request failed',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDownload = async (row: MealContentItem) => {
-    try {
-      await downloadMealContentFile(row.id);
-    } catch (e) {
-      toast({
-        title: 'Download failed',
         description: e instanceof Error ? e.message : 'Request failed',
         variant: 'destructive',
       });
@@ -689,9 +681,15 @@ export default function MealContentFolderTab({ category, title, description, use
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDt(row.updated_at)}</TableCell>
                       <TableCell>
                         <div className="inline-flex items-center gap-1">
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Download" onClick={() => void handleDownload(row)}>
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <FileAttachmentActions
+                            key={contentFileCacheKey(row)}
+                            cacheKey={contentFileCacheKey(row)}
+                            showLabel={false}
+                            label={row.original_file_name || row.display_name}
+                            fileName={row.original_file_name || row.display_name}
+                            mimeType={row.mime_type}
+                            fetchFile={() => fetchMealContentFile(row.id)}
+                          />
                           {canManage && (
                             <>
                               <Button

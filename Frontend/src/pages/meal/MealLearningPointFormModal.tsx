@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Search, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,22 @@ export type ActivitySource = 'topics' | 'departments' | '';
 export type DepartmentObjectiveKind = 'bau' | 'strategic' | '';
 
 const ALL_VALUE = '__all__';
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+type AttachmentMode = 'none' | 'url' | 'file';
+
+async function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 type ActivityOption = {
   id: number;
@@ -63,7 +79,13 @@ type Props = {
     corrective_action: string | null;
     status: MealLearningPointStatus;
     end_date: string | null;
+    department_codes: string[];
     activity_links: MealLearningActivityLink[];
+    attachment_url?: string | null;
+    attachment_file_base64?: string;
+    attachment_file_name?: string;
+    attachment_mime_type?: string | null;
+    clear_attachment?: boolean;
   }) => Promise<void>;
 };
 
@@ -82,9 +104,15 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
   const [correctiveAction, setCorrectiveAction] = useState('');
   const [status, setStatus] = useState<MealLearningPointStatus>('pending');
   const [endDate, setEndDate] = useState('');
+  const [relativeDepartmentCodes, setRelativeDepartmentCodes] = useState<string[]>([]);
+  const [attachmentMode, setAttachmentMode] = useState<AttachmentMode>('none');
+  const [attachmentUrl, setAttachmentUrl] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [existingAttachmentName, setExistingAttachmentName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activitySource, setActivitySource] = useState<ActivitySource>('');
   const [topicCode, setTopicCode] = useState<StrategicTopicCode | ''>('');
-  const [departmentCode, setDepartmentCode] = useState('');
+  const [filterDepartmentCode, setFilterDepartmentCode] = useState('');
   const [deptKind, setDeptKind] = useState<DepartmentObjectiveKind>('');
   const [formLinks, setFormLinks] = useState<MealLearningActivityLink[]>([]);
   const [saving, setSaving] = useState(false);
@@ -101,6 +129,28 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
     setCorrectiveAction(initial?.corrective_action ?? '');
     setStatus((initial?.status as MealLearningPointStatus) ?? 'pending');
     setEndDate(initial?.end_date ? String(initial.end_date).slice(0, 10) : '');
+    setRelativeDepartmentCodes(
+      initial?.department_codes?.length
+        ? [...initial.department_codes]
+        : initial?.department_code
+          ? [initial.department_code]
+          : []
+    );
+    if (initial?.attachment_url?.trim()) {
+      setAttachmentMode('url');
+      setAttachmentUrl(initial.attachment_url);
+      setExistingAttachmentName(null);
+    } else if (initial?.has_attachment_file) {
+      setAttachmentMode('file');
+      setAttachmentUrl('');
+      setExistingAttachmentName(initial.attachment_file_name?.trim() || 'Attachment');
+    } else {
+      setAttachmentMode('none');
+      setAttachmentUrl('');
+      setExistingAttachmentName(null);
+    }
+    setAttachmentFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setFormLinks(
       (initial?.activity_links ?? []).map((l) => ({
         link_type: l.link_type,
@@ -116,31 +166,31 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
           || c === String(first.source_label ?? '').toLowerCase()
       );
       setTopicCode(code || '');
-      setDepartmentCode('');
+      setFilterDepartmentCode('');
       setDeptKind('');
     } else if (first?.link_type === 'department_objective') {
       setActivitySource('');
       setTopicCode('');
       setDeptKind('bau');
-      setDepartmentCode(first.source_label ? String(first.source_label) : '');
+      setFilterDepartmentCode(first.source_label ? String(first.source_label) : '');
     } else if (first?.link_type === 'strategic_department_objective') {
       setActivitySource('');
       setTopicCode('');
       setDeptKind('strategic');
-      setDepartmentCode(first.source_label ? String(first.source_label) : '');
+      setFilterDepartmentCode(first.source_label ? String(first.source_label) : '');
     } else {
       setActivitySource('');
       setTopicCode('');
-      setDepartmentCode('');
+      setFilterDepartmentCode('');
       setDeptKind('');
     }
   }, [open, initial]);
 
   const needsActivityLoad = useMemo(() => {
     if (!open) return false;
-    if (activitySource || topicCode || departmentCode) return true;
+    if (activitySource || topicCode || filterDepartmentCode) return true;
     return activitySearch.trim().length > 0;
-  }, [open, activitySource, topicCode, departmentCode, activitySearch]);
+  }, [open, activitySource, topicCode, filterDepartmentCode, activitySearch]);
 
   useEffect(() => {
     if (!open) return;
@@ -174,12 +224,12 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
       loadTopics = true;
     } else if (activitySource === 'departments') {
       loadDepts = true;
-    } else if (topicCode && departmentCode) {
+    } else if (topicCode && filterDepartmentCode) {
       loadTopics = true;
       loadDepts = true;
     } else if (topicCode) {
       loadTopics = true;
-    } else if (departmentCode) {
+    } else if (filterDepartmentCode) {
       loadDepts = true;
     } else {
       loadTopics = true;
@@ -187,8 +237,8 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
     }
 
     const topicCodes = topicCode ? [topicCode] : STRATEGIC_TOPIC_CODES;
-    const deptCodes = departmentCode
-      ? [departmentCode]
+    const deptCodes = filterDepartmentCode
+      ? [filterDepartmentCode]
       : departments.map((d) => String(d.code || '').trim()).filter(Boolean);
     const deptKinds: Array<'bau' | 'strategic'> = deptKind ? [deptKind] : ['bau', 'strategic'];
 
@@ -272,7 +322,7 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
     needsActivityLoad,
     activitySource,
     topicCode,
-    departmentCode,
+    filterDepartmentCode,
     deptKind,
     departments,
   ]);
@@ -286,9 +336,23 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
     });
   }, [activityOptions, activitySearch]);
 
+  const toggleDepartment = useCallback((code: string, checked: boolean) => {
+    setRelativeDepartmentCodes((prev) => {
+      if (checked) return prev.includes(code) ? prev : [...prev, code];
+      return prev.filter((c) => c !== code);
+    });
+  }, []);
+
+  const selectedDepartmentKeys = useMemo(() => new Set(relativeDepartmentCodes), [relativeDepartmentCodes]);
+
   const selectedKeys = useMemo(
     () => new Set(formLinks.map((l) => linkKey(l.link_type, l.linked_id))),
     [formLinks]
+  );
+
+  const sortedDepartments = useMemo(
+    () => [...departments].sort((a, b) => a.name.localeCompare(b.name)),
+    [departments]
   );
 
   const toggleLink = useCallback((opt: ActivityOption, checked: boolean) => {
@@ -308,15 +372,46 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
       toast({ title: 'Learning point is required', variant: 'destructive' });
       return;
     }
+    if (!relativeDepartmentCodes.length) {
+      toast({ title: 'Select at least one relative department', variant: 'destructive' });
+      return;
+    }
+    if (attachmentMode === 'url' && attachmentUrl.trim() && !/^https?:\/\//i.test(attachmentUrl.trim())) {
+      toast({ title: 'Attachment URL must start with http:// or https://', variant: 'destructive' });
+      return;
+    }
+    if (attachmentMode === 'file' && attachmentFile && attachmentFile.size > MAX_ATTACHMENT_BYTES) {
+      toast({ title: 'Attachment file is too large (max 10 MB)', variant: 'destructive' });
+      return;
+    }
+
     setSaving(true);
     try {
-      await onSave({
+      const payload: Parameters<Props['onSave']>[0] = {
         learning_point: lp,
         corrective_action: correctiveAction.trim() || null,
         status,
         end_date: endDate.trim() || null,
+        department_codes: relativeDepartmentCodes,
         activity_links: formLinks,
-      });
+      };
+
+      const hadAttachment = Boolean(initial?.attachment_url?.trim() || initial?.has_attachment_file);
+      if (attachmentMode === 'none') {
+        if (hadAttachment) payload.clear_attachment = true;
+      } else if (attachmentMode === 'url') {
+        const url = attachmentUrl.trim();
+        if (url) payload.attachment_url = url;
+        else if (hadAttachment) payload.clear_attachment = true;
+      } else if (attachmentMode === 'file') {
+        if (attachmentFile) {
+          payload.attachment_file_base64 = await readFileAsBase64(attachmentFile);
+          payload.attachment_file_name = attachmentFile.name;
+          payload.attachment_mime_type = attachmentFile.type || null;
+        }
+      }
+
+      await onSave(payload);
       onOpenChange(false);
     } catch (e) {
       toast({
@@ -390,6 +485,37 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
           </div>
 
           <div className="rounded-lg border border-border/80 p-3 space-y-2.5">
+            <Label className="text-xs font-medium">Relative department</Label>
+            <div className="text-[11px] text-muted-foreground">
+              {relativeDepartmentCodes.length} department{relativeDepartmentCodes.length === 1 ? '' : 's'} selected
+            </div>
+            <ScrollArea className="h-40 rounded-md border border-border/60 p-1.5">
+              {sortedDepartments.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3 text-center">No departments found</p>
+              ) : (
+                <div className="space-y-1">
+                  {sortedDepartments.map((d) => {
+                    const checked = selectedDepartmentKeys.has(d.code);
+                    return (
+                      <label
+                        key={d.id}
+                        className="flex items-start gap-2 rounded-md px-1.5 py-1 hover:bg-muted/50 cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => toggleDepartment(d.code, v === true)}
+                          className="mt-0.5"
+                        />
+                        <span className="text-xs block whitespace-pre-wrap break-words">{d.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+
+          <div className="rounded-lg border border-border/80 p-3 space-y-2.5">
             <Label className="text-xs font-medium">Relative objective</Label>
 
             <div className="relative w-full">
@@ -413,7 +539,7 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                     const next = v === ALL_VALUE ? '' : (v as ActivitySource);
                     setActivitySource(next);
                     if (next === 'topics') {
-                      setDepartmentCode('');
+                      setFilterDepartmentCode('');
                       setDeptKind('');
                     } else if (next === 'departments') {
                       setTopicCode('');
@@ -458,8 +584,8 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                   <div className="grid gap-1.5">
                     <Label className="text-[11px] text-muted-foreground">Department</Label>
                     <Select
-                      value={departmentCode || ALL_VALUE}
-                      onValueChange={(v) => setDepartmentCode(v === ALL_VALUE ? '' : v)}
+                      value={filterDepartmentCode || ALL_VALUE}
+                      onValueChange={(v) => setFilterDepartmentCode(v === ALL_VALUE ? '' : v)}
                     >
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="All departments" />
@@ -544,6 +670,71 @@ export default function MealLearningPointFormModal({ open, onOpenChange, initial
                 </div>
               )}
             </ScrollArea>
+          </div>
+
+          <div className="rounded-lg border border-border/80 p-3 space-y-2.5">
+            <Label className="text-xs font-medium">Learning attachment (optional)</Label>
+            <div className="flex flex-wrap gap-2">
+              {(['none', 'url', 'file'] as AttachmentMode[]).map((mode) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  size="sm"
+                  variant={attachmentMode === mode ? 'default' : 'outline'}
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setAttachmentMode(mode);
+                    if (mode !== 'file') {
+                      setAttachmentFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }
+                    if (mode !== 'url') setAttachmentUrl('');
+                  }}
+                >
+                  {mode === 'none' ? 'None' : mode === 'url' ? 'URL' : 'File'}
+                </Button>
+              ))}
+            </div>
+            {attachmentMode === 'url' ? (
+              <Input
+                className="h-8 text-xs"
+                placeholder="https://…"
+                value={attachmentUrl}
+                onChange={(e) => setAttachmentUrl(e.target.value)}
+              />
+            ) : null}
+            {attachmentMode === 'file' ? (
+              <div className="space-y-2">
+                {existingAttachmentName && !attachmentFile ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Current file: {existingAttachmentName}. Choose a new file to replace it.
+                  </p>
+                ) : null}
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  className="h-8 text-xs"
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
+                />
+                {attachmentFile ? (
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="truncate">{attachmentFile.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => {
+                        setAttachmentFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
 

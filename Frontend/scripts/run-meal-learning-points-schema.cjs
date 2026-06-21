@@ -44,6 +44,16 @@ async function main() {
   }
   const pool = await sql.connect(config);
   await runSqlScript(pool, path.join(__dirname, '../database/meal-learning-points-schema.sql'), 'meal-learning-points-schema.sql');
+  await runSqlScript(
+    pool,
+    path.join(__dirname, '../database/meal-learning-points-department-attachment.sql'),
+    'meal-learning-points-department-attachment.sql'
+  );
+  await runSqlScript(
+    pool,
+    path.join(__dirname, '../database/meal-learning-points-department-codes.sql'),
+    'meal-learning-points-department-codes.sql'
+  );
   await pool.close();
   console.log('\nDone.');
 }

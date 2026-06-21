@@ -201,6 +201,25 @@ module.exports = function registerMealWigRoutes(app, { jwt, getPool, setNoCacheH
     }
   });
 
+  app.get('/api/wig/meal-learning-points/:id/attachment/download', async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const user = wigUserFromJwt(req, jwt);
+      if (!user) return res.status(401).json({ error: 'Authentication required' });
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      const pool = await getPool();
+      const bin = await mealLearningPoints.getMealLearningPointAttachmentDownload(pool, id, user);
+      const fname = encodeURIComponent(bin.filename);
+      res.setHeader('Content-Type', bin.mime);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${fname}`);
+      res.send(bin.buffer);
+    } catch (error) {
+      if (error.statusCode) return sendMealContentStatus(res, error);
+      handleError(res, error, 'Error downloading learning point attachment');
+    }
+  });
+
   app.put('/api/wig/meal-learning-points/:id', async (req, res) => {
     try {
       const user = wigUserFromJwt(req, jwt);

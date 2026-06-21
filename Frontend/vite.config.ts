@@ -141,6 +141,9 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
+    optimizeDeps: {
+      include: ["docx-preview", "jszip"],
+    },
     build: {
       rollupOptions: {
         input: {

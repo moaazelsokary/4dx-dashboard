@@ -26,6 +26,7 @@ import type {
 } from '@/types/wig';
 import { getCsrfHeader } from '@/utils/csrf';
 import { getAuthHeader } from './authService';
+import { downloadBlob, fetchAuthenticatedFile, getWigApiBaseUrl, type FetchedFile } from '@/lib/fileAttachment';
 import { handleApiError, isAuthError, shouldRetry, getRetryDelay, handleAuthError } from '@/utils/apiErrorHandler';
 import { getUserFriendlyError, type AppError } from '@/utils/errorMessages';
 import { requestQueue } from '@/utils/requestQueue';
@@ -610,43 +611,19 @@ export async function deleteStrategicTopicContentItem(id: number): Promise<{ suc
   });
 }
 
+/** Fetch file bytes for preview or download. */
+export async function fetchStrategicTopicContentFile(id: number): Promise<FetchedFile> {
+  const API_BASE_URL = getWigApiBaseUrl();
+  return fetchAuthenticatedFile(
+    `${API_BASE_URL}/strategic-topic-content/${id}/download`,
+    `file-${id}`
+  );
+}
+
 /** Browser download (binary GET). */
 export async function downloadStrategicTopicContentFile(id: number): Promise<void> {
-  const authHeaders = getAuthHeader();
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-  const isLocalWigProxy =
-    hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
-  const API_BASE_URL = isLocalWigProxy ? '/api/wig' : '/.netlify/functions/wig-api';
-  const url = `${API_BASE_URL}/strategic-topic-content/${id}/download?_t=${Date.now()}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { ...authHeaders, 'Cache-Control': 'no-cache' },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(text || `Download failed (${response.status})`);
-  }
-  let filename = `file-${id}`;
-  const cd = response.headers.get('Content-Disposition');
-  const m = cd?.match(/filename\*=UTF-8''([^;\s]+)/);
-  if (m?.[1]) {
-    try {
-      filename = decodeURIComponent(m[1]);
-    } catch {
-      /* keep default */
-    }
-  }
-  const blob = await response.blob();
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = filename;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(href);
+  const file = await fetchStrategicTopicContentFile(id);
+  downloadBlob(file.blob, file.filename);
 }
 
 export { MAX_STRATEGIC_TOPIC_CONTENT_BYTES };

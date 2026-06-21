@@ -747,6 +747,23 @@ const handler = rateLimiter('general')(
       result = await mealLearningPoints.updateMealLearningPointsOrder(pool, body, event.user);
     } else if (path === '/meal-learning-points' && method === 'POST') {
       result = await mealLearningPoints.createMealLearningPoint(pool, body, event.user);
+    } else if (/^\/meal-learning-points\/\d+\/attachment\/download$/.test(path) && method === 'GET') {
+      if (!event.user) {
+        return { statusCode: 401, headers, body: JSON.stringify({ error: 'Authentication required' }) };
+      }
+      const id = parseInt(path.match(/^\/meal-learning-points\/(\d+)\/attachment\/download$/)[1], 10);
+      const bin = await mealLearningPoints.getMealLearningPointAttachmentDownload(pool, id, event.user);
+      const fname = encodeURIComponent(bin.filename);
+      return {
+        statusCode: 200,
+        headers: {
+          ...headers,
+          'Content-Type': bin.mime,
+          'Content-Disposition': `attachment; filename*=UTF-8''${fname}`,
+        },
+        body: bin.buffer.toString('base64'),
+        isBase64Encoded: true,
+      };
     } else if (/^\/meal-learning-points\/\d+$/.test(path) && method === 'PUT') {
       const id = parseInt(path.split('/')[2], 10);
       result = await mealLearningPoints.updateMealLearningPoint(pool, id, body, event.user);

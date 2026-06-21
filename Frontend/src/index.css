@@ -266,3 +266,21 @@
     }
   }
 }
+
+/* Word (.docx) in-app preview */
+.docx-preview-host .docx-wrapper {
+  background: #fff;
+  padding: 1rem 1.25rem;
+  margin: 0 auto;
+  max-width: 100%;
+}
+
+.docx-preview-host .docx-wrapper > section.docx {
+  box-sizing: border-box;
+}
+
+.docx-preview-host .docx {
+  color: #111;
+  font-size: 14px;
+  line-height: 1.5;
+}

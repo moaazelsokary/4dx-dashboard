@@ -25,14 +25,19 @@ import type { User } from '@/services/authService';
 import {
   createStrategicTopicContentItem,
   deleteStrategicTopicContentItem,
-  downloadStrategicTopicContentFile,
+  fetchStrategicTopicContentFile,
   getStrategicTopicContentList,
   MAX_STRATEGIC_TOPIC_CONTENT_BYTES,
   updateStrategicTopicContentItem,
 } from '@/services/wigService';
 import { canManageStrategicTopicContent } from './strategicTopicKpiUtils';
+import FileAttachmentActions from '@/components/ui/FileAttachmentActions';
 import { toast } from '@/hooks/use-toast';
-import { FolderOpen, Loader2, Pencil, Plus, Trash2, Download } from 'lucide-react';
+import { FolderOpen, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+
+function contentFileCacheKey(row: { id: number; updated_at?: string | null; original_file_name?: string | null; mime_type?: string | null }): string {
+  return `${row.id}-${row.updated_at ?? ''}-${row.original_file_name ?? ''}-${row.mime_type ?? ''}`;
+}
 
 function fmtDt(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -219,18 +224,6 @@ export default function StrategicTopicContentFolder({ strategicTopicCode, user }
     }
   };
 
-  const handleDownload = async (row: StrategicTopicContentItem) => {
-    try {
-      await downloadStrategicTopicContentFile(row.id);
-    } catch (e) {
-      toast({
-        title: 'Download failed',
-        description: e instanceof Error ? e.message : 'Request failed',
-        variant: 'destructive',
-      });
-    }
-  };
-
   return (
     <div className="space-y-4">
       <Card>
@@ -305,16 +298,15 @@ export default function StrategicTopicContentFolder({ strategicTopicCode, user }
                               </Button>
                             </>
                           )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Download"
-                            onClick={() => void handleDownload(row)}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <FileAttachmentActions
+                            key={contentFileCacheKey(row)}
+                            cacheKey={contentFileCacheKey(row)}
+                            showLabel={false}
+                            label={row.original_file_name || row.display_name}
+                            fileName={row.original_file_name || row.display_name}
+                            mimeType={row.mime_type}
+                            fetchFile={() => fetchStrategicTopicContentFile(row.id)}
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="font-medium align-top">{row.display_name}</TableCell>
