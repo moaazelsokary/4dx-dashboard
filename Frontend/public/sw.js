@@ -2,7 +2,7 @@
  * Service Worker for cache management and automatic updates
  */
 
-const CACHE_NAME = 'lifemakers-v1';
+const CACHE_NAME = 'lifemakers-v2';
 const BUILD_VERSION = '1768656318862';
 
 // Install event - cache assets
@@ -44,31 +44,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Always fetch HTML from network (no cache)
-  if (request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' })
-        .then((response) => {
-          // Clone response for potential caching
-          const responseClone = response.clone();
-          
-          // Don't cache HTML
-          return response;
-        })
-        .catch(async () => {
-          // If network fails, try cache as fallback
-          const cachedResponse = await caches.match(request);
-          // If no cache, return a basic error response instead of null
-          if (!cachedResponse) {
-            return new Response('Network error and no cache available', {
-              status: 503,
-              statusText: 'Service Unavailable',
-              headers: { 'Content-Type': 'text/plain' }
-            });
-          }
-          return cachedResponse;
-        })
-    );
+  // SPA navigations and HTML: do not intercept. Netlify serves index.html for all routes;
+  // intercepting here caused 503 "Network error and no cache available" on reload when the
+  // network fetch failed and HTML was never cached as a fallback.
+  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
     return;
   }
 
@@ -100,13 +79,14 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch((error) => {
-          // If fetch fails, return a proper error response
+        .catch(async (error) => {
           console.error('[SW] Fetch failed:', error);
+          const retry = await fetch(request).catch(() => null);
+          if (retry) return retry;
           return new Response('Network error', {
             status: 503,
             statusText: 'Service Unavailable',
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'text/plain' },
           });
         });
     })
