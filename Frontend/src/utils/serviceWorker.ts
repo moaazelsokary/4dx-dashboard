@@ -1,62 +1,36 @@
 /**
- * Service Worker management for automatic updates
+ * Service worker disabled — purge any legacy registration on app load.
  */
-
-const SW_PATH = '/sw.js';
-declare const __BUILD_VERSION__: string;
-const SW_VERSION = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '__BUILD_VERSION__';
 
 /**
- * Register service worker if supported
+ * Unregister all service workers and clear Cache Storage.
+ * Fixes stale SW returning 503 "Network error and no cache available" on reload.
  */
-export function registerServiceWorker(): void {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker
-        .register(SW_PATH)
-        .then((registration) => {
-          console.log('[SW] Service Worker registered:', registration.scope);
+export async function purgeServiceWorker(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
 
-          // Check for updates periodically
-          setInterval(() => {
-            registration.update();
-          }, 60000); // Check every minute
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  } catch (error) {
+    console.warn('[SW] Unregister failed:', error);
+  }
 
-          // Handle updates
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  // New service worker available, force reload
-                  console.log('[SW] New service worker available, reloading...');
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  window.location.reload();
-                }
-              });
-            }
-          });
-
-          // Handle controller change (new SW activated)
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            console.log('[SW] New service worker activated, reloading...');
-            window.location.reload();
-          });
-        })
-        .catch((error) => {
-          console.warn('[SW] Service Worker registration failed:', error);
-        });
-    });
+  if ('caches' in window) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    } catch (error) {
+      console.warn('[SW] Cache clear failed:', error);
+    }
   }
 }
 
-/**
- * Unregister service worker (for cleanup)
- */
+/** @deprecated Service worker removed */
+export function registerServiceWorker(): void {
+  void purgeServiceWorker();
+}
+
 export function unregisterServiceWorker(): void {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then((registration) => {
-      registration.unregister();
-    });
-  }
+  void purgeServiceWorker();
 }
