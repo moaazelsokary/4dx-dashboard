@@ -1,15 +1,16 @@
 /**
- * Verify production site loads and legacy service worker is cleared.
- * Run: node scripts/verify-production-sw.mjs
+ * Diagnose production availability and service-worker recovery.
+ * Run: npm run verify:production
  */
 import { chromium } from '@playwright/test';
 import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import dns from 'node:dns/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PRODUCTION_URL = process.env.PRODUCTION_URL || 'https://lifemakers.netlify.app/';
+const execFileAsync = promisify(execFile);
+const PRODUCTION_HOST = process.env.PRODUCTION_HOST || 'lifemakers.netlify.app';
+const PRODUCTION_URL = process.env.PRODUCTION_URL || `https://${PRODUCTION_HOST}/`;
 
 const OLD_BROKEN_SW = `
 self.addEventListener('install', (e) => self.skipWaiting());
@@ -39,20 +40,67 @@ const RETIRED_SW = `// retired\nconst SW_RETIRED_VERSION = 'test';\n`;
 
 const INDEX_HTML = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SW test</title>
-<script>
-  if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs => Promise.all(regs.map(r => r.unregister())));
-  }
-</script>
-</head><body><h1>OK</h1></body></html>`;
+<title>SW test</title></head><body><h1>OK</h1></body></html>`;
 
-async function testProduction() {
+async function timedFetch(url, ms = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    const text = await res.text();
+    return {
+      ok: true,
+      status: res.status,
+      clearSiteData: res.headers.get('clear-site-data'),
+      bodyStart: text.slice(0, 160),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkDns() {
+  try {
+    const records = await dns.lookup(PRODUCTION_HOST, { all: true });
+    return { ok: true, records };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function checkCurlHead() {
+  try {
+    const { stdout } = await execFileAsync('curl.exe', [
+      '-4', '-sI', '--max-time', '15',
+      `https://${PRODUCTION_HOST}/sw.js`,
+    ], { timeout: 20000 });
+    const lines = stdout.split(/\r?\n/).filter(Boolean);
+    const status = lines[0] || '';
+    const clearSiteData = lines.find((l) => l.toLowerCase().startsWith('clear-site-data:')) || null;
+    return { ok: true, status, clearSiteData, raw: lines.slice(0, 12) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function testProductionBrowser() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
-
   const result = { url: PRODUCTION_URL };
+
   try {
     const response = await page.goto(PRODUCTION_URL, {
       waitUntil: 'domcontentloaded',
@@ -69,12 +117,9 @@ async function testProduction() {
         supported: true,
         count: regs.length,
         controller: !!navigator.serviceWorker.controller,
+        scriptUrl: navigator.serviceWorker.controller?.scriptURL || null,
       };
     });
-
-    const reload = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 });
-    result.reloadStatus = reload?.status() ?? null;
-    result.reloadTitle = await page.title();
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
   } finally {
@@ -91,9 +136,7 @@ async function testLocalClearSiteDataFix() {
       res.writeHead(200, {
         'Content-Type': 'application/javascript; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        ...(swMode === 'retired'
-          ? { 'Clear-Site-Data': '"executionContexts"' }
-          : {}),
+        ...(swMode === 'retired' ? { 'Clear-Site-Data': '"executionContexts"' } : {}),
       });
       res.end(swMode === 'broken' ? OLD_BROKEN_SW : RETIRED_SW);
       return;
@@ -155,24 +198,56 @@ async function testLocalClearSiteDataFix() {
   return result;
 }
 
-async function checkProductionSwHeaders() {
-  const res = await fetch('https://lifemakers.netlify.app/sw.js', { cache: 'no-store' });
-  return {
-    status: res.status,
-    clearSiteData: res.headers.get('clear-site-data'),
-    bodyStart: (await res.text()).slice(0, 120),
-  };
+function summarize(network, browser) {
+  const lines = [];
+
+  if (!network.homepage?.ok || !network.sw?.ok) {
+    lines.push('NETWORK BLOCKED: This PC cannot reach Netlify (HTTPS timeout).');
+    lines.push('The old service worker turns that into a fake 503 page.');
+    lines.push('Ask IT to allow HTTPS to lifemakers.netlify.app (and *.netlify.app for APIs).');
+    lines.push('Until then, no deploy fix will help from office networks.');
+  } else if (network.sw.clearSiteData?.includes('executionContexts')) {
+    lines.push('Server fix is deployed (Clear-Site-Data on /sw.js).');
+  } else {
+    lines.push('Server reachable but Clear-Site-Data header missing on /sw.js — deploy latest build.');
+  }
+
+  if (browser.error?.includes('ERR_CONNECTION_TIMED_OUT') || !network.homepage?.ok) {
+    lines.push('On each stuck device: Edge → F12 → Application → Storage → Clear site data (once).');
+    lines.push('After IT unblocks Netlify, the site should load without manual steps.');
+  } else if (browser.sw?.scriptUrl && !browser.sw.scriptUrl.includes('SW_RETIRED')) {
+    lines.push('Browser still runs an OLD service worker script — clear site data once.');
+  } else if (browser.hasSignIn) {
+    lines.push('Production looks healthy from this machine.');
+  }
+
+  return lines;
 }
 
-console.log('=== Production fetch (sw.js headers) ===');
-try {
-  console.log(await checkProductionSwHeaders());
-} catch (error) {
-  console.log({ error: String(error) });
+const dnsResult = await checkDns();
+const curlResult = await checkCurlHead();
+const homepage = await timedFetch(PRODUCTION_URL);
+const sw = await timedFetch(`https://${PRODUCTION_HOST}/sw.js`);
+const browser = await testProductionBrowser();
+const local = await testLocalClearSiteDataFix();
+
+const report = {
+  host: PRODUCTION_HOST,
+  dns: dnsResult,
+  curl: curlResult,
+  network: { homepage, sw },
+  browser,
+  localSimulation: local,
+  summary: summarize({ homepage, sw }, browser),
+};
+
+console.log(JSON.stringify(report, null, 2));
+console.log('\n=== SUMMARY ===');
+for (const line of report.summary) {
+  console.log(`- ${line}`);
 }
 
-console.log('\n=== Production browser test ===');
-console.log(await testProduction());
-
-console.log('\n=== Local Clear-Site-Data simulation ===');
-console.log(await testLocalClearSiteDataFix());
+process.exitCode =
+  report.summary.some((l) => l.startsWith('NETWORK BLOCKED')) ? 2 :
+  report.summary.some((l) => l.includes('clear site data') || l.includes('OLD service worker')) ? 1 :
+  0;
