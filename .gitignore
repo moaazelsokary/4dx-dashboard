@@ -1,3 +1,6 @@
 # Local Netlify folder
 .netlify
-frontend/database/
+
+# Keep DB migrations and dev scripts local only (not on GitHub)
+Frontend/database/
+Frontend/scripts/

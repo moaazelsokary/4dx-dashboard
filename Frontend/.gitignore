@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local-only — not published to GitHub
+database/
+scripts/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
