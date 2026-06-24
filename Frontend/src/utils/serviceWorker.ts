@@ -1,10 +1,11 @@
 /**
- * Service worker disabled — purge any legacy registration on app load.
+ * Service worker disabled — neutralize any legacy registration on production.
  */
+
+const KILL_SWITCH_URL = '/sw.js';
 
 /**
  * Unregister all service workers and clear Cache Storage.
- * Fixes stale SW returning 503 "Network error and no cache available" on reload.
  */
 export async function purgeServiceWorker(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
@@ -26,9 +27,48 @@ export async function purgeServiceWorker(): Promise<void> {
   }
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/**
+ * Force-download the kill-switch worker (replaces broken legacy SW), then purge.
+ * Call on every app load so production recovers without manual "clear site data".
+ */
+export async function neutralizeLegacyServiceWorker(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+
+  const onMessage = (event: MessageEvent) => {
+    if (event.data?.type === 'SW_KILL_RELOAD') {
+      window.location.reload();
+    }
+  };
+  navigator.serviceWorker.addEventListener('message', onMessage);
+
+  try {
+    const registration = await navigator.serviceWorker.register(KILL_SWITCH_URL, {
+      scope: '/',
+      updateViaCache: 'none',
+    });
+    await registration.update();
+
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+
+    if (registration.installing || registration.waiting) {
+      await Promise.race([navigator.serviceWorker.ready, wait(2500)]);
+    }
+  } catch (error) {
+    console.warn('[SW] Kill-switch register failed:', error);
+  }
+
+  await purgeServiceWorker();
+}
+
 /** @deprecated Service worker removed */
 export function registerServiceWorker(): void {
-  void purgeServiceWorker();
+  void neutralizeLegacyServiceWorker();
 }
 
 export function unregisterServiceWorker(): void {

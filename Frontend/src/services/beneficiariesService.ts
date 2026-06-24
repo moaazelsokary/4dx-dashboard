@@ -16,9 +16,27 @@ import type {
 } from '@/types/beneficiaries';
 
 const API_BASE = '/.netlify/functions/beneficiaries-api';
+const FETCH_TIMEOUT_MS = 25000;
 
 function authHeaders(): HeadersInit {
   return { ...getAuthHeader() };
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(
+        'Beneficiaries API timed out in production. The server may be cold-starting or the database may be unreachable from Netlify.'
+      );
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -34,7 +52,7 @@ async function readJson<T>(res: Response): Promise<T> {
 }
 
 export async function fetchDashboardSummary(): Promise<RbSummaryResponse> {
-  const res = await fetch(`${API_BASE}/dashboard/summary`, { headers: authHeaders() });
+  const res = await fetchWithTimeout(`${API_BASE}/dashboard/summary`, { headers: authHeaders() });
   return readJson<RbSummaryResponse>(res);
 }
 
@@ -52,14 +70,14 @@ export function analyticsQueryString(filters: RbAnalyticsFilters = {}): string {
 }
 
 export async function fetchDashboardCharts(filters: RbAnalyticsFilters = {}): Promise<RbChartsResponse> {
-  const res = await fetch(`${API_BASE}/dashboard/charts${analyticsQueryString(filters)}`, {
+  const res = await fetchWithTimeout(`${API_BASE}/dashboard/charts${analyticsQueryString(filters)}`, {
     headers: authHeaders(),
   });
   return readJson<RbChartsResponse>(res);
 }
 
 export async function fetchDashboardAnalytics(filters: RbAnalyticsFilters = {}): Promise<RbAnalyticsResponse> {
-  const res = await fetch(`${API_BASE}/dashboard/analytics${analyticsQueryString(filters)}`, {
+  const res = await fetchWithTimeout(`${API_BASE}/dashboard/analytics${analyticsQueryString(filters)}`, {
     headers: authHeaders(),
   });
   return readJson<RbAnalyticsResponse>(res);
@@ -92,7 +110,7 @@ export async function fetchCategoryProducts(
   if (filters.category) qs.set('category', filters.category);
   if (filters.month) qs.set('month', filters.month);
   if (filters.feedback) qs.set('feedback', filters.feedback);
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${API_BASE}/dashboard/categories/${encodeURIComponent(category)}/products?${qs.toString()}`,
     { headers: authHeaders() }
   );
@@ -101,12 +119,12 @@ export async function fetchCategoryProducts(
 
 export async function fetchBeneficiariesSearch(q: string): Promise<RbSearchResponse> {
   const qs = new URLSearchParams({ q: q.trim() });
-  const res = await fetch(`${API_BASE}/search?${qs.toString()}`, { headers: authHeaders() });
+  const res = await fetchWithTimeout(`${API_BASE}/search?${qs.toString()}`, { headers: authHeaders() });
   return readJson<RbSearchResponse>(res);
 }
 
 export async function fetchCaseProfile(resCaseId: string): Promise<RbProfileResponse> {
-  const res = await fetch(`${API_BASE}/${encodeURIComponent(resCaseId)}/profile`, { headers: authHeaders() });
+  const res = await fetchWithTimeout(`${API_BASE}/${encodeURIComponent(resCaseId)}/profile`, { headers: authHeaders() });
   return readJson<RbProfileResponse>(res);
 }
 
@@ -119,7 +137,7 @@ export async function fetchCaseServicesPage(
   if (cursor) qs.set('cursor', cursor);
   if (limit != null) qs.set('limit', String(limit));
   const tail = qs.toString() ? `?${qs.toString()}` : '';
-  const res = await fetch(`${API_BASE}/${encodeURIComponent(resCaseId)}/services${tail}`, {
+  const res = await fetchWithTimeout(`${API_BASE}/${encodeURIComponent(resCaseId)}/services${tail}`, {
     headers: authHeaders(),
   });
   return readJson<RbKeysetPage<RbServiceRow>>(res);
@@ -134,7 +152,7 @@ export async function fetchCaseTimelinePage(
   if (cursor) qs.set('cursor', cursor);
   if (limit != null) qs.set('limit', String(limit));
   const tail = qs.toString() ? `?${qs.toString()}` : '';
-  const res = await fetch(`${API_BASE}/${encodeURIComponent(resCaseId)}/timeline${tail}`, {
+  const res = await fetchWithTimeout(`${API_BASE}/${encodeURIComponent(resCaseId)}/timeline${tail}`, {
     headers: authHeaders(),
   });
   return readJson<RbKeysetPage<RbTimelineItem>>(res);
@@ -142,7 +160,7 @@ export async function fetchCaseTimelinePage(
 
 /** Queue background sync (202 + jobId). Requires Admin/CEO. */
 export async function enqueueBeneficiariesSync(): Promise<{ ok: boolean; jobId: string }> {
-  const res = await fetch(`${API_BASE}/sync`, {
+  const res = await fetchWithTimeout(`${API_BASE}/sync`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: '{}',
@@ -159,7 +177,7 @@ export async function enqueueBeneficiariesSync(): Promise<{ ok: boolean; jobId: 
 
 /** Start Odoo warehouse sync in Netlify background (202 + jobId). Admin/CEO. */
 export async function refreshBeneficiariesImmediate(): Promise<{ ok: boolean; jobId: string }> {
-  const res = await fetch(`${API_BASE}/sync?immediate=1`, {
+  const res = await fetchWithTimeout(`${API_BASE}/sync?immediate=1`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: '{}',
@@ -181,7 +199,7 @@ export async function refreshBeneficiariesImmediate(): Promise<{ ok: boolean; jo
 }
 
 export async function fetchBeneficiariesSyncJob(jobId: string): Promise<RbSyncJobResponse> {
-  const res = await fetch(`${API_BASE}/sync/${encodeURIComponent(jobId)}`, { headers: authHeaders() });
+  const res = await fetchWithTimeout(`${API_BASE}/sync/${encodeURIComponent(jobId)}`, { headers: authHeaders() });
   let body: RbSyncJobResponse;
   try {
     body = (await res.json()) as RbSyncJobResponse;

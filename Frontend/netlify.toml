@@ -3,6 +3,31 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+
+# Netlify default timeout is 10s — beneficiaries + DB cold start need more in production
+[functions."beneficiaries-api"]
+  timeout = 26
+
+[functions."wig-api"]
+  timeout = 26
+
+[functions."auth-session"]
+  timeout = 15
+
+[functions."config-api"]
+  timeout = 15
+
+[functions."metrics-api"]
+  timeout = 15
+
+[[redirects]]
+  from = "/sw.js"
+  to = "/sw.js"
+  status = 200
+  force = false
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

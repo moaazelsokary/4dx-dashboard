@@ -36,6 +36,12 @@ if (password) {
   password = password.trim();
 }
 
+const isServerless = Boolean(
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NETLIFY ||
+  process.env.CONTEXT === 'production'
+);
+
 const config = {
   server: server,
   port: port,
@@ -46,8 +52,8 @@ const config = {
     encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true,
-    requestTimeout: 120000,
-    connectionTimeout: 30000,
+    requestTimeout: isServerless ? 22000 : 120000,
+    connectionTimeout: isServerless ? 8000 : 30000,
   },
   pool: {
     max: 10,
@@ -96,10 +102,19 @@ async function resetPool() {
 }
 
 async function connectPool() {
-  const p = new sql.ConnectionPool(config);
-  await p.connect();
-  attachSharedPoolErrorHandler(p);
-  return p;
+  try {
+    const p = new sql.ConnectionPool(config);
+    await p.connect();
+    attachSharedPoolErrorHandler(p);
+    return p;
+  } catch (err) {
+    const hint = isServerless
+      ? ' Check Azure SQL firewall allows outbound IPs from Netlify and env vars on Netlify.'
+      : '';
+    const wrapped = new Error(`Database connection failed:${hint} ${err?.message || err}`);
+    wrapped.cause = err;
+    throw wrapped;
+  }
 }
 
 async function getPool() {
