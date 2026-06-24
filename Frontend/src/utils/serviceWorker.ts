@@ -1,8 +1,6 @@
 /**
- * Service worker disabled — neutralize any legacy registration on production.
+ * Service worker removed — purge any legacy registration on app load.
  */
-
-const KILL_SWITCH_URL = '/sw.js';
 
 /**
  * Unregister all service workers and clear Cache Storage.
@@ -12,7 +10,16 @@ export async function purgeServiceWorker(): Promise<void> {
 
   try {
     const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((registration) => registration.unregister()));
+    await Promise.all(
+      registrations.map(async (registration) => {
+        try {
+          await registration.update();
+        } catch {
+          /* ignore update errors */
+        }
+        return registration.unregister();
+      }),
+    );
   } catch (error) {
     console.warn('[SW] Unregister failed:', error);
   }
@@ -27,43 +34,22 @@ export async function purgeServiceWorker(): Promise<void> {
   }
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
 /**
- * Force-download the kill-switch worker (replaces broken legacy SW), then purge.
- * Call on every app load so production recovers without manual "clear site data".
+ * Purge legacy workers. Do not register a new worker — the server-hosted
+ * kill-switch sw.js is picked up automatically when the browser updates.
  */
 export async function neutralizeLegacyServiceWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
-
-  const onMessage = (event: MessageEvent) => {
-    if (event.data?.type === 'SW_KILL_RELOAD') {
-      window.location.reload();
-    }
-  };
-  navigator.serviceWorker.addEventListener('message', onMessage);
-
-  try {
-    const registration = await navigator.serviceWorker.register(KILL_SWITCH_URL, {
-      scope: '/',
-      updateViaCache: 'none',
-    });
-    await registration.update();
-
-    if (registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    }
-
-    if (registration.installing || registration.waiting) {
-      await Promise.race([navigator.serviceWorker.ready, wait(2500)]);
-    }
-  } catch (error) {
-    console.warn('[SW] Kill-switch register failed:', error);
-  }
-
   await purgeServiceWorker();
+
+  const hadWorker = navigator.serviceWorker?.controller != null;
+  if (hadWorker && sessionStorage.getItem('sw-purge-reload') !== '1') {
+    try {
+      sessionStorage.setItem('sw-purge-reload', '1');
+      window.location.reload();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** @deprecated Service worker removed */

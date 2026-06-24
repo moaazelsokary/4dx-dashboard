@@ -1,8 +1,10 @@
 /**
  * Kill-switch service worker — replaces the legacy worker that returned
  * 503 "Network error and no cache available" on SPA reload.
- * No fetch handler: never intercepts requests once active.
- * On activate: clear caches, unregister, reload open tabs.
+ *
+ * Passthrough fetch: as soon as this script replaces the old worker, all
+ * requests go to the network (no synthetic 503). Then activate clears caches
+ * and unregisters so the site runs without a service worker.
  */
 const SW_KILL_VERSION = '__BUILD_VERSION__';
 
@@ -30,6 +32,11 @@ self.addEventListener('activate', (event) => {
       }
     })()
   );
+});
+
+// Critical: pass every request to the network so navigations never get 503.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });
 
 self.addEventListener('message', (event) => {

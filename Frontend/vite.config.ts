@@ -96,17 +96,7 @@ export default defineConfig(({ mode }) => {
       // Replace build version in service worker file during build
       {
         name: 'replace-sw-version',
-        buildStart() {
-          // Replace version in source file before build (Vite copies public/ to dist/)
-          const swPath = path.resolve(__dirname, 'public/sw.js');
-          if (fs.existsSync(swPath)) {
-            let swContent = fs.readFileSync(swPath, 'utf-8');
-            swContent = swContent.replace(/__BUILD_VERSION__/g, buildVersion);
-            fs.writeFileSync(swPath, swContent);
-          }
-        },
         closeBundle() {
-          // After build completes, ensure version is replaced in dist/sw.js
           const distSwPath = path.resolve(__dirname, 'dist/sw.js');
           if (fs.existsSync(distSwPath)) {
             let swContent = fs.readFileSync(distSwPath, 'utf-8');

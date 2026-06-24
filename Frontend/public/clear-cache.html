@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clear site cache — Life Makers</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <script>
+      (function () {
+        var done = false;
+        function finish() {
+          if (done) return;
+          done = true;
+          document.getElementById('status').textContent = 'Done. Opening the app…';
+          window.location.replace('/');
+        }
+        if (!('serviceWorker' in navigator)) {
+          finish();
+          return;
+        }
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).then(function () {
+          if ('caches' in window) {
+            return caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            });
+          }
+        }).then(finish).catch(finish);
+        setTimeout(finish, 4000);
+      })();
+    </script>
+  </head>
+  <body>
+    <p id="status">Clearing cached service worker…</p>
+    <p>If you are not redirected, <a href="/">open the app</a>.</p>
+  </body>
+</html>
