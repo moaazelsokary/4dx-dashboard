@@ -40,14 +40,22 @@
     Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
     Pragma = "no-cache"
     Expires = "0"
+    Clear-Site-Data = "\"executionContexts\""
 
-# Service worker must never be cached (otherwise old broken SW keeps running)
+# Service worker must never be cached; Clear-Site-Data unregisters legacy workers fleet-wide.
 [[headers]]
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
     Pragma = "no-cache"
     Expires = "0"
+    Clear-Site-Data = "\"executionContexts\""
+
+[[headers]]
+  for = "/clear-cache.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Clear-Site-Data = "\"executionContexts\""
 
 # Cache Control Headers - All HTML files (no cache)
 [[headers]]

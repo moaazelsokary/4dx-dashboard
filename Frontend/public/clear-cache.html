@@ -27,12 +27,14 @@
             });
           }
         }).then(finish).catch(finish);
-        setTimeout(finish, 4000);
+        setTimeout(finish, 3000);
       })();
     </script>
   </head>
   <body>
+    <h1>Life Makers — cache reset</h1>
     <p id="status">Clearing cached service worker…</p>
-    <p>If you are not redirected, <a href="/">open the app</a>.</p>
+    <p>If you are not redirected automatically, <a href="/">open the app</a>.</p>
+    <p><small>Share this link with anyone who sees “Network error and no cache available”.</small></p>
   </body>
 </html>

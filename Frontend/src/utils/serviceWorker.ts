@@ -2,9 +2,6 @@
  * Service worker removed — purge any legacy registration on app load.
  */
 
-/**
- * Unregister all service workers and clear Cache Storage.
- */
 export async function purgeServiceWorker(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
 
@@ -15,7 +12,7 @@ export async function purgeServiceWorker(): Promise<void> {
         try {
           await registration.update();
         } catch {
-          /* ignore update errors */
+          /* ignore */
         }
         return registration.unregister();
       }),
@@ -34,27 +31,14 @@ export async function purgeServiceWorker(): Promise<void> {
   }
 }
 
-/**
- * Purge legacy workers. Do not register a new worker — the server-hosted
- * kill-switch sw.js is picked up automatically when the browser updates.
- */
+/** Purge legacy workers on every app load. Never register a new worker. */
 export async function neutralizeLegacyServiceWorker(): Promise<void> {
   await purgeServiceWorker();
-
-  const hadWorker = navigator.serviceWorker?.controller != null;
-  if (hadWorker && sessionStorage.getItem('sw-purge-reload') !== '1') {
-    try {
-      sessionStorage.setItem('sw-purge-reload', '1');
-      window.location.reload();
-    } catch {
-      /* ignore */
-    }
-  }
 }
 
 /** @deprecated Service worker removed */
 export function registerServiceWorker(): void {
-  void neutralizeLegacyServiceWorker();
+  void purgeServiceWorker();
 }
 
 export function unregisterServiceWorker(): void {

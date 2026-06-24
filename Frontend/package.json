@@ -17,6 +17,7 @@
     "test:ui": "vitest --ui",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "verify:production": "node scripts/verify-production-sw.mjs",
     "test:coverage": "vitest run --coverage",
     "test:coverage:check": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=75 --coverage.thresholds.statements=80",
     "init-db": "node scripts/init-database.cjs",
